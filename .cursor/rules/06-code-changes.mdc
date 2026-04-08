@@ -1,0 +1,10 @@
+---
+description: Minimal, focused edits that match existing project style
+alwaysApply: true
+---
+
+# Code changes
+
+- Change only what the task requires. Avoid drive-by refactors, unrelated files, and scope creep.
+- Read surrounding code first; align naming, types, imports, and documentation level with the file’s style.
+- Prefer reusing and extending existing helpers over parallel implementations. Keep diffs easy to review.

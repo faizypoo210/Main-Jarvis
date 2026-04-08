@@ -1,0 +1,20 @@
+{
+  "postgresql": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "jarvis",
+    "password": "jarvis_secure_password_2026",
+    "database": "jarvis_missions",
+    "connectionString": "postgresql://jarvis:jarvis_secure_password_2026@localhost:5432/jarvis_missions",
+    "containerName": "jarvis-postgres",
+    "dataDirectory": "C:\\jarvis-data\\postgres"
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "connectionString": "redis://localhost:6379",
+    "containerName": "jarvis-redis",
+    "dataDirectory": "C:\\jarvis-data\\redis",
+    "persistence": "AOF (appendonly yes)"
+  }
+}

@@ -1,4 +1,5 @@
 ---
+description: Deployment phase order, gates, and DEPLOYMENT_STATUS updates
 alwaysApply: true
 ---
 # Phase Execution Rules

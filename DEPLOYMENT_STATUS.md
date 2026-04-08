@@ -1,22 +1,23 @@
 # JARVIS Deployment Status
 
-## Phase 1: Docker + Databases
-- [ ] Docker Desktop running
-- [ ] PostgreSQL container running (jarvis-postgres)
-- [ ] Redis container running (jarvis-redis)
-- [ ] DB connection verified
+## Phase 1: Docker + Databases ✅
+- [x] Docker Desktop running
+- [x] PostgreSQL container running (jarvis-postgres)
+- [x] Redis container running (jarvis-redis)
+- [x] DB connection verified
 
-## Phase 2: Mission Control
-- [ ] Repo cloned
-- [ ] .env files created
-- [ ] docker-compose deployed
-- [ ] UI accessible at localhost:3000
+## Phase 2: Mission Control ✅
+- [x] Repo cloned (`C:\projects\openclaw-mission-control`)
+- [x] `.env` and `backend\.env` created (host DB/Redis via `host.docker.internal`)
+- [x] `compose.yml` replaced with JARVIS variant (no bundled db/redis); `docker compose up -d`
+- [x] UI accessible at http://localhost:3000; API health at http://localhost:3001/health
 
-## Phase 3: OpenClaw Gateway
-- [ ] OpenClaw installed
-- [ ] Config written
-- [ ] SOUL.md and AGENTS.md in workspace
-- [ ] Gateway running at localhost:18789
+## Phase 3: OpenClaw Gateway ✅
+- [x] OpenClaw installed (`openclaw --version` OK; WSL bash skipped if bash unavailable; Windows `install.ps1 -NoOnboard` used)
+- [x] Config scaffolded (`%USERPROFILE%\.openclaw\openclaw.json` + `config.json`, `gateway.bind`=`lan`, token auth)
+- [x] SOUL.md, AGENTS.md, MEMORY.md under `%USERPROFILE%\.openclaw\workspace\main\`
+- [x] Gateway listening on `0.0.0.0:18789`; `openclaw status`, `openclaw gateway health`, GET `/` OK
+- [ ] **Optional:** Set User `ANTHROPIC_API_KEY` via `.\scripts\03-configure-openclaw.ps1` (interactive), restart gateway, re-run verify for full agent chat test
 
 ## Phase 4: LobsterBoard
 - [ ] Repo cloned

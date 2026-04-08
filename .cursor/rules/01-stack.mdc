@@ -1,4 +1,5 @@
 ---
+description: Stack ports, credentials, Docker networking, and repo references
 alwaysApply: true
 ---
 # JARVIS Stack Reference

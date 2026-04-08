@@ -1,0 +1,10 @@
+---
+description: Code citations, links, and clear technical writing
+alwaysApply: true
+---
+
+# Communication
+
+- Reference existing code with Cursor code citations: a fenced block whose info string is `startLine:endLine:filepath` (opening fence alone on its line).
+- When citing paths or `https://` URLs, use the full string; do not shorten for brevity.
+- Prefer markdown links for web references. Write in complete sentences; avoid telegraphic shorthand.

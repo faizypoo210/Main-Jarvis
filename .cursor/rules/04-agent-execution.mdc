@@ -1,0 +1,11 @@
+---
+description: Run commands in the real environment; persist through failures; use session dates
+alwaysApply: true
+---
+
+# Agent execution
+
+- Use the shell and network when investigation or fixes are needed — do not only instruct the user to run commands.
+- After a failure, try another approach, diagnose, or retry; do not stop after a single error.
+- When `user_info` (or similar) gives an authoritative current date, use that year for dates and time-bounded searches.
+- Infer goals and implicit requirements from the full conversation, not only the latest message unless it clearly changes direction.

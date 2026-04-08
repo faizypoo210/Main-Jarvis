@@ -1,0 +1,4 @@
+aioredis
+httpx
+python-dotenv
+redis

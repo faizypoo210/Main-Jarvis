@@ -94,6 +94,9 @@ $ollamaScript = Join-Path $JarvisRoot 'scripts\05-start-ollama.ps1'
 & $ollamaScript
 if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE)." }
 
+# Event Coordinator
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Normal
+
 Write-Host ""
 Write-Host "JARVIS is online." -ForegroundColor Green
 Write-Host ""

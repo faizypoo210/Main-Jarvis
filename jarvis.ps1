@@ -2,6 +2,9 @@
 # JARVIS master startup: bring up stack in order (idempotent; skips running services).
 $ErrorActionPreference = 'Stop'
 
+# Give Windows services time to initialize
+Start-Sleep -Seconds 5
+
 $JarvisRoot = $PSScriptRoot
 $LanIp = '10.0.0.249'
 $MissionControlRoot = 'C:\projects\openclaw-mission-control'
@@ -95,7 +98,7 @@ $ollamaScript = Join-Path $JarvisRoot 'scripts\05-start-ollama.ps1'
 if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE)." }
 
 # Event Coordinator
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Minimized
 
 Write-Host ""
 Write-Host "JARVIS is online." -ForegroundColor Green

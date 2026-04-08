@@ -1,0 +1,21 @@
+{
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "<GATEWAY_TOKEN>"
+    }
+  },
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "workspace": "C:\\Users\\faizt\\.openclaw\\workspace\\main",
+        "model": "anthropic/claude-sonnet-4-20250514"
+      }
+    ]
+  }
+}

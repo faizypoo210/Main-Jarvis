@@ -1,0 +1,27 @@
+# Secrets and keys
+auth-profiles.json
+*.key
+*.pem
+.env.local
+
+# Live OpenClaw auth store (contains API keys)
+**/auth-profiles.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs
+*.log
+
+# Cursor cache
+.cursor/cache/

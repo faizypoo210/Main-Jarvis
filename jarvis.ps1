@@ -117,4 +117,10 @@ Write-Host "  OpenClaw Gateway:    http://${LanIp}:18789"
 Write-Host "  LobsterBoard:        http://${LanIp}:8080"
 Write-Host "  Ollama:              http://${LanIp}:11434"
 
+# System tray
+$TrayDir = Join-Path $JarvisRoot 'tray'
+$TrayPythonw = Join-Path $TrayDir '.venv\Scripts\pythonw.exe'
+$TrayPyw = Join-Path $TrayDir 'tray.pyw'
+Start-Process -FilePath $TrayPythonw -ArgumentList "`"$TrayPyw`"" -WorkingDirectory $TrayDir -WindowStyle Hidden
+
 exit 0

@@ -19,16 +19,17 @@
 - [x] Gateway listening on `0.0.0.0:18789`; `openclaw status`, `openclaw gateway health`, GET `/` OK
 - [ ] **Optional:** Set User `ANTHROPIC_API_KEY` via `.\scripts\03-configure-openclaw.ps1` (interactive), restart gateway, re-run verify for full agent chat test
 
-## Phase 4: LobsterBoard
-- [ ] Repo cloned
-- [ ] npm install complete
-- [ ] Server running at localhost:8080
+## Phase 4: LobsterBoard ✅
+- [x] Repo cloned to `C:\projects\LobsterBoard`
+- [x] `npm install` complete; `server.cjs` present
+- [x] Dashboard template `templates/jarvis-dashboard` (`jarvis-dashboard.json`, `config.json`, `meta.json`)
+- [x] Server running at http://localhost:8080; `04-verify-lobsterboard.ps1` passes
 
-## Phase 5: Ollama + GPU
-- [ ] Ollama installed
-- [ ] phi4-mini downloaded
-- [ ] GPU verified
-- [ ] OpenClaw integration tested
+## Phase 5: Ollama + GPU ✅
+- [x] Ollama installed (manual .exe); `05-install-ollama.ps1` detects `ollama` CLI
+- [x] Ollama serving on `0.0.0.0:11434` (`OLLAMA_HOST`); `phi4-mini` pulled
+- [x] CUDA/GPU: Ollama default (no CPU-only env overrides); port **11434** unchanged
+- [x] `plugins.entries.ollama` in `%USERPROFILE%\.openclaw\openclaw.json`; `05-verify-ollama.ps1` passes (including `/api/generate` smoke test)
 
 ## Phase 6: Composio
 - [ ] CLI installed

@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "description": "JARVIS LobsterBoard template: REST endpoint specs (Bearer) plus importable LobsterBoard dashboard layout.",
+  "widgetEndpoints": {
+    "openclawGateway": {
+      "title": "OpenClaw Gateway status",
+      "url": "http://localhost:18789",
+      "authorization": "Bearer 1aa716114e74097698e1ffe4be8d550f181f291afa1b86db",
+      "notes": "Use Authorization on HTTP/WebSocket clients; Control UI is embedded below when available."
+    },
+    "missionControlActiveMissions": {
+      "title": "Mission Control active missions",
+      "url": "http://localhost:3001/api/v1/tasks?status=active",
+      "authorization": "Bearer +ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN",
+      "refreshIntervalMs": 5000
+    },
+    "dashclawPendingApprovals": {
+      "title": "DashClaw pending approvals",
+      "url": "https://jarvis-dashclaw.vercel.app/api/approvals?status=pending",
+      "authorization": "Bearer 62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=",
+      "refreshIntervalMs": 2000
+    },
+    "systemStats": {
+      "title": "System stats (CPU, RAM)",
+      "lobsterBoardEndpoint": "/api/system",
+      "notes": "Served by LobsterBoard Node server on the same host."
+    }
+  },
+  "lobsterBoard": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "widgets": [
+      {
+        "id": "jarvis-title",
+        "type": "text-header",
+        "x": 20,
+        "y": 20,
+        "width": 600,
+        "height": 50,
+        "properties": {
+          "title": "JARVIS — LobsterBoard",
+          "showHeader": false,
+          "fontSize": 22,
+          "fontColor": "#e6edf3",
+          "textAlign": "left",
+          "fontWeight": "bold"
+        }
+      },
+      {
+        "id": "jarvis-openclaw-embed",
+        "type": "iframe-embed",
+        "x": 20,
+        "y": 90,
+        "width": 600,
+        "height": 420,
+        "properties": {
+          "title": "OpenClaw Gateway",
+          "embedUrl": "http://localhost:18789/",
+          "allowFullscreen": true
+        }
+      },
+      {
+        "id": "jarvis-mc-embed",
+        "type": "iframe-embed",
+        "x": 660,
+        "y": 90,
+        "width": 600,
+        "height": 420,
+        "properties": {
+          "title": "Mission Control",
+          "embedUrl": "http://localhost:3000",
+          "allowFullscreen": true
+        }
+      },
+      {
+        "id": "jarvis-dashclaw-embed",
+        "type": "iframe-embed",
+        "x": 1300,
+        "y": 90,
+        "width": 600,
+        "height": 420,
+        "properties": {
+          "title": "DashClaw",
+          "embedUrl": "https://jarvis-dashclaw.vercel.app",
+          "allowFullscreen": true
+        }
+      },
+      {
+        "id": "jarvis-cpu-memory",
+        "type": "cpu-memory",
+        "x": 1660,
+        "y": 540,
+        "width": 240,
+        "height": 160,
+        "properties": {
+          "title": "System",
+          "endpoint": "/api/system",
+          "refreshInterval": 5
+        }
+      }
+    ]
+  }
+}

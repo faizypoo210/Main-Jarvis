@@ -31,11 +31,10 @@
 - [x] CUDA/GPU: Ollama default (no CPU-only env overrides); port **11434** unchanged
 - [x] `plugins.entries.ollama` in `%USERPROFILE%\.openclaw\openclaw.json`; `05-verify-ollama.ps1` passes (including `/api/generate` smoke test)
 
-## Phase 6: Composio
-- [ ] CLI installed
-- [ ] Gmail connected
-- [ ] Google Calendar connected
-- [ ] Slack connected
+## Phase 6: Composio ✅
+- [x] `composio-core` global CLI; `@composio/openclaw-plugin` under `%USERPROFILE%\.openclaw`
+- [ ] `composio login` + per-app OAuth: complete manually if needed (`COMPOSIO_API_KEY` from [Composio settings](https://app.composio.dev/settings) may be required by composio-core CLI)
+- [x] `workspace\main\TOOLS.md` and `plugins.entries.composio` in `openclaw.json`; `06-verify-composio.ps1` passes (core checks; per-service OAuth optional)
 
 ## Phase 7: Phone Access
 - [ ] Firewall rules created

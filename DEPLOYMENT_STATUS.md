@@ -36,11 +36,10 @@
 - [ ] `composio login` + per-app OAuth: complete manually if needed (`COMPOSIO_API_KEY` from [Composio settings](https://app.composio.dev/settings) may be required by composio-core CLI)
 - [x] `workspace\main\TOOLS.md` and `plugins.entries.composio` in `openclaw.json`; `06-verify-composio.ps1` passes (core checks; per-service OAuth optional)
 
-## Phase 7: Phone Access
-- [ ] Firewall rules created
-- [ ] Accessible at 10.0.0.249:3000
-- [ ] Accessible at 10.0.0.249:8080
-- [ ] Master start script working
+## Phase 7: Phone Access + Firewall ✅
+- [x] `scripts/07-firewall-rules.ps1` (inbound TCP, Private profile only; run **as Administrator** once to create `JARVIS-*` rules)
+- [x] `jarvis.ps1` master start; `07-verify-jarvis-stack.ps1` passes
+- [x] `07-verify-phone-access.ps1` for LAN URL checks (optional; confirm from a phone on same WiFi after firewall rules exist)
 
 ## Phase 8: End-to-End Testing
 - [ ] All health checks pass

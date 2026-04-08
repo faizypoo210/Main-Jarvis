@@ -1,0 +1,114 @@
+#Requires -Version 5.1
+# JARVIS master startup: bring up stack in order (idempotent; skips running services).
+$ErrorActionPreference = 'Stop'
+
+$JarvisRoot = $PSScriptRoot
+$LanIp = '10.0.0.249'
+$MissionControlRoot = 'C:\projects\openclaw-mission-control'
+
+function Test-TcpListen([int]$Port) {
+    return (@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue).Count -gt 0)
+}
+
+function Test-DockerContainerRunning([string]$Name) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    try {
+        $out = docker inspect -f '{{.State.Running}}' $Name 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { return $false }
+        return ($out.Trim() -eq 'true')
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+function Invoke-Step([string]$Message) {
+    Write-Host ""
+    Write-Host "=== $Message ===" -ForegroundColor Cyan
+}
+
+Write-Host "JARVIS master start (repo: $JarvisRoot)" -ForegroundColor Green
+
+# 1) PostgreSQL
+Invoke-Step "PostgreSQL (jarvis-postgres)"
+if (Test-DockerContainerRunning 'jarvis-postgres') {
+    Write-Host "Already running: jarvis-postgres"
+} else {
+    docker start jarvis-postgres 2>&1 | Write-Host
+    if ($LASTEXITCODE -ne 0) { throw "docker start jarvis-postgres failed (exit $LASTEXITCODE)." }
+    Write-Host "Started: jarvis-postgres"
+}
+
+# 2) Redis
+Invoke-Step "Redis (jarvis-redis)"
+if (Test-DockerContainerRunning 'jarvis-redis') {
+    Write-Host "Already running: jarvis-redis"
+} else {
+    docker start jarvis-redis 2>&1 | Write-Host
+    if ($LASTEXITCODE -ne 0) { throw "docker start jarvis-redis failed (exit $LASTEXITCODE)." }
+    Write-Host "Started: jarvis-redis"
+}
+
+# 3) Mission Control (Docker Compose)
+Invoke-Step "Mission Control (docker compose)"
+$mcUp = (Test-TcpListen 3000) -and (Test-TcpListen 3001)
+if ($mcUp) {
+    Write-Host "Mission Control appears up (ports 3000 and 3001 listening)."
+} else {
+    if (-not (Test-Path -LiteralPath $MissionControlRoot)) {
+        throw "Mission Control directory not found: $MissionControlRoot"
+    }
+    Push-Location $MissionControlRoot
+    try {
+        docker compose up -d 2>&1 | Write-Host
+        if ($LASTEXITCODE -ne 0) { throw "docker compose up -d failed in $MissionControlRoot (exit $LASTEXITCODE)." }
+    } finally {
+        Pop-Location
+    }
+    Write-Host "docker compose up -d completed."
+}
+
+# 4) OpenClaw Gateway
+Invoke-Step "OpenClaw Gateway"
+if (Test-TcpListen 18789) {
+    Write-Host "Gateway already listening on port 18789 (skip start script)."
+} else {
+    $gw = Join-Path $JarvisRoot 'scripts\03-start-gateway.ps1'
+    & $gw
+    if ($LASTEXITCODE -ne 0) { throw "03-start-gateway.ps1 failed (exit $LASTEXITCODE)." }
+}
+
+# 5) LobsterBoard
+Invoke-Step "LobsterBoard"
+if (Test-TcpListen 8080) {
+    Write-Host "LobsterBoard already listening on port 8080 (skip start script)."
+} else {
+    $lb = Join-Path $JarvisRoot 'scripts\04-start-lobsterboard.ps1'
+    & $lb
+    if ($LASTEXITCODE -ne 0) { throw "04-start-lobsterboard.ps1 failed (exit $LASTEXITCODE)." }
+}
+
+# 6) Ollama
+Invoke-Step "Ollama"
+$ollamaScript = Join-Path $JarvisRoot 'scripts\05-start-ollama.ps1'
+& $ollamaScript
+if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE)." }
+
+Write-Host ""
+Write-Host "JARVIS is online." -ForegroundColor Green
+Write-Host ""
+Write-Host "Local URLs:" -ForegroundColor Cyan
+Write-Host "  Mission Control UI:  http://localhost:3000"
+Write-Host "  Mission Control API: http://localhost:3001"
+Write-Host "  OpenClaw Gateway:    http://localhost:18789"
+Write-Host "  LobsterBoard:        http://localhost:8080"
+Write-Host "  Ollama:              http://localhost:11434"
+Write-Host ""
+Write-Host "LAN URLs (phone / same WiFi, $LanIp):" -ForegroundColor Cyan
+Write-Host "  Mission Control UI:  http://${LanIp}:3000"
+Write-Host "  Mission Control API: http://${LanIp}:3001"
+Write-Host "  OpenClaw Gateway:    http://${LanIp}:18789"
+Write-Host "  LobsterBoard:        http://${LanIp}:8080"
+Write-Host "  Ollama:              http://${LanIp}:11434"
+
+exit 0

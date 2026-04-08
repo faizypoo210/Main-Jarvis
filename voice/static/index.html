@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>JARVIS Voice</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --danger: #f85149;
+      --ok: #3fb950;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+    }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; text-align: center; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .dot.idle { background: var(--muted); }
+    .dot.listening { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .dot.thinking { background: var(--accent); animation: pulse 1s infinite; }
+    .dot.speaking { background: var(--accent); }
+    @keyframes pulse { 50% { opacity: 0.4; } }
+    .mic-wrap {
+      margin: 1rem 0 1.5rem;
+    }
+    button.mic {
+      width: min(88vw, 280px);
+      height: min(88vw, 280px);
+      border-radius: 50%;
+      border: 3px solid var(--border);
+      background: linear-gradient(145deg, #21262d, #161b22);
+      color: var(--text);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    button.mic:active { transform: scale(0.98); }
+    button.mic.recording {
+      border-color: var(--danger);
+      background: linear-gradient(145deg, #3d1f1f, #21262d);
+    }
+    .mic svg { width: 48px; height: 48px; fill: currentColor; }
+    .hint { font-size: 0.8rem; color: var(--muted); max-width: 320px; text-align: center; }
+    .log {
+      width: 100%;
+      max-width: 520px;
+      flex: 1;
+      min-height: 120px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      overflow-y: auto;
+    }
+    .log p { margin: 0 0 0.6rem; }
+    .log .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .log .heard { color: #79c0ff; }
+    .log .reply { color: #7ee787; }
+    .log .err { color: var(--danger); }
+    .log .upd { color: #d2a8ff; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>JARVIS Voice</h1>
+  <p class="sub">Tap the mic to start / stop. Audio is sent when you stop.</p>
+  <div class="status" id="statusRow">
+    <span class="dot idle" id="dot"></span>
+    <span id="statusText">Idle</span>
+  </div>
+  <div class="mic-wrap">
+    <button type="button" class="mic" id="micBtn" aria-label="Toggle microphone">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
+      <span id="micLabel">Tap to record</span>
+    </button>
+  </div>
+  <p class="hint">Requires microphone permission. Use Chrome or Edge on the same network.</p>
+  <div class="log" id="log"></div>
+  <script>
+(function () {
+  const micBtn = document.getElementById('micBtn');
+  const micLabel = document.getElementById('micLabel');
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+  const logEl = document.getElementById('log');
+
+  let ws = null;
+  let recording = false;
+  let mediaRecorder = null;
+  let chunks = [];
+  let audioCtx = null;
+
+  function setState(state, label) {
+    dot.className = 'dot ' + state;
+    statusText.textContent = label;
+  }
+
+  function appendLine(cls, title, body) {
+    const p = document.createElement('p');
+    p.innerHTML = '<span class="label">' + title + '</span><br/>' +
+      '<span class="' + cls + '">' + (body || '').replace(/</g, '&lt;') + '</span>';
+    logEl.appendChild(p);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function connectWs() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host + '/ws');
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = function () { appendLine('heard', 'System', 'Connected.'); };
+    ws.onclose = function () { setState('idle', 'Disconnected'); };
+    ws.onerror = function () { appendLine('err', 'Error', 'WebSocket error.'); };
+    ws.onmessage = async function (ev) {
+      if (typeof ev.data !== 'string') return;
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === 'status') {
+        var st = msg.state || 'idle';
+        if (st === 'listening') setState('listening', 'Listening…');
+        else if (st === 'thinking') setState('thinking', 'Thinking…');
+        else if (st === 'speaking') setState('speaking', 'Speaking…');
+        else setState('idle', 'Idle');
+        return;
+      }
+      if (msg.type === 'heard') {
+        appendLine('heard', 'Heard', msg.text || '');
+        return;
+      }
+      if (msg.type === 'reply') {
+        appendLine('reply', 'Jarvis', msg.text || '');
+        return;
+      }
+      if (msg.type === 'error') {
+        appendLine('err', 'Error', msg.message || 'Unknown');
+        setState('idle', 'Idle');
+        return;
+      }
+      if (msg.type === 'coordinator_update') {
+        appendLine('upd', 'Coordinator', JSON.stringify(msg.payload || {}));
+        return;
+      }
+      if (msg.type === 'tts' && msg.audio_b64) {
+        try {
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const bin = atob(msg.audio_b64);
+          const buf = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+          const audioBuffer = await audioCtx.decodeAudioData(buf.buffer.slice(0));
+          const src = audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(audioCtx.destination);
+          src.start();
+        } catch (e) {
+          appendLine('err', 'Playback', 'Could not play audio.');
+        }
+      }
+    };
+  }
+
+  connectWs();
+
+  async function toggleRecord() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      connectWs();
+      appendLine('err', 'System', 'Reconnecting…');
+      return;
+    }
+    if (!recording) {
+      chunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        var mime = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
+          else mime = '';
+        }
+        mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+        mediaRecorder.onstop = function () {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          var blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          if (blob.size && ws.readyState === WebSocket.OPEN) {
+            blob.arrayBuffer().then(function (ab) { ws.send(ab); });
+          }
+          micBtn.classList.remove('recording');
+          micLabel.textContent = 'Tap to record';
+          recording = false;
+        };
+        mediaRecorder.start();
+        recording = true;
+        micBtn.classList.add('recording');
+        micLabel.textContent = 'Tap to stop';
+        setState('listening', 'Listening…');
+      } catch (e) {
+        appendLine('err', 'Mic', 'Permission denied or unavailable.');
+      }
+    } else {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    }
+  }
+
+  micBtn.addEventListener('click', toggleRecord);
+})();
+  </script>
+</body>
+</html>

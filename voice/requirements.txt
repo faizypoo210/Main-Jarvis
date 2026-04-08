@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+websockets
+faster-whisper
+redis
+httpx
+pyttsx3
+python-multipart

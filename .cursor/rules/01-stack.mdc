@@ -1,0 +1,33 @@
+---
+alwaysApply: true
+---
+# JARVIS Stack Reference
+
+## Credentials (use exactly)
+- PostgreSQL user: jarvis
+- PostgreSQL password: jarvis_secure_password_2026
+- PostgreSQL database: jarvis_missions
+- PostgreSQL port: 5432
+- Redis port: 6379
+- Gateway token: 1aa716114e74097698e1ffe4be8d550f181f291afa1b86db
+- Auth token: +ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN
+- DashClaw API key: 62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=
+
+## Service Ports
+- Mission Control frontend: 3000
+- Mission Control backend: 3001
+- OpenClaw Gateway: 18789
+- LobsterBoard: 8080
+- Ollama: 11434
+- PostgreSQL: 5432
+- Redis: 6379
+
+## Docker Networking Rule
+All references from inside Docker containers to host services
+must use host.docker.internal, NOT localhost.
+
+## Repos
+- Mission Control: https://github.com/abhi1693/openclaw-mission-control
+- LobsterBoard: https://github.com/Curbob/LobsterBoard
+
+## Local IP for phone access: 10.0.0.249

@@ -1,0 +1,26 @@
+---
+alwaysApply: true
+---
+# PowerShell Script Standards
+
+## Every script must include
+1. A header comment block describing what it does
+2. Error handling with try/catch on all Docker and network commands
+3. A final status summary showing ✓ or ✗ for each step
+4. An exit code (0 = success, 1 = failure)
+
+## Style rules
+- Use Write-Host with color: -ForegroundColor Green for success, Red for failure
+- Use $ErrorActionPreference = "Stop" at the top of every script
+- Docker commands must check container status after running
+- Never use curl — use Invoke-WebRequest or Test-NetConnection instead
+
+## Verification pattern (use this in every verify script)
+function Test-Endpoint($url, $name) {
+    try {
+        $r = Invoke-WebRequest -Uri $url -TimeoutSec 5 -UseBasicParsing
+        Write-Host "✓ $name" -ForegroundColor Green
+    } catch {
+        Write-Host "✗ $name - $_" -ForegroundColor Red
+    }
+}

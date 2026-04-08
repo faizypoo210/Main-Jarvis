@@ -1,0 +1,10 @@
+﻿JARVIS Deployment Report
+========================
+Infrastructure:     7/9 passed
+Gateway + Agent:    6/6 passed
+Mission Control:    2/5 passed
+LAN Access:         5/5 passed
+Full Flow:          4/4 passed
+========================
+Overall: FAIL
+

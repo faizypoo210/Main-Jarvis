@@ -4,17 +4,11 @@ JARVIS system tray — pystray + Pillow. No console (run with pythonw).
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
 import webbrowser
-from pathlib import Path
 
 import pystray
 from PIL import Image, ImageDraw
 from pystray import MenuItem as item
-
-JARVIS_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _build_icon_image() -> Image.Image:
@@ -38,43 +32,37 @@ def _open(url: str) -> None:
     webbrowser.open(url)
 
 
-def _stop_jarvis_stack() -> None:
-    mypid = os.getpid()
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+def stop_jarvis(icon, item):
+    import subprocess
 
-    with open(os.devnull, "wb") as devnull:
+    # Kill by port - covers voice(8000), lobsterboard(8080),
+    # mission control(3000,3001), openclaw(18789)
+    for port in [8000, 8080, 3000, 3001, 18789]:
         subprocess.run(
-            ["docker", "stop", "jarvis-postgres", "jarvis-redis"],
-            stdout=devnull,
-            stderr=devnull,
-            creationflags=creationflags,
+            f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :{port} ^| findstr LISTENING\') do taskkill /F /PID %a',
+            shell=True, capture_output=True
         )
 
-    root_escaped = str(JARVIS_ROOT).replace("'", "''")
-    ps = f"""
-$me = {mypid}
-$root = '{root_escaped}'
-Get-CimInstance Win32_Process | Where-Object {{
-  $_.CommandLine -and ($_.CommandLine -like ('*' + $root + '*')) -and $_.ProcessId -ne $me
-}} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}
-"""
-    subprocess.run(
-        [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            ps,
-        ],
-        creationflags=creationflags,
-    )
+    # Stop Docker containers using full Docker Desktop path
+    docker_paths = [
+        r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+        "docker"
+    ]
+    for docker in docker_paths:
+        result = subprocess.run(
+            [docker, "ps", "-q"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            ids = result.stdout.strip().split()
+            subprocess.run([docker, "stop"] + ids, capture_output=True)
+            break
 
+    # Kill python/node processes
+    for proc in ["python.exe", "pythonw.exe", "node.exe"]:
+        subprocess.run(["taskkill", "/F", "/IM", proc], capture_output=True)
 
-def _on_stop(icon: pystray.Icon, _item: pystray.MenuItem | None) -> None:
-    _stop_jarvis_stack()
+    icon.notify("JARVIS Offline", "All services stopped.")
     icon.stop()
 
 
@@ -98,7 +86,7 @@ def main() -> None:
             item("Open Dashboard", lambda i, it: _open("http://localhost:8080")),
             item("Open Mission Control", lambda i, it: _open("http://localhost:3000")),
             pystray.Menu.SEPARATOR,
-            item("Stop JARVIS", _on_stop),
+            item("Stop JARVIS", stop_jarvis),
             item("Exit Tray", _on_exit),
         ),
     )

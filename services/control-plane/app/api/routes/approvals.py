@@ -1,0 +1,58 @@
+"""Approvals API."""
+
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.repositories.approval_repo import ApprovalRepository
+from app.schemas.approvals import ApprovalCreate, ApprovalDecision, ApprovalRead
+from app.services.approval_service import ApprovalService
+
+router = APIRouter()
+
+
+@router.post("", response_model=ApprovalRead)
+async def create_approval(
+    body: ApprovalCreate,
+    session: AsyncSession = Depends(get_db),
+) -> ApprovalRead:
+    svc = ApprovalService(session)
+    approval = await svc.request_approval(
+        mission_id=body.mission_id,
+        action_type=body.action_type,
+        risk_class=body.risk_class,
+        reason=body.reason,
+        requested_by=body.requested_by,
+        requested_via=body.requested_via,
+        expires_at=body.expires_at,
+    )
+    return ApprovalRead.model_validate(approval)
+
+
+@router.get("/pending", response_model=list[ApprovalRead])
+async def list_pending_approvals(
+    session: AsyncSession = Depends(get_db),
+) -> list[ApprovalRead]:
+    rows = await ApprovalRepository.get_pending(session)
+    return [ApprovalRead.model_validate(a) for a in rows]
+
+
+@router.post("/{approval_id}/decision", response_model=ApprovalRead)
+async def decide_approval(
+    approval_id: UUID,
+    body: ApprovalDecision,
+    session: AsyncSession = Depends(get_db),
+) -> ApprovalRead:
+    svc = ApprovalService(session)
+    approval = await svc.resolve_approval(
+        approval_id=approval_id,
+        decision=body.decision,
+        decided_by=body.decided_by,
+        decided_via=body.decided_via,
+        decision_notes=body.decision_notes,
+    )
+    return ApprovalRead.model_validate(approval)

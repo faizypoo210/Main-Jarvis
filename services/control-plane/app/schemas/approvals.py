@@ -1,0 +1,54 @@
+"""Approval schemas."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class ApprovalCreate(BaseModel):
+    mission_id: UUID
+    action_type: str
+    risk_class: str = Field(
+        ...,
+        description="Risk class: green, amber, or red",
+    )
+    reason: str | None = None
+    requested_by: str
+    requested_via: str = Field(
+        ...,
+        description="voice | command_center | system | sms",
+    )
+    expires_at: datetime | None = None
+
+
+class ApprovalDecision(BaseModel):
+    decision: Literal["approved", "denied"]
+    decided_by: str
+    decided_via: str = Field(
+        ...,
+        description="voice | command_center | system | sms",
+    )
+    decision_notes: str | None = None
+
+
+class ApprovalRead(BaseModel):
+    id: UUID
+    mission_id: UUID
+    action_type: str
+    risk_class: str
+    reason: str | None
+    status: str
+    requested_by: str
+    requested_via: str
+    decided_by: str | None
+    decided_via: str | None
+    decision_notes: str | None
+    created_at: datetime
+    decided_at: datetime | None
+    expires_at: datetime | None
+
+    model_config = {"from_attributes": True}

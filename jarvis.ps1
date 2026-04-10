@@ -97,6 +97,13 @@ $ollamaScript = Join-Path $JarvisRoot 'scripts\05-start-ollama.ps1'
 & $ollamaScript
 if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE)." }
 
+# Start Jarvis Control Plane
+Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\services\control-plane; `$env:PYTHONPATH='.'; uvicorn app.main:app --port 8001" -WindowStyle Normal
+
+# Brief pause to let control plane initialize
+Start-Sleep -Seconds 3
+
 # Event Coordinator
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Minimized
 

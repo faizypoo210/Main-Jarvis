@@ -3,6 +3,9 @@ auth-profiles.json
 *.key
 *.pem
 .env.local
+# Local env files (use .env.example templates; never commit secrets)
+.env
+**/.env
 
 # Live OpenClaw auth store (contains API keys)
 **/auth-profiles.json

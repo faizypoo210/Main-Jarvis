@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_api_key
 from app.core.db import get_db
 from app.repositories.receipt_repo import ReceiptRepository
 from app.schemas.receipts import ReceiptCreate, ReceiptRead
@@ -19,6 +20,7 @@ router = APIRouter()
 async def create_receipt(
     body: ReceiptCreate,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
 ) -> ReceiptRead:
     svc = ReceiptService(session)
     receipt = await svc.record_receipt(

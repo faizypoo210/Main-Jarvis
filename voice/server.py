@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +23,8 @@ from redis.asyncio import Redis
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 # Override with CONTROL_PLANE_URL if the control plane listens elsewhere.
@@ -89,7 +92,10 @@ async def post_command_to_control_plane(text: str) -> str | None:
     url = f"{CONTROL_PLANE_URL}/api/v1/commands"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.post(url, json={"text": text, "source": "voice"})
+            headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
+            r = await client.post(
+                url, json={"text": text, "source": "voice"}, headers=headers
+            )
             r.raise_for_status()
             body = r.json()
             mid = body.get("mission_id")

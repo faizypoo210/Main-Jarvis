@@ -22,35 +22,11 @@ const stagger = (i: number): CSSProperties => ({
   animationDelay: `${i * 50}ms`,
 });
 
-const INITIAL: ThreadItem[] = [
-  {
-    id: "seed-0",
-    kind: "jarvis",
-    body: "Got it. I'll start coordinating the offsite event for next month. I'll find a venue, plan the agenda, and update you as I go.",
-    time: "10:02",
-    routing: "→ Spar team",
-  },
-  { id: "seed-1", kind: "activity", text: "Finding venues that fit your team size..." },
-  {
-    id: "seed-2",
-    kind: "jarvis",
-    body: "I've found a few venue options that can accommodate your team. Would you like to see them, or should I proceed with one?",
-    time: "10:03",
-  },
-  { id: "seed-3", kind: "user", body: "Proceed with the top pick and send invites" },
-  {
-    id: "seed-4",
-    kind: "jarvis",
-    body: "Understood. I'll book the top pick and start sending invitations. What dates should I use?",
-    time: "10:04",
-  },
-];
-
 const PHASE2_POLL_MS = 2000;
 const PHASE2_MAX_TICKS = 90;
 
 export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void }) {
-  const [items, setItems] = useState<ThreadItem[]>(INITIAL);
+  const [items, setItems] = useState<ThreadItem[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

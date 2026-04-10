@@ -4,5 +4,6 @@ websockets
 faster-whisper
 redis
 httpx
+python-dotenv
 pyttsx3
 python-multipart

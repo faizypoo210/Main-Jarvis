@@ -1,5 +1,40 @@
 /** Display helpers for mission / mission list (no styling). */
 
+import type { Mission } from "./types";
+
+export type MissionStatus =
+  | "pending"
+  | "active"
+  | "blocked"
+  | "awaiting_approval"
+  | "complete"
+  | "failed";
+
+export function normalizeMissionStatus(s: string): MissionStatus {
+  const allowed: MissionStatus[] = [
+    "pending",
+    "active",
+    "blocked",
+    "awaiting_approval",
+    "complete",
+    "failed",
+  ];
+  return (allowed.includes(s as MissionStatus) ? s : "pending") as MissionStatus;
+}
+
+/** Prefer most recently updated active mission; else newest by created_at. */
+export function selectFocusMission(missions: Mission[]): Mission | null {
+  if (missions.length === 0) return null;
+  const active = missions
+    .filter((m) => m.status === "active")
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+  if (active.length > 0) return active[0] ?? null;
+  const newest = [...missions].sort(
+    (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)
+  )[0];
+  return newest ?? null;
+}
+
 export function formatCreatedByLabel(createdBy: string): string {
   const readable = createdBy.replace(/_/g, " ");
   return `by ${readable}`;

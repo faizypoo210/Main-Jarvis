@@ -117,8 +117,10 @@ Start-Sleep -Seconds 2
 # Event Coordinator
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Minimized
 
-# Executor worker (OpenClaw + receipts)
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\executor; .\.venv\Scripts\Activate.ps1; python executor.py" -WindowStyle Minimized
+# Start Jarvis Executor
+Write-Host "Starting Jarvis Executor..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\executor; .\.venv\Scripts\Activate.ps1; python -u executor.py" -WindowStyle Minimized
+Start-Sleep -Seconds 2
 
 Write-Host ""
 Write-Host "JARVIS is online." -ForegroundColor Green
@@ -131,7 +133,7 @@ Write-Host "  LobsterBoard:        http://localhost:8080"
 Write-Host "  Ollama:              http://localhost:11434"
 Write-Host "  Command Center:      http://localhost:5173"
 Write-Host "  Voice Server:        http://localhost:8000"
-Write-Host "  Executor:            running (no port)"
+Write-Host "  Executor:            running (background)"
 Write-Host ""
 Write-Host "LAN URLs (phone / same WiFi, $LanIp):" -ForegroundColor Cyan
 Write-Host "  Mission Control UI:  http://${LanIp}:3000"
@@ -141,7 +143,7 @@ Write-Host "  LobsterBoard:        http://${LanIp}:8080"
 Write-Host "  Ollama:              http://${LanIp}:11434"
 Write-Host "  Command Center:      http://${LanIp}:5173"
 Write-Host "  Voice Server:        http://${LanIp}:8000"
-Write-Host "  Executor:            running (no port)"
+Write-Host "  Executor:            running (background)"
 
 # System tray
 $TrayDir = Join-Path $JarvisRoot 'tray'

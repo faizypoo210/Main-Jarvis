@@ -1,21 +1,7 @@
 import { RiskBadge, type Risk } from "../common/RiskBadge";
 import { StatusBadge } from "../common/StatusBadge";
 import type { Mission } from "../../lib/types";
-import { formatCreatedByLabel, formatRelativeTime } from "../../lib/format";
-
-type Status = "pending" | "active" | "blocked" | "awaiting_approval" | "complete" | "failed";
-
-function toStatus(s: string): Status {
-  const allowed: Status[] = [
-    "pending",
-    "active",
-    "blocked",
-    "awaiting_approval",
-    "complete",
-    "failed",
-  ];
-  return (allowed.includes(s as Status) ? s : "pending") as Status;
-}
+import { formatCreatedByLabel, formatRelativeTime, normalizeMissionStatus } from "../../lib/format";
 
 function toRisk(r: string | null): Risk | null {
   if (r === "green" || r === "amber" || r === "red") return r;
@@ -34,7 +20,7 @@ export function MissionCard({ mission }: { mission: Mission }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="font-display text-base font-semibold text-[var(--text-primary)]">{mission.title}</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={toStatus(mission.status)} />
+          <StatusBadge status={normalizeMissionStatus(mission.status)} />
           {risk ? <RiskBadge risk={risk} /> : null}
         </div>
       </div>

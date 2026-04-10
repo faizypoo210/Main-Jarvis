@@ -43,7 +43,6 @@ def _decode_fields(raw: dict[Any, Any]) -> dict[str, str]:
 
 
 def _parse_data(fields: dict[str, str]) -> dict[str, Any]:
-    # Try nested JSON in data or payload field first
     raw = fields.get("data") or fields.get("payload")
     if raw:
         try:
@@ -52,11 +51,8 @@ def _parse_data(fields: dict[str, str]) -> dict[str, Any]:
                 return parsed
         except (json.JSONDecodeError, TypeError):
             pass
-
-    # Fall back to flat fields (mission_id, command, etc. as top-level keys)
     if "mission_id" in fields:
         return dict(fields)
-
     return {}
 
 
@@ -74,8 +70,9 @@ async def _post_control_plane(
     payload: dict[str, Any],
 ) -> None:
     url = f"{CONTROL_PLANE_URL}{path if path.startswith('/') else '/' + path}"
+    headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
     try:
-        async with session.post(url, json=payload) as resp:
+        async with session.post(url, json=payload, headers=headers) as resp:
             if resp.status >= 400:
                 body = await resp.text()
                 log.warning(

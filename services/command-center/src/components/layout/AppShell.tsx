@@ -17,13 +17,11 @@ export function useShellOutlet() {
 }
 
 export function AppShell() {
-  const { missions } = useMissions({ limit: 100 });
+  const { missions: panelMissions, loading: missionsLoading } = useMissions({ limit: 100 });
+  const { missions: activeMissions } = useMissions({ status: "active", limit: 500 });
   const { approvals } = usePendingApprovals();
 
-  const missionActiveCount = useMemo(
-    () => missions.filter((m) => m.status === "active").length,
-    [missions]
-  );
+  const missionActiveCount = useMemo(() => activeMissions.length, [activeMissions]);
   const pendingApprovalCount = approvals.length;
 
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -60,7 +58,7 @@ export function AppShell() {
 
         {/* Desktop right panel */}
         <div className="hidden min-h-0 lg:block">
-          <RightPanel />
+          <RightPanel missions={panelMissions} missionsLoading={missionsLoading} />
         </div>
       </div>
 
@@ -77,7 +75,11 @@ export function AppShell() {
             className="h-full w-[min(100vw,320px)] shadow-2xl animate-[fade-up_250ms_ease_forwards]"
             onClick={(e) => e.stopPropagation()}
           >
-            <RightPanel onClose={() => setRightSheetOpen(false)} />
+            <RightPanel
+              missions={panelMissions}
+              missionsLoading={missionsLoading}
+              onClose={() => setRightSheetOpen(false)}
+            />
           </div>
         </div>
       ) : null}

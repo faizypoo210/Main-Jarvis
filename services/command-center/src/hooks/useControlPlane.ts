@@ -55,12 +55,13 @@ export function useMissions(params?: {
   return { missions, loading, error, refetch };
 }
 
-export function usePendingApprovals(): {
+export function usePendingApprovals(params?: { pollIntervalMs?: number }): {
   approvals: Approval[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 } {
+  const pollIntervalMs = params?.pollIntervalMs ?? 3000;
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,15 +89,76 @@ export function usePendingApprovals(): {
 
   useEffect(() => {
     void load(false);
-    const id = window.setInterval(() => void load(true), 3000);
+    const id = window.setInterval(() => void load(true), pollIntervalMs);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, pollIntervalMs]);
 
   const refetch = useCallback(async () => {
     await load(false);
   }, [load]);
 
   return { approvals, loading, error, refetch };
+}
+
+/** Poll mission + events on an interval (e.g. right panel detail). */
+export function usePolledMissionDetail(missionId: string | null, pollIntervalMs = 5000): {
+  mission: Mission | null;
+  events: MissionEvent[];
+  loading: boolean;
+  error: string | null;
+} {
+  const [mission, setMission] = useState<Mission | null>(null);
+  const [events, setEvents] = useState<MissionEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!missionId?.trim()) {
+      setMission(null);
+      setEvents([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async (isPoll: boolean) => {
+      if (!isPoll) {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const [m, ev] = await Promise.all([
+          api.getMission(missionId),
+          api.getMissionEvents(missionId),
+        ]);
+        if (!cancelled) {
+          setMission(m);
+          setEvents(ev);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setMission(null);
+          setEvents([]);
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (!cancelled && !isPoll) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load(false);
+    const id = window.setInterval(() => void load(true), pollIntervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [missionId, pollIntervalMs]);
+
+  return { mission, events, loading, error };
 }
 
 export function useMission(id: string): {

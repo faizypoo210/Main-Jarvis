@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_api_key
 from app.core.db import get_db
 from app.schemas.missions import MissionRead, MissionStatusUpdate
 from app.schemas.updates import MissionEventRead
@@ -37,6 +38,7 @@ async def post_mission_status(
     mission_id: UUID,
     body: MissionStatusUpdate,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
 ) -> MissionRead:
     svc = MissionService(session)
     return await svc.update_mission_status(mission_id, body.status)

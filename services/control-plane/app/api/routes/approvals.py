@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_api_key
 from app.core.db import get_db
 from app.repositories.approval_repo import ApprovalRepository
 from app.schemas.approvals import ApprovalCreate, ApprovalDecision, ApprovalRead
@@ -19,6 +20,7 @@ router = APIRouter()
 async def create_approval(
     body: ApprovalCreate,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
 ) -> ApprovalRead:
     svc = ApprovalService(session)
     approval = await svc.request_approval(
@@ -48,6 +50,7 @@ async def decide_approval(
     approval_id: UUID,
     body: ApprovalDecision,
     session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
 ) -> ApprovalRead:
     svc = ApprovalService(session)
     approval = await svc.resolve_approval(

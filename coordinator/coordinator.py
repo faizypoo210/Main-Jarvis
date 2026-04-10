@@ -56,7 +56,8 @@ async def post_to_control_plane(path: str, payload: dict[str, Any]) -> dict[str,
     url = f"{base}{p}"
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(url, json=payload)
+            headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
+            r = await client.post(url, json=payload, headers=headers)
             r.raise_for_status()
             out = r.json()
             if not isinstance(out, dict):

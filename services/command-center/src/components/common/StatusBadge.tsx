@@ -5,14 +5,14 @@ const styles: Record<
   { dot: string; label: string; bg: string }
 > = {
   pending: {
+    dot: "bg-[var(--text-muted)]",
+    label: "text-[var(--text-muted)]",
+    bg: "bg-[var(--bg-border)]",
+  },
+  active: {
     dot: "bg-[var(--status-blue)]",
     label: "text-[var(--status-blue)]",
     bg: "bg-[var(--status-blue)]/15",
-  },
-  active: {
-    dot: "bg-[var(--status-green)]",
-    label: "text-[var(--status-green)]",
-    bg: "bg-[var(--status-green)]/15",
   },
   blocked: {
     dot: "bg-[var(--status-red)]",

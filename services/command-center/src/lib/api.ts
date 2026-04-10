@@ -44,6 +44,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        "x-api-key": import.meta.env.VITE_CONTROL_PLANE_API_KEY ?? "",
         ...init?.headers,
       },
     });
@@ -138,7 +139,10 @@ export async function checkHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${ORIGIN}/health`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "x-api-key": import.meta.env.VITE_CONTROL_PLANE_API_KEY ?? "",
+      },
     });
     return res.ok;
   } catch {

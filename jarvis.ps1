@@ -104,6 +104,16 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\serv
 # Brief pause to let control plane initialize
 Start-Sleep -Seconds 3
 
+# Start Jarvis Command Center
+Write-Host "Starting Jarvis Command Center..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\services\command-center; npm run dev" -WindowStyle Minimized
+Start-Sleep -Seconds 2
+
+# Start Jarvis Voice Server
+Write-Host "Starting Jarvis Voice Server..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\voice; uvicorn server:app --port 8000 --reload" -WindowStyle Minimized
+Start-Sleep -Seconds 2
+
 # Event Coordinator
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Minimized
 
@@ -116,6 +126,8 @@ Write-Host "  Mission Control API: http://localhost:3001"
 Write-Host "  OpenClaw Gateway:    http://localhost:18789"
 Write-Host "  LobsterBoard:        http://localhost:8080"
 Write-Host "  Ollama:              http://localhost:11434"
+Write-Host "  Command Center:      http://localhost:5173"
+Write-Host "  Voice Server:        http://localhost:8000"
 Write-Host ""
 Write-Host "LAN URLs (phone / same WiFi, $LanIp):" -ForegroundColor Cyan
 Write-Host "  Mission Control UI:  http://${LanIp}:3000"
@@ -123,6 +135,8 @@ Write-Host "  Mission Control API: http://${LanIp}:3001"
 Write-Host "  OpenClaw Gateway:    http://${LanIp}:18789"
 Write-Host "  LobsterBoard:        http://${LanIp}:8080"
 Write-Host "  Ollama:              http://${LanIp}:11434"
+Write-Host "  Command Center:      http://${LanIp}:5173"
+Write-Host "  Voice Server:        http://${LanIp}:8000"
 
 # System tray
 $TrayDir = Join-Path $JarvisRoot 'tray'

@@ -6,8 +6,10 @@ import type {
   Receipt,
 } from "./types";
 
-const BASE = "http://localhost:8001/api/v1";
-const ORIGIN = "http://localhost:8001";
+const CP = import.meta.env.VITE_CONTROL_PLANE_URL;
+if (!CP) throw new Error("VITE_CONTROL_PLANE_URL is not set. Check your .env file.");
+const BASE = `${CP}/api/v1`;
+const ORIGIN = CP;
 
 function isNetworkError(e: unknown): boolean {
   return e instanceof TypeError && typeof e.message === "string";

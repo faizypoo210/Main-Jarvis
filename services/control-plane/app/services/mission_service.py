@@ -52,3 +52,12 @@ class MissionService:
             )
         rows = await MissionEventRepository.list_by_mission(self._session, mission_id)
         return [MissionEventRead.model_validate(e) for e in rows]
+
+    async def update_mission_status(self, mission_id: UUID, status: str) -> MissionRead:
+        mission = await self._repo.update_status(mission_id, status)
+        if mission is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mission not found",
+            )
+        return MissionRead.model_validate(mission)

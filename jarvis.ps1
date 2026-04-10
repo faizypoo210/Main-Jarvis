@@ -99,7 +99,7 @@ if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE
 
 # Start Jarvis Control Plane
 Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\services\control-plane; `$env:PYTHONPATH='.'; uvicorn app.main:app --port 8001" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\services\control-plane; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001" -WindowStyle Normal
 
 # Brief pause to let control plane initialize
 Start-Sleep -Seconds 3
@@ -117,6 +117,9 @@ Start-Sleep -Seconds 2
 # Event Coordinator
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\coordinator; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Minimized
 
+# Executor worker (OpenClaw + receipts)
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\executor; .\.venv\Scripts\Activate.ps1; python executor.py" -WindowStyle Minimized
+
 Write-Host ""
 Write-Host "JARVIS is online." -ForegroundColor Green
 Write-Host ""
@@ -128,6 +131,7 @@ Write-Host "  LobsterBoard:        http://localhost:8080"
 Write-Host "  Ollama:              http://localhost:11434"
 Write-Host "  Command Center:      http://localhost:5173"
 Write-Host "  Voice Server:        http://localhost:8000"
+Write-Host "  Executor:            running (no port)"
 Write-Host ""
 Write-Host "LAN URLs (phone / same WiFi, $LanIp):" -ForegroundColor Cyan
 Write-Host "  Mission Control UI:  http://${LanIp}:3000"
@@ -137,6 +141,7 @@ Write-Host "  LobsterBoard:        http://${LanIp}:8080"
 Write-Host "  Ollama:              http://${LanIp}:11434"
 Write-Host "  Command Center:      http://${LanIp}:5173"
 Write-Host "  Voice Server:        http://${LanIp}:8000"
+Write-Host "  Executor:            running (no port)"
 
 # System tray
 $TrayDir = Join-Path $JarvisRoot 'tray'

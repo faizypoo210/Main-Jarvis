@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -17,6 +18,8 @@ class ApprovalCreate(BaseModel):
         description="Risk class: green, amber, or red",
     )
     reason: str | None = None
+    command_text: str | None = None
+    dashclaw_decision_id: str | None = None
     requested_by: str
     requested_via: str = Field(
         ...,
@@ -41,6 +44,8 @@ class ApprovalRead(BaseModel):
     action_type: str
     risk_class: str
     reason: str | None
+    command_text: str | None
+    dashclaw_decision_id: str | None
     status: str
     requested_by: str
     requested_via: str

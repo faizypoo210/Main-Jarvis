@@ -46,16 +46,86 @@ const INITIAL: ThreadItem[] = [
   },
 ];
 
+const PHASE2_POLL_MS = 2000;
+const PHASE2_MAX_TICKS = 90;
+
 export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void }) {
   const [items, setItems] = useState<ThreadItem[]>(INITIAL);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
+  }, []);
+
+  const startPhase2Poll = useCallback((missionId: string) => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    let ticks = 0;
+    pollRef.current = setInterval(async () => {
+      ticks += 1;
+      if (ticks > PHASE2_MAX_TICKS) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        return;
+      }
+      try {
+        const [mission, events] = await Promise.all([
+          api.getMission(missionId),
+          api.getMissionEvents(missionId),
+        ]);
+        const receipt = [...events]
+          .reverse()
+          .find(
+            (e) =>
+              e.event_type === "receipt_recorded" &&
+              e.payload &&
+              typeof (e.payload as Record<string, unknown>).summary === "string" &&
+              String((e.payload as Record<string, unknown>).summary).trim().length > 0
+          );
+        if (receipt?.payload) {
+          const text = String(
+            (receipt.payload as Record<string, unknown>).summary
+          ).trim();
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setItems((prev) => [
+            ...prev,
+            {
+              id: `exec-${missionId}-${Date.now()}`,
+              kind: "jarvis",
+              body: text,
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              missionIdTag: missionId,
+            },
+          ]);
+          return;
+        }
+        if (mission.status === "failed") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setItems((prev) => [
+            ...prev,
+            {
+              id: `exec-fail-${missionId}-${Date.now()}`,
+              kind: "jarvis",
+              body: "Mission execution failed.",
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              missionIdTag: missionId,
+            },
+          ]);
+        }
+      } catch {
+        /* next tick */
+      }
+    }, PHASE2_POLL_MS);
   }, []);
 
   const handleSubmit = useCallback(async (text: string) => {
@@ -73,6 +143,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
         timeoutRef.current = null;
+        const mid = res.mission_id;
         setItems((prev) => {
           const without = prev.filter((x) => x.id !== activityId);
           return [
@@ -82,17 +153,18 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
               kind: "jarvis",
               body: "Got it. Mission created — I'll update you as work progresses.",
               time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              missionIdTag: res.mission_id,
+              missionIdTag: mid,
             },
           ];
         });
+        startPhase2Poll(mid);
       }, 1500);
     } catch {
       setSubmitError("Could not reach Jarvis — try again");
     } finally {
       setSubmitting(false);
     }
-  }, []);
+  }, [startPhase2Poll]);
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">

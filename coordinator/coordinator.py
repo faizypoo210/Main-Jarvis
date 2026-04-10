@@ -1,4 +1,4 @@
-"""JARVIS Event Coordinator: Redis Streams, local SQLite missions, DashClaw guard/outcomes."""
+"""JARVIS Event Coordinator: Redis Streams router, DashClaw guard/outcomes, control plane status."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ import asyncio
 import json
 import logging
 import os
-import sqlite3
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -24,10 +22,8 @@ load_dotenv()
 # Control plane (Jarvis API). Override via .env: CONTROL_PLANE_URL=http://localhost:8001
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001")
 
-# Mission status values (missions table)
-ST_PENDING = "pending"
+# Mission status values (control plane missions)
 ST_ACTIVE = "active"
-ST_AWAITING_APPROVAL = "awaiting_approval"
 ST_COMPLETE = "complete"
 ST_FAILED = "failed"
 
@@ -41,7 +37,6 @@ GROUP_RECEIPTS = "jarvis-coordinator-receipts"
 CONSUMER_NAME = f"coordinator-{os.getpid()}"
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-MISSIONS_DB_PATH = Path(__file__).resolve().parent / "missions.db"
 
 DASHCLAW_BASE_URL = os.environ.get("DASHCLAW_BASE_URL", "").rstrip("/")
 DASHCLAW_API_KEY = os.environ.get("DASHCLAW_API_KEY", "")
@@ -98,13 +93,13 @@ async def post_to_control_plane(path: str, payload: dict[str, Any]) -> dict[str,
         return None
 
 
-def _control_plane_command_source(data: dict[str, Any]) -> str:
-    """Map incoming command metadata to control plane CommandCreate.source (voice|command_center|sms|api)."""
-    raw = str(data.get("surface_origin") or data.get("source") or "").strip().lower()
-    if raw in ("voice", "command_center", "sms", "api"):
-        return raw
-    # Coordinator path / unknown surfaces: use api (control plane does not accept "coordinator" as source)
-    return "api"
+def _normalize_risk_class(risk: str | None) -> str:
+    if not risk:
+        return "amber"
+    r = risk.strip().lower()
+    if r in ("green", "amber", "red"):
+        return r
+    return "amber"
 
 
 def _now_iso() -> str:
@@ -153,33 +148,12 @@ async def _ensure_group(redis: Redis, stream: str, group: str) -> None:
             raise
 
 
-def _init_db_sync(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS missions (
-            id TEXT PRIMARY KEY,
-            title TEXT,
-            status TEXT,
-            created_by TEXT,
-            decision TEXT,
-            risk_level TEXT,
-            created_at TEXT,
-            updated_at TEXT
-        )
-        """
-    )
-    conn.commit()
-
-
 class Coordinator:
     def __init__(self) -> None:
         if not DASHCLAW_BASE_URL or not DASHCLAW_API_KEY:
             raise RuntimeError("DASHCLAW_BASE_URL and DASHCLAW_API_KEY are required.")
 
         self._redis: Redis | None = None
-        self._conn: sqlite3.Connection | None = None
-        self._db_lock = asyncio.Lock()
-        self._cp_mission_by_local: dict[str, str] = {}
         self._dash_headers = {
             "x-api-key": DASHCLAW_API_KEY,
             "Content-Type": "application/json",
@@ -191,104 +165,44 @@ class Coordinator:
         await _ensure_group(self._redis, STREAM_COMMANDS, GROUP_COMMANDS)
         await _ensure_group(self._redis, STREAM_RECEIPTS, GROUP_RECEIPTS)
 
-        def _open_and_init() -> sqlite3.Connection:
-            MISSIONS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            c = sqlite3.connect(MISSIONS_DB_PATH, check_same_thread=False)
-            _init_db_sync(c)
-            return c
-
-        self._conn = await asyncio.to_thread(_open_and_init)
-        assert self._conn is not None
-
     async def close(self) -> None:
         if self._redis:
             await self._redis.close()
-        if self._conn:
-
-            def _close(c: sqlite3.Connection) -> None:
-                c.close()
-
-            await asyncio.to_thread(_close, self._conn)
-            self._conn = None
-
-    async def _db_run(self, fn: Callable[..., Any], *args: Any) -> Any:
-        async with self._db_lock:
-            return await asyncio.to_thread(fn, *args)
-
-    def _insert_mission(
-        self,
-        mission_id: str,
-        title: str,
-        created_by: str,
-        status: str = ST_PENDING,
-    ) -> None:
-        assert self._conn is not None
-        now = _now_iso()
-        self._conn.execute(
-            """
-            INSERT INTO missions (id, title, status, created_by, decision, risk_level, created_at, updated_at)
-            VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)
-            """,
-            (mission_id, title, status, created_by, now, now),
-        )
-        self._conn.commit()
-
-    def _ensure_mission_row(
-        self,
-        mission_id: str,
-        title: str,
-        created_by: str,
-    ) -> None:
-        assert self._conn is not None
-        cur = self._conn.execute("SELECT id FROM missions WHERE id = ?", (mission_id,))
-        if cur.fetchone() is None:
-            self._insert_mission(mission_id, title, created_by, ST_PENDING)
-
-    def _update_mission(
-        self,
-        mission_id: str,
-        *,
-        status: str | None = None,
-        decision: str | None = None,
-        risk_level: str | None = None,
-    ) -> None:
-        assert self._conn is not None
-        now = _now_iso()
-        parts: list[str] = ["updated_at = ?"]
-        vals: list[Any] = [now]
-        if status is not None:
-            parts.append("status = ?")
-            vals.append(status)
-        if decision is not None:
-            parts.append("decision = ?")
-            vals.append(decision)
-        if risk_level is not None:
-            parts.append("risk_level = ?")
-            vals.append(risk_level)
-        vals.append(mission_id)
-        sql = f"UPDATE missions SET {', '.join(parts)} WHERE id = ?"
-        self._conn.execute(sql, vals)
-        self._conn.commit()
 
     async def handle_command(self, redis: Redis, msg_id: bytes, fields: dict[Any, Any]) -> None:
         f = _decode_fields(fields)
         data = _parse_json_field(f, "data")
         text = (data.get("text") or data.get("command") or "").strip()
         mission_id = str(data.get("mission_id") or "").strip()
-        created_by = str(data.get("created_by") or os.environ.get("JARVIS_OPERATOR") or "").strip()
 
-        title = f"JARVIS: {(text[:200] or '(empty command)').replace(chr(10), ' ')}"
+        if not mission_id:
+            log.warning(
+                json.dumps(
+                    {
+                        "error": "command_missing_mission_id",
+                        "detail": "Redis command payload must include mission_id from control plane",
+                    }
+                )
+            )
+            await redis.xack(STREAM_COMMANDS, GROUP_COMMANDS, msg_id)
+            return
+
+        try:
+            uuid.UUID(mission_id)
+        except ValueError:
+            log.warning(
+                json.dumps(
+                    {
+                        "error": "command_invalid_mission_id",
+                        "mission_id": mission_id,
+                        "detail": "mission_id must be a UUID from the control plane",
+                    }
+                )
+            )
+            await redis.xack(STREAM_COMMANDS, GROUP_COMMANDS, msg_id)
+            return
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            if not mission_id:
-                mission_id = str(uuid.uuid4())
-
-            def _prepare() -> None:
-                assert self._conn is not None
-                self._ensure_mission_row(mission_id, title, created_by)
-
-            await self._db_run(_prepare)
-
             _log_event(
                 stream=STREAM_COMMANDS,
                 event_type="command_received",
@@ -321,18 +235,18 @@ class Coordinator:
 
             risk = guard.get("risk_level")
             risk_s = str(risk).strip() if risk is not None else None
+            risk_class = _normalize_risk_class(risk_s)
+            dashclaw_decision_id = guard.get("decision_id") or guard.get("id")
+            dashclaw_decision_id_s = (
+                str(dashclaw_decision_id).strip() if dashclaw_decision_id is not None else None
+            )
+            action_type = (text[:128] if text else "(empty)") or "(empty)"
 
             if decision == "allow":
-
-                def _allow() -> None:
-                    self._update_mission(
-                        mission_id,
-                        status=ST_ACTIVE,
-                        decision=decision,
-                        risk_level=risk_s,
-                    )
-
-                await self._db_run(_allow)
+                await post_to_control_plane(
+                    f"/api/v1/missions/{mission_id}/status",
+                    {"status": ST_ACTIVE},
+                )
                 exec_payload = {
                     "mission_id": mission_id,
                     "command": text,
@@ -350,22 +264,31 @@ class Coordinator:
                 )
 
             elif decision == "requires_approval":
-
-                def _approval() -> None:
-                    self._update_mission(
-                        mission_id,
-                        status=ST_AWAITING_APPROVAL,
-                        decision=decision,
-                        risk_level=risk_s,
-                    )
-
-                await self._db_run(_approval)
-                up = {
+                approval_body: dict[str, Any] = {
+                    "mission_id": mission_id,
+                    "action_type": action_type,
+                    "risk_class": risk_class,
+                    "reason": guard.get("message"),
+                    "command_text": text,
+                    "requested_by": os.environ.get("JARVIS_OPERATOR") or "coordinator",
+                    "requested_via": "system",
+                }
+                if dashclaw_decision_id_s:
+                    approval_body["dashclaw_decision_id"] = dashclaw_decision_id_s
+                ap_resp = await post_to_control_plane("/api/v1/approvals", approval_body)
+                approval_id_str: str | None = None
+                if ap_resp is not None:
+                    aid = ap_resp.get("id")
+                    if aid is not None:
+                        approval_id_str = str(aid)
+                up: dict[str, Any] = {
                     "type": "approval_required",
                     "mission_id": mission_id,
                     "message": guard.get("message") or "Approval required before execution.",
                     "command": text,
                 }
+                if approval_id_str:
+                    up["approval_id"] = approval_id_str
                 await redis.xadd(STREAM_UPDATES, {"data": json.dumps(up, default=str)})
                 _log_event(
                     stream=STREAM_UPDATES,
@@ -375,40 +298,15 @@ class Coordinator:
                 )
 
             else:
-
-                def _deny() -> None:
-                    self._update_mission(
-                        mission_id,
-                        status=ST_FAILED,
-                        decision="deny",
-                        risk_level=risk_s,
-                    )
-
-                await self._db_run(_deny)
+                await post_to_control_plane(
+                    f"/api/v1/missions/{mission_id}/status",
+                    {"status": ST_FAILED},
+                )
                 _log_event(
                     stream=STREAM_COMMANDS,
                     event_type="command_denied",
                     mission_id=mission_id,
                     decision="deny",
-                )
-
-        cmd_text = (text or "").strip() or "(empty command)"
-        cp_source = _control_plane_command_source(data)
-        cp_resp = await post_to_control_plane(
-            "/api/v1/commands",
-            {"text": cmd_text, "source": cp_source},
-        )
-        if cp_resp is not None:
-            cp_mid = cp_resp.get("mission_id")
-            if cp_mid is not None:
-                self._cp_mission_by_local[str(mission_id)] = str(cp_mid)
-                log.info(
-                    json.dumps(
-                        {
-                            "control_plane_mission_id": str(cp_mid),
-                            "local_mission_id": mission_id,
-                        }
-                    )
                 )
 
         await redis.xack(STREAM_COMMANDS, GROUP_COMMANDS, msg_id)
@@ -440,18 +338,16 @@ class Coordinator:
             or_post.raise_for_status()
 
             if ok:
-
-                def _done() -> None:
-                    self._update_mission(mission_id, status=ST_COMPLETE, decision="complete")
-
-                await self._db_run(_done)
+                await post_to_control_plane(
+                    f"/api/v1/missions/{mission_id}/status",
+                    {"status": ST_COMPLETE},
+                )
                 decision = "complete"
             else:
-
-                def _fail() -> None:
-                    self._update_mission(mission_id, status=ST_FAILED, decision="failed")
-
-                await self._db_run(_fail)
+                await post_to_control_plane(
+                    f"/api/v1/missions/{mission_id}/status",
+                    {"status": ST_FAILED},
+                )
                 decision = "failed"
 
             up = {
@@ -469,23 +365,21 @@ class Coordinator:
                 decision=decision,
             )
 
-            cp_mid = self._cp_mission_by_local.get(mission_id)
-            if cp_mid:
-                summ: str | None = None
-                if summary is not None:
-                    s = str(summary).strip()
-                    if s:
-                        summ = s[:500] if len(s) > 500 else s
-                await post_to_control_plane(
-                    "/api/v1/receipts",
-                    {
-                        "mission_id": cp_mid,
-                        "receipt_type": "agent_output",
-                        "source": "coordinator",
-                        "payload": data,
-                        "summary": summ,
-                    },
-                )
+            summ: str | None = None
+            if summary is not None:
+                s = str(summary).strip()
+                if s:
+                    summ = s[:500] if len(s) > 500 else s
+            await post_to_control_plane(
+                "/api/v1/receipts",
+                {
+                    "mission_id": mission_id,
+                    "receipt_type": "agent_output",
+                    "source": "coordinator",
+                    "payload": data,
+                    "summary": summ,
+                },
+            )
 
         await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
 

@@ -29,6 +29,8 @@ async def create_approval(
         requested_by=body.requested_by,
         requested_via=body.requested_via,
         expires_at=body.expires_at,
+        command_text=body.command_text,
+        dashclaw_decision_id=body.dashclaw_decision_id,
     )
     return ApprovalRead.model_validate(approval)
 

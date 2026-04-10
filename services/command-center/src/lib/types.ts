@@ -33,6 +33,8 @@ export interface Approval {
   action_type: string;
   risk_class: string;
   reason: string | null;
+  command_text: string | null;
+  dashclaw_decision_id: string | null;
   status: string;
   requested_by: string;
   requested_via: string;

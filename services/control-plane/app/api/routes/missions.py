@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.schemas.missions import MissionRead
+from app.schemas.missions import MissionRead, MissionStatusUpdate
 from app.schemas.updates import MissionEventRead
 from app.services.mission_service import MissionService
 
@@ -30,6 +30,16 @@ async def list_missions(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post("/{mission_id}/status", response_model=MissionRead)
+async def post_mission_status(
+    mission_id: UUID,
+    body: MissionStatusUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> MissionRead:
+    svc = MissionService(session)
+    return await svc.update_mission_status(mission_id, body.status)
 
 
 @router.get("/{mission_id}/events", response_model=list[MissionEventRead])

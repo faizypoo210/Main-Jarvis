@@ -2,16 +2,47 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.approval import Approval
+from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.repositories.approval_repo import ApprovalRepository
 from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.mission_repo import MissionRepository
+
+STREAM_EXECUTION = "jarvis.execution"
+
+log = get_logger(__name__)
+
+
+async def _publish_execution_resume(
+    mission_id: str,
+    command: str,
+    approval_id: str,
+) -> None:
+    settings = get_settings()
+    url = settings.REDIS_URL or "redis://localhost:6379"
+    payload = {
+        "mission_id": mission_id,
+        "command": command,
+        "approval_id": approval_id,
+        "resumed": True,
+    }
+    r: Redis | None = None
+    try:
+        r = Redis.from_url(url, decode_responses=False)
+        await r.xadd(STREAM_EXECUTION, {"data": json.dumps(payload)})
+    except Exception as e:
+        log.warning("redis execution publish failed: %s", e)
+    finally:
+        if r is not None:
+            await r.close()
 
 
 class ApprovalService:
@@ -28,6 +59,9 @@ class ApprovalService:
         requested_by: str,
         requested_via: str,
         expires_at: datetime | None = None,
+        *,
+        command_text: str | None = None,
+        dashclaw_decision_id: str | None = None,
     ) -> Approval:
         mission = await self._mission_repo.get_by_id(mission_id)
         if mission is None:
@@ -45,6 +79,8 @@ class ApprovalService:
             requested_by=requested_by,
             requested_via=requested_via,
             expires_at=expires_at,
+            command_text=command_text,
+            dashclaw_decision_id=dashclaw_decision_id,
         )
         await MissionEventRepository.create(
             self._session,
@@ -92,14 +128,23 @@ class ApprovalService:
 
         await MissionEventRepository.create(
             self._session,
-            mission_id=approval.mission_id,
+            mission_id=updated.mission_id,
             event_type="approval_resolved",
             payload={"decision": decision, "decided_by": decided_by},
         )
 
+        mid = updated.mission_id
+        aid = updated.id
+        cmd_text = (updated.command_text or "").strip()
+
         if decision == "approved":
-            await self._mission_repo.update_status(approval.mission_id, "active")
+            await self._mission_repo.update_status(mid, "active")
         else:
-            await self._mission_repo.update_status(approval.mission_id, "blocked")
+            await self._mission_repo.update_status(mid, "blocked")
+
+        await self._session.commit()
+
+        if decision == "approved":
+            await _publish_execution_resume(str(mid), cmd_text, str(aid))
 
         return updated

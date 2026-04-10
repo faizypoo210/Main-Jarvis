@@ -34,7 +34,6 @@ if WHISPER_DEVICE == "cuda":
 else:
     WHISPER_COMPUTE = "int8"
 
-STREAM_COMMANDS = "jarvis.commands"
 STREAM_UPDATES = "jarvis.updates"
 
 OLLAMA_ACK_SYSTEM = (
@@ -260,11 +259,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await _manager.send_json(websocket, {"type": "heard", "text": text})
 
             mission_id = await post_command_to_control_plane(text)
-
-            await _redis.xadd(
-                STREAM_COMMANDS,
-                {"data": json.dumps({"text": text, "created_by": "voice"})},
-            )
 
             if mission_id is not None:
                 user_ollama = (

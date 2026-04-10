@@ -31,6 +31,8 @@ class Approval(Base):
     action_type: Mapped[str] = mapped_column(String(128), nullable=False)
     risk_class: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    command_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dashclaw_decision_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     requested_by: Mapped[str] = mapped_column(String(256), nullable=False)
     requested_via: Mapped[str] = mapped_column(String(64), nullable=False)

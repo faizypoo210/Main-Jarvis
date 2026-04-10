@@ -24,12 +24,17 @@ class ApprovalRepository:
         requested_by: str,
         requested_via: str,
         expires_at: datetime | None = None,
+        *,
+        command_text: str | None = None,
+        dashclaw_decision_id: str | None = None,
     ) -> Approval:
         approval = Approval(
             mission_id=mission_id,
             action_type=action_type,
             risk_class=risk_class,
             reason=reason,
+            command_text=command_text,
+            dashclaw_decision_id=dashclaw_decision_id,
             status="pending",
             requested_by=requested_by,
             requested_via=requested_via,

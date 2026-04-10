@@ -20,6 +20,10 @@ class MissionCreate(BaseModel):
     summary: str | None = None
 
 
+class MissionStatusUpdate(BaseModel):
+    status: str = Field(..., min_length=1, max_length=64)
+
+
 class MissionRead(BaseModel):
     id: UUID
     title: str

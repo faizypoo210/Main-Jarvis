@@ -47,10 +47,13 @@ class ReceiptService:
             payload=payload,
             summary=summary,
         )
+        ev_payload: dict[str, Any] = {"receipt_type": receipt_type, "source": source}
+        if summary is not None:
+            ev_payload["summary"] = summary
         await MissionEventRepository.create(
             self._session,
             mission_id=mission_id,
             event_type="receipt_recorded",
-            payload={"receipt_type": receipt_type, "source": source},
+            payload=ev_payload,
         )
         return receipt

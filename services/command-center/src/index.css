@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-void: #07080d;
+  --bg-surface: #0d0f17;
+  --bg-elevated: #131621;
+  --bg-border: #1e2235;
+  --accent-blue: #4f8ef7;
+  --accent-blue-dim: #2a4a8a;
+  --accent-blue-glow: rgba(79, 142, 247, 0.15);
+  --text-primary: #e8eaf0;
+  --text-secondary: #8b90a0;
+  --text-muted: #4a5060;
+  --status-green: #34d399;
+  --status-amber: #fbbf24;
+  --status-red: #f87171;
+  --status-blue: #60a5fa;
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--bg-void);
+    color: var(--text-primary);
+    font-family: "DM Sans", system-ui, sans-serif;
+  }
+  #root {
+    min-height: 100dvh;
+  }
+}
+
+/* Voice orb — pure CSS */
+@keyframes orb-idle {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.04);
+    filter: brightness(1.08);
+  }
+}
+
+@keyframes orb-listening {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes orb-thinking {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orb-speaking {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 40px rgba(79, 142, 247, 0.35);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 56px rgba(79, 142, 247, 0.5);
+  }
+}
+
+@keyframes orb-awaiting {
+  0%,
+  100% {
+    filter: hue-rotate(0deg) brightness(1);
+  }
+  50% {
+    filter: hue-rotate(-15deg) brightness(1.1);
+  }
+}
+
+@keyframes orb-error {
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(0.9);
+  }
+  50% {
+    opacity: 0.75;
+    filter: brightness(0.7);
+  }
+}
+
+.voice-orb-idle {
+  animation: orb-idle 4s ease-in-out infinite;
+}
+
+.voice-orb-listening {
+  animation: orb-listening 1.2s ease-in-out infinite;
+}
+
+.voice-orb-thinking .orb-gradient-spin {
+  animation: orb-thinking 8s linear infinite;
+}
+
+.voice-orb-speaking {
+  animation: orb-speaking 1.5s ease-in-out infinite;
+}
+
+.voice-orb-awaiting_approval {
+  animation: orb-awaiting 3s ease-in-out infinite;
+}
+
+.voice-orb-error {
+  animation: orb-error 2.5s ease-in-out infinite;
+}
+
+.agent-dot-pulse {
+  animation: orb-listening 1.4s ease-in-out infinite;
+}

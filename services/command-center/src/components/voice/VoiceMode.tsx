@@ -1,20 +1,266 @@
-import { Bell, Mic, Play, X } from "lucide-react";
+import { Bell, Mic, Pause, Play, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { VoiceOrb, type VoiceOrbState } from "./VoiceOrb";
 
-export function VoiceMode({
-  open,
-  onClose,
-  state,
-  label,
-  transcript,
-}: {
-  open: boolean;
-  onClose: () => void;
-  state: VoiceOrbState;
-  label: string;
-  transcript: string;
-}) {
+type WsState = "connecting" | "open" | "closed" | "error";
+
+function getVoiceWsUrl(): string {
+  const raw = import.meta.env.VITE_VOICE_SERVER_URL?.trim();
+  if (raw) {
+    const u = new URL(raw);
+    const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
+    return `${wsProto}//${u.host}/ws`;
+  }
+  const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${wsProto}//${window.location.hostname}:8000/ws`;
+}
+
+function pickRecorderMime(): string {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  for (const c of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c)) {
+      return c;
+    }
+  }
+  return "audio/webm";
+}
+
+export function VoiceMode({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [wsState, setWsState] = useState<WsState>("closed");
+  const [serverOrb, setServerOrb] = useState<"idle" | "thinking" | "speaking">("idle");
+  const [transcript, setTranscript] = useState("");
+  const [reply, setReply] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const mimeRef = useRef<string>(pickRecorderMime());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const orbState: VoiceOrbState = useMemo(() => {
+    if (recording) return "listening";
+    if (error) return "error";
+    if (serverOrb === "thinking") return "thinking";
+    if (serverOrb === "speaking") return "speaking";
+    return "idle";
+  }, [error, recording, serverOrb]);
+
+  const label = useMemo(() => {
+    if (wsState === "connecting") return "Connecting...";
+    if (recording) return "Listening...";
+    if (serverOrb === "thinking") return "Thinking...";
+    if (serverOrb === "speaking") return "Speaking...";
+    if (wsState === "open") return "Jarvis";
+    return "Disconnected";
+  }, [wsState, recording, serverOrb]);
+
+  const stopRecordingTracks = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    setRecording(false);
+  }, []);
+
+  const stopRecordingSend = useCallback(() => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== "inactive") {
+      rec.stop();
+    } else {
+      stopRecordingTracks();
+    }
+  }, [stopRecordingTracks]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setTranscript("");
+    setReply("");
+    setError(null);
+    setWsState("connecting");
+    setServerOrb("idle");
+
+    const url = getVoiceWsUrl();
+    let cancelled = false;
+    const ws = new WebSocket(url);
+    ws.binaryType = "arraybuffer";
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (cancelled) return;
+      setWsState("open");
+      setError(null);
+    };
+
+    ws.onmessage = (ev) => {
+      if (typeof ev.data !== "string") return;
+      try {
+        const data = JSON.parse(ev.data) as {
+          type?: string;
+          state?: string;
+          text?: string;
+          message?: string;
+          audio_b64?: string;
+          kind?: string;
+        };
+        const t = data.type;
+        if (t === "status" && data.state) {
+          const s = data.state;
+          if (s === "thinking" || s === "speaking" || s === "idle") {
+            setServerOrb(s);
+          }
+          return;
+        }
+        if (t === "heard" && typeof data.text === "string") {
+          setTranscript(data.text);
+          setError(null);
+          return;
+        }
+        if (t === "reply" && typeof data.text === "string") {
+          setReply(data.text);
+          setError(null);
+          return;
+        }
+        if (t === "tts" && typeof data.audio_b64 === "string") {
+          const audioB64 = data.audio_b64;
+          void (async () => {
+            try {
+              let ctx = audioCtxRef.current;
+              if (!ctx) {
+                ctx = new AudioContext();
+                audioCtxRef.current = ctx;
+              }
+              const binary = atob(audioB64);
+              const len = binary.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              const audioBuffer = await ctx.decodeAudioData(
+                bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+              );
+              const src = ctx.createBufferSource();
+              src.buffer = audioBuffer;
+              src.connect(ctx.destination);
+              src.start();
+            } catch (e) {
+              console.warn("VoiceMode TTS playback failed:", e);
+            }
+          })();
+          return;
+        }
+        if (t === "error") {
+          const msg = typeof data.message === "string" ? data.message : "Voice error";
+          setError(msg);
+          return;
+        }
+      } catch {
+        /* ignore non-JSON */
+      }
+    };
+
+    ws.onerror = () => {
+      if (cancelled) return;
+      setWsState("error");
+      setError("WebSocket connection failed");
+    };
+
+    ws.onclose = () => {
+      if (cancelled) return;
+      wsRef.current = null;
+      setWsState("closed");
+    };
+
+    return () => {
+      cancelled = true;
+      const rec = mediaRecorderRef.current;
+      if (rec && rec.state !== "inactive") {
+        rec.onstop = null;
+        rec.stop();
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      mediaRecorderRef.current = null;
+      chunksRef.current = [];
+      setRecording(false);
+
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+      wsRef.current = null;
+    };
+  }, [open]);
+
+  const startRecording = useCallback(async () => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      setError("Not connected to voice server");
+      return;
+    }
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      mimeRef.current = pickRecorderMime();
+      chunksRef.current = [];
+      let rec: MediaRecorder;
+      try {
+        rec = new MediaRecorder(stream, { mimeType: mimeRef.current });
+      } catch {
+        rec = new MediaRecorder(stream);
+        mimeRef.current = rec.mimeType || "audio/webm";
+      }
+      mediaRecorderRef.current = rec;
+
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeRef.current });
+        chunksRef.current = [];
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        mediaRecorderRef.current = null;
+        setRecording(false);
+
+        if (wsRef.current?.readyState === WebSocket.OPEN && blob.size > 0) {
+          wsRef.current.send(blob);
+        }
+      };
+
+      rec.start();
+      setRecording(true);
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "Microphone access denied or unavailable";
+      setError(msg);
+      setRecording(false);
+    }
+  }, []);
+
+  const toggleRecording = useCallback(() => {
+    if (recording) {
+      stopRecordingSend();
+    } else {
+      void startRecording();
+    }
+  }, [recording, startRecording, stopRecordingSend]);
+
+  const handleClose = useCallback(() => {
+    stopRecordingSend();
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    }
+    wsRef.current = null;
+    setWsState("closed");
+    onClose();
+  }, [onClose, stopRecordingSend]);
+
   if (!open) return null;
+
+  const canUseMic = wsState === "open";
 
   return (
     <div
@@ -25,7 +271,7 @@ export function VoiceMode({
     >
       <div className="flex items-center justify-between px-4 py-4 md:px-8">
         <div className="flex items-center gap-2">
-          <VoiceOrb state="idle" size="sm" />
+          <VoiceOrb state={orbState} size="sm" />
           <span className="font-display text-sm font-semibold tracking-wide text-[var(--text-primary)]">
             JARVIS
           </span>
@@ -45,34 +291,47 @@ export function VoiceMode({
       <div className="flex flex-1 flex-col items-center justify-center px-6 pb-12">
         <p className="font-display text-lg font-semibold text-[var(--accent-blue)] md:text-xl">{label}</p>
         <div className="mt-8">
-          <VoiceOrb state={state} size="lg" />
+          <VoiceOrb state={orbState} size="lg" />
         </div>
-        <p className="mt-10 max-w-md text-center text-sm leading-relaxed text-[var(--text-secondary)]">
-          {transcript}
-        </p>
+        <div className="mt-10 max-w-md space-y-3 text-center text-sm leading-relaxed">
+          {transcript ? (
+            <p className="text-[var(--accent-blue)]/90">{transcript}</p>
+          ) : null}
+          {reply ? <p className="text-[var(--text-primary)]">{reply}</p> : null}
+          {error ? <p className="text-red-400">{error}</p> : null}
+        </div>
       </div>
 
       <div className="flex items-center justify-center gap-8 border-t border-white/10 px-6 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/15"
-          aria-label="Play or pause"
+          disabled={!canUseMic}
+          onClick={() => void toggleRecording()}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={recording ? "Pause recording" : "Start recording"}
         >
-          <Play className="h-5 w-5" />
+          {recording ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </button>
-        <button type="button" className="text-sm font-medium text-[var(--text-secondary)] hover:text-white">
+        <button
+          type="button"
+          disabled={!recording}
+          onClick={() => stopRecordingSend()}
+          className="text-sm font-medium text-[var(--text-secondary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
           Stop
         </button>
         <button
           type="button"
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-blue)]/20 text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/30"
+          disabled={!canUseMic}
+          onClick={() => void toggleRecording()}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-blue)]/20 text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/30 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Microphone"
         >
           <Mic className="h-5 w-5" />
         </button>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 text-white hover:bg-white/10"
           aria-label="Close voice mode"
         >

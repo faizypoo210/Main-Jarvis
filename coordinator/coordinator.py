@@ -217,12 +217,17 @@ class Coordinator:
                 "command": text,
                 "context": data.get("context") or {},
             }
-            gr = await client.post(
-                f"{DASHCLAW_BASE_URL}/api/guard",
-                headers=self._dash_headers,
-                json=guard_body,
-            )
-            gr.raise_for_status()
+            try:
+                gr = await client.post(
+                    f"{DASHCLAW_BASE_URL}/api/guard",
+                    headers=self._dash_headers,
+                    json=guard_body,
+                )
+                gr.raise_for_status()
+            except Exception as e:
+                log.error(json.dumps({"error": "dashclaw_unreachable", "detail": str(e)}))
+                await asyncio.sleep(5)
+                raise
             guard = gr.json()
             decision_raw = (guard.get("decision") or "").strip().lower()
             if decision_raw in ("allow", "approved"):

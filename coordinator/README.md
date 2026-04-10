@@ -1,6 +1,6 @@
 # JARVIS Event Coordinator
 
-Async Python service that connects **Redis Streams**, a **local SQLite** mission store (`missions.db`), and **DashClaw** (governance). It reads voice/UI commands and OpenClaw receipts from streams, records missions in SQLite, calls DashClaw **guard** and **outcomes** endpoints, and publishes execution work and UI updates back to Redis.
+Async Python service that connects **Redis Streams**, **DashClaw** (governance), and the **Jarvis Control Plane** (mission state). It reads voice/UI commands and OpenClaw receipts from streams, calls DashClaw **guard** and **outcomes** endpoints, and publishes execution work and UI updates back to Redis.
 
 ## Flow
 
@@ -10,21 +10,13 @@ Async Python service that connects **Redis Streams**, a **local SQLite** mission
    - `deny` → `failed` (guard denied)
 2. **Receipts** (`jarvis.receipts`): POST DashClaw `/api/outcomes`, set mission `complete` or `failed`, summary to `jarvis.updates`.
 
-## SQLite: `missions.db`
+## State
 
-Default path: **`F:\Jarvis\coordinator\missions.db`** (same directory as `coordinator.py`). The `missions` table:
-
-| Column | Purpose |
-|--------|---------|
-| `id` | Primary key (UUID string) |
-| `title` | Short label derived from the command |
-| `status` | `pending` \| `active` \| `awaiting_approval` \| `complete` \| `failed` |
-| `created_by` | From command JSON `created_by`, or `JARVIS_OPERATOR` env, or empty |
-| `decision` | Last guard/outcome decision string when set |
-| `risk_level` | From DashClaw guard when present |
-| `created_at` / `updated_at` | ISO-8601 timestamps (UTC) |
-
-The database file is created on first run.
+The coordinator is stateless. All mission state lives in the
+Jarvis Control Plane (PostgreSQL via FastAPI at CONTROL_PLANE_URL).
+The coordinator reads Redis streams, calls DashClaw for policy
+evaluation, and POSTs state changes back to the control plane.
+No local database is used.
 
 ## Redis Streams
 
@@ -42,6 +34,7 @@ Messages use a `data` field containing JSON.
 | Variable | Purpose |
 |----------|---------|
 | `REDIS_URL` | Redis URL (default `redis://localhost:6379`) |
+| `CONTROL_PLANE_URL` | Control plane base URL (default `http://localhost:8001`) |
 | `DASHCLAW_BASE_URL` | DashClaw base URL (no trailing slash required) |
 | `DASHCLAW_API_KEY` | DashClaw API key (sent as `Authorization: Bearer …`) |
 | `JARVIS_OPERATOR` | Optional default for mission `created_by` when not in the command payload |

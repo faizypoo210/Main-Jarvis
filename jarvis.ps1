@@ -101,8 +101,17 @@ if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE
 Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\services\control-plane; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001" -WindowStyle Normal
 
-# Brief pause to let control plane initialize
-Start-Sleep -Seconds 3
+Write-Host "Waiting for control plane to be ready..." -ForegroundColor Cyan
+$cpReady = $false
+for ($i = 0; $i -lt 20; $i++) {
+    Start-Sleep -Seconds 2
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8001/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+        if ($r.StatusCode -eq 200) { $cpReady = $true; break }
+    } catch { }
+}
+if (-not $cpReady) { Write-Host "WARNING: Control plane did not respond in time" -ForegroundColor Yellow }
+else { Write-Host "Control plane ready." -ForegroundColor Green }
 
 # Start Jarvis Command Center
 Write-Host "Starting Jarvis Command Center..." -ForegroundColor Cyan
@@ -111,7 +120,7 @@ Start-Sleep -Seconds 2
 
 # Start Jarvis Voice Server
 Write-Host "Starting Jarvis Voice Server..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\voice; uvicorn server:app --port 8000 --reload" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd F:\Jarvis\voice; .\.venv\Scripts\Activate.ps1; uvicorn server:app --host 0.0.0.0 --port 8000" -WindowStyle Minimized
 Start-Sleep -Seconds 2
 
 # Event Coordinator

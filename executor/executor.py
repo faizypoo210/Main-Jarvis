@@ -18,6 +18,10 @@ load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
+OPENCLAW_CMD = os.getenv(
+    "OPENCLAW_CMD",
+    r"C:\Users\faizt\AppData\Roaming\npm\openclaw.cmd",
+)
 
 STREAM_EXECUTION = "jarvis.execution"
 STREAM_UPDATES = "jarvis.updates"
@@ -100,7 +104,7 @@ async def _call_openclaw(
 ) -> tuple[str, bool]:
     try:
         proc = await asyncio.create_subprocess_exec(
-            r"C:\Users\faizt\AppData\Roaming\npm\openclaw.cmd",
+            OPENCLAW_CMD,
             "agent",
             "--agent",
             "main",

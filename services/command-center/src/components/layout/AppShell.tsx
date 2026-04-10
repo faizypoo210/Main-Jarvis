@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Outlet, useOutletContext } from "react-router-dom";
 import { useMissions, usePendingApprovals } from "../../hooks/useControlPlane";
 import { VoiceMode } from "../voice/VoiceMode";
-import type { VoiceOrbState } from "../voice/VoiceOrb";
 import { CenterPane } from "./CenterPane";
 import { LeftRail } from "./LeftRail";
 import { MobileBottomNav } from "./MobileBottomNav";
@@ -25,21 +24,11 @@ export function AppShell() {
   const pendingApprovalCount = approvals.length;
 
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const [voiceOrbState] = useState<VoiceOrbState>("listening");
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
 
   const outletCtx: ShellOutletContext = {
     openVoiceMode: () => setVoiceOpen(true),
   };
-
-  const voiceLabel =
-    voiceOrbState === "listening"
-      ? "Listening"
-      : voiceOrbState === "thinking"
-        ? "Thinking"
-        : voiceOrbState === "speaking"
-          ? "Speaking"
-          : "Jarvis";
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--bg-void)] md:flex-row">
@@ -84,13 +73,7 @@ export function AppShell() {
         </div>
       ) : null}
 
-      <VoiceMode
-        open={voiceOpen}
-        onClose={() => setVoiceOpen(false)}
-        state={voiceOrbState}
-        label={voiceLabel}
-        transcript="What tasks should I prioritize today?"
-      />
+      <VoiceMode open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

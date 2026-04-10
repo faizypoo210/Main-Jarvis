@@ -9,6 +9,7 @@ import base64
 import json
 import logging
 import os
+import re
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -291,6 +292,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     r.raise_for_status()
                     body = r.json()
                     reply = (body.get("message") or {}).get("content") or ""
+                    reply = re.sub(r"<\|[^>]+\|>", "", reply).strip()
             except Exception as e:
                 log.exception("ollama: %s", e)
                 await _manager.send_json(

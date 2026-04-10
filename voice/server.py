@@ -24,6 +24,8 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+# Override with CONTROL_PLANE_URL if the control plane listens elsewhere.
+CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
 OLLAMA_BASE = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "phi4-mini")
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
@@ -34,6 +36,13 @@ else:
 
 STREAM_COMMANDS = "jarvis.commands"
 STREAM_UPDATES = "jarvis.updates"
+
+OLLAMA_ACK_SYSTEM = (
+    "You are Jarvis, a calm executive AI assistant. "
+    "Acknowledge the user's command in 1-2 sentences. "
+    "Be brief. Confirm what you understood and that you are on it. "
+    "Do not make up information. Do not invent results."
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -74,6 +83,24 @@ def _transcribe_file(path: str) -> str:
     model = _get_model()
     segments, _ = model.transcribe(path, language="en")
     return "".join(s.text for s in segments).strip()
+
+
+async def post_command_to_control_plane(text: str) -> str | None:
+    """POST command to the Jarvis control plane; return mission_id or None on failure."""
+    url = f"{CONTROL_PLANE_URL}/api/v1/commands"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.post(url, json={"text": text, "source": "voice"})
+            r.raise_for_status()
+            body = r.json()
+            mid = body.get("mission_id")
+            if mid is None:
+                log.warning("control plane response missing mission_id: %s", body)
+                return None
+            return str(mid)
+    except Exception as e:
+        log.warning("control plane command post failed: %s", e)
+        return None
 
 
 class ConnectionManager:
@@ -232,10 +259,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             await _manager.send_json(websocket, {"type": "heard", "text": text})
 
+            mission_id = await post_command_to_control_plane(text)
+
             await _redis.xadd(
                 STREAM_COMMANDS,
                 {"data": json.dumps({"text": text, "created_by": "voice"})},
             )
+
+            if mission_id is not None:
+                user_ollama = (
+                    f"The user said: '{text}'. Mission ID {mission_id} has been created."
+                )
+            else:
+                user_ollama = (
+                    f"The user said: '{text}'. Acknowledge and confirm you understood."
+                )
 
             try:
                 async with httpx.AsyncClient(timeout=120.0) as client:
@@ -244,13 +282,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         json={
                             "model": OLLAMA_MODEL,
                             "messages": [
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        "You are Jarvis, a concise home AI assistant. Keep replies brief."
-                                    ),
-                                },
-                                {"role": "user", "content": text},
+                                {"role": "system", "content": OLLAMA_ACK_SYSTEM},
+                                {"role": "user", "content": user_ollama},
                             ],
                             "stream": False,
                         },

@@ -21,6 +21,9 @@ from redis.exceptions import ResponseError
 
 load_dotenv()
 
+# Control plane (Jarvis API). Override via .env: CONTROL_PLANE_URL=http://localhost:8001
+CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001")
+
 # Mission status values (missions table)
 ST_PENDING = "pending"
 ST_ACTIVE = "active"
@@ -49,6 +52,59 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger("jarvis.coordinator")
+
+
+async def post_to_control_plane(path: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    """POST JSON to the control plane. Logs only; never raises."""
+    base = CONTROL_PLANE_URL.rstrip("/")
+    p = path if path.startswith("/") else f"/{path}"
+    url = f"{base}{p}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(url, json=payload)
+            r.raise_for_status()
+            out = r.json()
+            if not isinstance(out, dict):
+                log.warning(
+                    json.dumps(
+                        {
+                            "control_plane": "unexpected_response",
+                            "path": path,
+                            "detail": "response was not a JSON object",
+                        }
+                    )
+                )
+                return None
+            log.info(
+                json.dumps(
+                    {
+                        "control_plane": "ok",
+                        "path": path,
+                        "status_code": r.status_code,
+                    }
+                )
+            )
+            return out
+    except Exception as e:
+        log.warning(
+            json.dumps(
+                {
+                    "control_plane": "fail",
+                    "path": path,
+                    "detail": str(e),
+                }
+            )
+        )
+        return None
+
+
+def _control_plane_command_source(data: dict[str, Any]) -> str:
+    """Map incoming command metadata to control plane CommandCreate.source (voice|command_center|sms|api)."""
+    raw = str(data.get("surface_origin") or data.get("source") or "").strip().lower()
+    if raw in ("voice", "command_center", "sms", "api"):
+        return raw
+    # Coordinator path / unknown surfaces: use api (control plane does not accept "coordinator" as source)
+    return "api"
 
 
 def _now_iso() -> str:
@@ -123,6 +179,7 @@ class Coordinator:
         self._redis: Redis | None = None
         self._conn: sqlite3.Connection | None = None
         self._db_lock = asyncio.Lock()
+        self._cp_mission_by_local: dict[str, str] = {}
         self._dash_headers = {
             "x-api-key": DASHCLAW_API_KEY,
             "Content-Type": "application/json",
@@ -335,6 +392,25 @@ class Coordinator:
                     decision="deny",
                 )
 
+        cmd_text = (text or "").strip() or "(empty command)"
+        cp_source = _control_plane_command_source(data)
+        cp_resp = await post_to_control_plane(
+            "/api/v1/commands",
+            {"text": cmd_text, "source": cp_source},
+        )
+        if cp_resp is not None:
+            cp_mid = cp_resp.get("mission_id")
+            if cp_mid is not None:
+                self._cp_mission_by_local[str(mission_id)] = str(cp_mid)
+                log.info(
+                    json.dumps(
+                        {
+                            "control_plane_mission_id": str(cp_mid),
+                            "local_mission_id": mission_id,
+                        }
+                    )
+                )
+
         await redis.xack(STREAM_COMMANDS, GROUP_COMMANDS, msg_id)
 
     async def handle_receipt(self, redis: Redis, msg_id: bytes, fields: dict[Any, Any]) -> None:
@@ -392,6 +468,24 @@ class Coordinator:
                 mission_id=mission_id,
                 decision=decision,
             )
+
+            cp_mid = self._cp_mission_by_local.get(mission_id)
+            if cp_mid:
+                summ: str | None = None
+                if summary is not None:
+                    s = str(summary).strip()
+                    if s:
+                        summ = s[:500] if len(s) > 500 else s
+                await post_to_control_plane(
+                    "/api/v1/receipts",
+                    {
+                        "mission_id": cp_mid,
+                        "receipt_type": "agent_output",
+                        "source": "coordinator",
+                        "payload": data,
+                        "summary": summ,
+                    },
+                )
 
         await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
 

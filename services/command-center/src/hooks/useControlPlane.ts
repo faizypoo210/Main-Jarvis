@@ -4,6 +4,11 @@ import type { Approval, Mission, MissionEvent } from "../lib/types";
 
 export { useControlPlaneLive } from "../contexts/ControlPlaneLiveContext";
 export type { StreamPhase } from "../contexts/ControlPlaneLiveContext";
+export { useResolveApprovalAction } from "./useResolveApprovalAction";
+export type {
+  LastResolvedApproval,
+  ResolveApprovalSuccessOptions,
+} from "./useResolveApprovalAction";
 
 export function useMissions(params?: {
   status?: string;

@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import * as api from "../lib/api";
 import { ApprovalCard } from "../components/approvals/ApprovalCard";
 import { MissionTimeline } from "../components/mission/MissionTimeline";
 import { StatusBadge } from "../components/common/StatusBadge";
 import { useShellOutlet } from "../components/layout/AppShell";
-import { useControlPlaneLive } from "../hooks/useControlPlane";
+import { useControlPlaneLive, useResolveApprovalAction } from "../hooks/useControlPlane";
 import type { Approval, Receipt } from "../lib/types";
 import { formatRelativeTime, normalizeMissionStatus } from "../lib/format";
 import { deriveExecutiveMissionSummary } from "../lib/missionExecutiveSummary";
+import {
+  deriveLatestExecutionResult,
+  MISSION_DETAIL_RECEIPTS_SECTION_ID,
+  missionDetailLatestResultHash,
+} from "../lib/missionLatestResult";
 import { MissionExecutiveSummaryBlock } from "../components/mission/MissionExecutiveSummaryBlock";
-import { ExecutionMetaLine } from "../components/mission/ExecutionMetaLine";
+import { LatestExecutionResultLine } from "../components/mission/LatestExecutionResultLine";
+import { MissionReceiptsSection } from "../components/mission/MissionReceiptsSection";
 import { LiveLinkIndicator } from "../components/layout/LiveLinkIndicator";
 import { operatorCopy } from "../lib/operatorCopy";
 import { deriveMissionTiming } from "../lib/missionTiming";
@@ -19,17 +25,19 @@ import { MissionOperationalHealthRow, MissionTimingStrip } from "../components/m
 
 export function MissionDetail() {
   const { missionId = "" } = useParams<{ missionId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { setThreadMissionId } = useShellOutlet();
   const {
     eventStreamRevision,
-    refetchPendingApprovals,
     hydrateMissionBundle,
     missionById,
     eventsByMissionId,
     streamPhase,
     pendingError,
   } = useControlPlaneLive();
+  const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
+    useResolveApprovalAction();
 
   const mission = missionId ? missionById[missionId] ?? null : null;
   const events = missionId ? eventsByMissionId[missionId] ?? [] : [];
@@ -38,9 +46,6 @@ export function MissionDetail() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [initialDone, setInitialDone] = useState(false);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolveErrorId, setResolveErrorId] = useState<string | null>(null);
-
   useEffect(() => {
     if (!missionId.trim()) return;
     setThreadMissionId(missionId);
@@ -77,31 +82,22 @@ export function MissionDetail() {
     return () => clearTimeout(t);
   }, [eventStreamRevision, missionId, initialDone]);
 
-  const resolve = useCallback(
-    async (id: string, decision: "approved" | "denied") => {
-      setResolvingId(id);
-      setResolveErrorId(null);
-      try {
-        await api.resolveApproval(id, {
-          decision,
-          decided_by: "operator",
-          decided_via: "command_center",
-        });
-        await loadBundle();
-        void refetchPendingApprovals();
-      } catch {
-        setResolveErrorId(id);
-      } finally {
-        setResolvingId(null);
-      }
+  const resolveOne = useCallback(
+    (id: string, decision: "approved" | "denied") => {
+      void resolve(id, decision, { onSuccess: () => loadBundle() });
     },
-    [loadBundle, refetchPendingApprovals]
+    [resolve, loadBundle]
   );
 
   const executiveSummary = useMemo(() => {
     if (!mission) return null;
     return deriveExecutiveMissionSummary(mission, events, approvals, receipts);
   }, [mission, events, approvals, receipts]);
+
+  const latestExecution = useMemo(() => {
+    if (!mission) return null;
+    return deriveLatestExecutionResult(mission, events, receipts);
+  }, [mission, events, receipts]);
 
   const missionTiming = useMemo(() => {
     if (!mission) return null;
@@ -126,6 +122,18 @@ export function MissionDetail() {
     mission!.status === "awaiting_approval" &&
     pendingCount === 0 &&
     approvals.length > 0;
+
+  useEffect(() => {
+    const raw = location.hash.slice(1);
+    if (!raw || !missionId.trim()) return;
+    const el = document.getElementById(raw);
+    if (!el) return;
+    const details = el.querySelector("details");
+    if (details && !details.open) details.open = true;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [location.hash, missionId, receipts.length, initialDone, mission?.id]);
 
   if (!missionId.trim()) {
     return <Navigate to="/missions" replace />;
@@ -179,6 +187,22 @@ export function MissionDetail() {
               </h1>
               {mission ? (
                 <p className="mt-1 font-mono text-[10px] text-[var(--text-muted)]">{mission.id}</p>
+              ) : null}
+              {mission && executiveSummary ? (
+                <p
+                  className="mt-2 text-sm leading-snug text-[var(--text-secondary)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {executiveSummary.phaseLabel}
+                </p>
+              ) : null}
+              {latestExecution?.hasResult ? (
+                <LatestExecutionResultLine
+                  latest={latestExecution}
+                  className="mt-3"
+                  to={missionDetailLatestResultHash(latestExecution)}
+                />
               ) : null}
             </div>
             {mission ? (
@@ -242,7 +266,11 @@ export function MissionDetail() {
             {loadingShell && events.length === 0 ? (
               <p className="text-xs text-[var(--text-muted)]">Loading events…</p>
             ) : (
-              <MissionTimeline events={events} missionStatus={mission?.status} />
+              <MissionTimeline
+                events={events}
+                missionStatus={mission?.status}
+                phaseLabel={executiveSummary?.phaseLabel ?? null}
+              />
             )}
           </section>
 
@@ -265,63 +293,31 @@ export function MissionDetail() {
                     key={a.id}
                     approval={a}
                     muted={a.status !== "pending"}
-                    resolving={resolvingId === a.id}
-                    resolveError={resolveErrorId === a.id ? "err" : null}
-                    onApprove={
-                      a.status === "pending" ? () => void resolve(a.id, "approved") : undefined
+                    resolving={resolvingApprovalId === a.id}
+                    resolveError={resolveErrorApprovalId === a.id ? "err" : null}
+                    recentlyResolvedDecision={
+                      a.status === "pending" ? recentlyResolvedDecisionFor(a.id) : null
                     }
-                    onDeny={a.status === "pending" ? () => void resolve(a.id, "denied") : undefined}
+                    onApprove={
+                      a.status === "pending" ? () => void resolveOne(a.id, "approved") : undefined
+                    }
+                    onDeny={a.status === "pending" ? () => void resolveOne(a.id, "denied") : undefined}
                   />
                 ))}
               </div>
             )}
           </section>
 
-          <section>
+          <section id={MISSION_DETAIL_RECEIPTS_SECTION_ID} className="scroll-mt-24">
             <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
               Receipts
             </h2>
-            {!initialDone && receipts.length === 0 ? (
-              <p className="text-xs text-[var(--text-muted)]">Loading…</p>
-            ) : receipts.length === 0 ? (
-              <p className="text-xs text-[var(--text-secondary)]">No receipts yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {receipts.map((r) => {
-                  const execMeta =
-                    r.payload && typeof r.payload === "object" && "execution_meta" in r.payload
-                      ? (r.payload as Record<string, unknown>).execution_meta
-                      : null;
-                  return (
-                    <li
-                      key={r.id}
-                      className="rounded-xl border border-[var(--bg-border)] px-4 py-3"
-                      style={{ backgroundColor: "var(--bg-surface)" }}
-                    >
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-display text-sm font-semibold text-[var(--text-primary)]">
-                          {r.receipt_type}
-                        </span>
-                        <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                          {formatRelativeTime(r.created_at)}
-                        </span>
-                      </div>
-                      <p className="mt-1 font-mono text-[10px] text-[var(--text-muted)]">{r.source}</p>
-                      {r.summary?.trim() ? (
-                        <p className="mt-2 text-sm text-[var(--text-secondary)]">{r.summary}</p>
-                      ) : (
-                        <p className="mt-2 text-xs text-[var(--text-muted)]">
-                          {mission?.status === "failed"
-                            ? operatorCopy.receiptNoSummaryFailed
-                            : operatorCopy.receiptNoSummary}
-                        </p>
-                      )}
-                      <ExecutionMetaLine value={execMeta} />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <MissionReceiptsSection
+              mission={mission}
+              receipts={receipts}
+              loading={!initialDone && receipts.length === 0}
+              latestExecution={latestExecution}
+            />
           </section>
         </div>
       </div>

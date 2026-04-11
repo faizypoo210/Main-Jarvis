@@ -1,5 +1,6 @@
 import type { ExecutiveMissionSummary } from "../../lib/missionExecutiveSummary";
 import { formatRelativeTime } from "../../lib/format";
+import { operatorCopy } from "../../lib/operatorCopy";
 
 type Variant = "detail" | "panel" | "card";
 
@@ -19,9 +20,15 @@ export function MissionExecutiveSummaryBlock({
     : "text-xs leading-relaxed text-[var(--text-secondary)]";
 
   const rows: { key: string; label: string; value: string | null; emphasize?: boolean }[] = [
+    ...(variant !== "detail"
+      ? [{ key: "phase", label: "Phase", value: summary.phaseLabel, emphasize: true as const }]
+      : []),
+    { key: "queue", label: "Queue", value: summary.stalenessHint },
     { key: "last", label: "Last signal", value: summary.lastEventLine, emphasize: true },
     { key: "block", label: "Blocker", value: summary.blockerLine, emphasize: true },
-    { key: "recv", label: "Latest receipt", value: summary.latestReceiptLine },
+    ...(variant === "detail" || variant === "panel"
+      ? []
+      : [{ key: "recv", label: operatorCopy.latestResultReadoutRowLabel, value: summary.latestReceiptLine }]),
     { key: "appr", label: "Governance", value: summary.pendingApprovalLine },
   ];
 
@@ -77,16 +84,24 @@ export function ExecutiveMissionCardLine({
   className?: string;
 }) {
   const line =
+    summary.phaseLabel ??
     summary.pendingApprovalLine ??
     summary.blockerLine ??
     summary.lastEventLine ??
     (summary.isSparse ? "Awaiting first execution update" : null);
   if (!line) return null;
   return (
-    <p
-      className={`line-clamp-2 text-[11px] leading-snug text-[var(--text-secondary)] ${className ?? "mt-2"}`}
-    >
-      {line}
-    </p>
+    <>
+      <p
+        className={`line-clamp-2 text-[11px] leading-snug text-[var(--text-secondary)] ${className ?? "mt-2"}`}
+      >
+        {line}
+      </p>
+      {summary.stalenessHint ? (
+        <p className="line-clamp-2 mt-0.5 text-[10px] leading-snug text-[var(--text-muted)]">
+          {summary.stalenessHint}
+        </p>
+      ) : null}
+    </>
   );
 }

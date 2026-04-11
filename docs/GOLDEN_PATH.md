@@ -26,7 +26,16 @@ The script uses **only control plane HTTP APIs** (same surfaces as the product):
 
 It does **not** bypass governance, invent status, or use a second source of truth.
 
-For **timed benchmarks**, JSON reports under `docs/reports/`, and the baseline workflow with `14` and `15`, see [`OPERATOR_EVALS.md`](./OPERATOR_EVALS.md) and `scripts/15-benchmark-operator-loop.ps1`.
+### Isolation from Redis / runtime execution
+
+`13-rehearse-golden-path.ps1` sends an explicit command **context** so the control plane **does not publish** to `jarvis.commands` for that mission:
+
+- `context.rehearsal_mode = "synthetic_api_only"`
+- `context.skip_runtime_publish = true`
+
+Mission rows and `created` events behave as usual; only the Redis fan-out is skipped so a **full live stack** (coordinator + executor) on the same machine does not pick up synthetic missions and collide with this rehearsal. Normal Command Center traffic does not send these markers.
+
+For **timed benchmarks**, JSON reports under `docs/reports/`, and the baseline workflow with `14` and `15`, see [`OPERATOR_EVALS.md`](./OPERATOR_EVALS.md) and `scripts/15-benchmark-operator-loop.ps1`. To run **semantics + this golden path + optional synthetic-only benchmark** in one command, use `scripts/17-verify-operator-evals.ps1` (see **Recommended quick check** in [`OPERATOR_EVALS.md`](./OPERATOR_EVALS.md)).
 
 ## What you should see in the UI (Faiz)
 

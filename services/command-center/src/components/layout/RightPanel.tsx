@@ -1,15 +1,21 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useOutletContext } from "react-router-dom";
 import { MoreHorizontal, Search } from "lucide-react";
-import * as api from "../../lib/api";
-import { useControlPlaneLive, usePendingApprovals, usePolledMissionDetail } from "../../hooks/useControlPlane";
+import { useControlPlaneLive, usePendingApprovals, usePolledMissionDetail, useResolveApprovalAction } from "../../hooks/useControlPlane";
 import { ApprovalCard } from "../approvals/ApprovalCard";
 import { StatusBadge } from "../common/StatusBadge";
 import type { Approval, Mission } from "../../lib/types";
 import { formatRelativeTime, normalizeMissionStatus, selectFocusMission } from "../../lib/format";
 import { deriveExecutiveMissionSummary } from "../../lib/missionExecutiveSummary";
+import { deriveLatestExecutionResult, missionDetailLatestResultHref } from "../../lib/missionLatestResult";
+import { LatestExecutionResultLine } from "../mission/LatestExecutionResultLine";
 import { MissionExecutiveSummaryBlock } from "../mission/MissionExecutiveSummaryBlock";
 import { LiveLinkIndicator } from "./LiveLinkIndicator";
 import { operatorCopy } from "../../lib/operatorCopy";
+
+type ShellOutletContext = {
+  setThreadMissionId: (id: string | null) => void;
+};
 
 export function RightPanel({
   missions,
@@ -24,7 +30,8 @@ export function RightPanel({
   onClose?: () => void;
 }) {
   const { streamPhase } = useControlPlaneLive();
-  const { approvals, loading: approvalsLoading, refetch: refetchApprovals } = usePendingApprovals();
+  const { setThreadMissionId } = useOutletContext<ShellOutletContext>();
+  const { approvals, loading: approvalsLoading } = usePendingApprovals();
   const focusFromList = useMemo(() => selectFocusMission(missions), [missions]);
   const focusMissionId = useMemo(() => {
     const tid = threadMissionId?.trim();
@@ -54,33 +61,18 @@ export function RightPanel({
     return deriveExecutiveMissionSummary(displayMission, events, approvals, null);
   }, [displayMission, events, approvals]);
 
+  const latestExecution = useMemo(() => {
+    if (!displayMission) return null;
+    return deriveLatestExecutionResult(displayMission, events, null);
+  }, [displayMission, events]);
+
   const activityEvents = useMemo(() => {
     const last = events.slice(-5);
     return [...last].reverse();
   }, [events]);
 
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolveErrorId, setResolveErrorId] = useState<string | null>(null);
-
-  const resolve = useCallback(
-    async (id: string, decision: "approved" | "denied") => {
-      setResolvingId(id);
-      setResolveErrorId(null);
-      try {
-        await api.resolveApproval(id, {
-          decision,
-          decided_by: "operator",
-          decided_via: "command_center",
-        });
-        await refetchApprovals();
-      } catch {
-        setResolveErrorId(id);
-      } finally {
-        setResolvingId(null);
-      }
-    },
-    [refetchApprovals]
-  );
+  const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
+    useResolveApprovalAction();
 
   const panelLoading = missionsLoading || (displayMission != null && detailLoading && events.length === 0);
 
@@ -173,6 +165,15 @@ export function RightPanel({
               </p>
             </section>
 
+            {latestExecution?.hasResult ? (
+              <section className="mb-4" aria-label="Latest execution output">
+                <LatestExecutionResultLine
+                  latest={latestExecution}
+                  to={missionDetailLatestResultHref(displayMission.id, latestExecution)}
+                  onNavigate={() => setThreadMissionId(displayMission.id)}
+                />
+              </section>
+            ) : null}
             {executiveSummary ? (
               <section className="mb-6">
                 <MissionExecutiveSummaryBlock summary={executiveSummary} variant="panel" />
@@ -200,10 +201,11 @@ export function RightPanel({
                     <ApprovalCard
                       key={a.id}
                       approval={a}
-                      resolving={resolvingId === a.id}
-                      resolveError={resolveErrorId === a.id ? "err" : null}
-                      onApprove={() => resolve(a.id, "approved")}
-                      onDeny={() => resolve(a.id, "denied")}
+                      resolving={resolvingApprovalId === a.id}
+                      resolveError={resolveErrorApprovalId === a.id ? "err" : null}
+                      recentlyResolvedDecision={recentlyResolvedDecisionFor(a.id)}
+                      onApprove={() => void resolve(a.id, "approved")}
+                      onDeny={() => void resolve(a.id, "denied")}
                     />
                   ))}
                 </div>

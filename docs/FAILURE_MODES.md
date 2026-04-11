@@ -6,6 +6,7 @@ This document describes how the **control plane** (authoritative state), **SSE l
 
 - Single source of truth: control plane API + persisted `mission_events`.
 - Command center does **not** invent mission state; it deduplicates and merges server data.
+- **Mission phase** lines (Awaiting approval, Executing, Execution updated, etc.) are **derived in the UI** from the same mission row + events + receipts — not a parallel backend status. See [MISSION_TIMING.md](./MISSION_TIMING.md#operator-phase-line-mission-detail-readouts-cards). The same `deriveOperatorMissionPhase` helper drives mission detail, executive readout, **conversation thread** status lines, **voice overlay** mission line, and timeline empty-state hints so wording stays aligned.
 - No “fake optimistic” mission completion — only **approval cards** reflect an immediate client update after a successful `POST …/decision`, aligned with the API response.
 
 ## What is covered in code
@@ -21,6 +22,12 @@ This document describes how the **control plane** (authoritative state), **SSE l
 | **Approval event payload** | `approval_resolved` includes `decided_at` (ISO), `decided_via`, consistent with approvals API. |
 | **Status writes** | `MissionRepository.update_status` skips `mission_status_changed` when status is unchanged (no noise). |
 | **Degraded copy** | Centralized in `services/command-center/src/lib/operatorCopy.ts` (reconnecting, offline polling, partial bundle, empty receipt). |
+| **Approval POST failures** | Shared `useResolveApprovalAction` hook: one mutation path, duplicate-submit guard while a decision is in flight, quiet `operatorCopy.approvalResolveFailed`, then `refetchPendingApprovals` + `refetchMissions`. Overview, thread, right panel, mission detail, approvals inbox, and voice overlay all use this path; mission detail and voice may pass `onSuccess` for bundle/thread-specific refresh. Still one control-plane approval authority — not parallel client semantics. |
+| **Post-decision UI (presentation-only)** | After a **successful** `POST …/decision`, the hook exposes a short-lived `lastResolved` + `recentlyResolvedDecisionFor(approvalId)` so surfaces can show calm confirmation (via `approvalPresentation` + `operatorCopy`) while the pending list refetches — **not** a second source of truth; derived mission phase lines still come from refreshed mission/events as before. |
+| **Latest execution result line** | `deriveLatestExecutionResult` merges receipt rows + `receipt_recorded` events for a compact “latest output” hint; wording stays consistent via `operatorCopy` and does not override mission terminal status. Optional `sourceReceiptId` links the hint to a receipt row when applicable. |
+| **Receipt list layout** | Mission detail receipts use `receiptPresentation` helpers: newest card first, older rows collapsed by default; full payload JSON stays behind disclosure. |
+| **Missions list preview** | `MissionCard` may show `LatestExecutionResultLine` when `shouldShowMissionListLatestPreview` passes — same receipt/event derivation as elsewhere; no change to list sort or filters. |
+| **Latest-result hash handoff** | `missionDetailLatestResultHref` links to `#receipts` or `#receipt-<id>` on mission detail; DOM ids match bundle receipt rows / section anchor only. |
 | **Diagnostics** | Mission detail, conversation thread, and right panel show short stream/polling hints when not `live`. |
 
 ## Simulated vs natural
@@ -63,5 +70,5 @@ This document describes how the **control plane** (authoritative state), **SSE l
 
 ## Related files
 
-- Client: `ControlPlaneLiveContext.tsx` (merge + dedupe), `ConversationThread.tsx`, `MissionTimeline.tsx`, `MissionDetail.tsx`, `operatorCopy.ts`
+- Client: `ControlPlaneLiveContext.tsx` (merge + dedupe), `useResolveApprovalAction.ts`, `ConversationThread.tsx`, `MissionTimeline.tsx`, `MissionDetail.tsx`, `operatorCopy.ts`
 - Server: `mission_repo.py` (no-op status), `approval_service.py`, `receipt_service.py`, `mission_event_repo.py`

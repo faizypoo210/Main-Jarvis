@@ -2,8 +2,9 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useShellOutlet } from "../layout/AppShell";
 import * as api from "../../lib/api";
-import { useControlPlaneLive } from "../../hooks/useControlPlane";
+import { useControlPlaneLive, useResolveApprovalAction } from "../../hooks/useControlPlane";
 import type { Approval, Mission, MissionEvent } from "../../lib/types";
+import { deriveOperatorMissionPhase, OPERATOR_PHASE_LABELS } from "../../lib/missionPhase";
 import { operatorCopy } from "../../lib/operatorCopy";
 import { AgentActivity } from "./AgentActivity";
 import { Composer } from "./Composer";
@@ -84,8 +85,8 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
   const [items, setItems] = useState<ThreadItem[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolveErrorId, setResolveErrorId] = useState<string | null>(null);
+  const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
+    useResolveApprovalAction();
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchedMissionIdsRef = useRef<Set<string>>(new Set());
@@ -104,41 +105,31 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
   }, []);
 
   const resolveApproval = useCallback(
-    async (approvalId: string, missionId: string, decision: "approved" | "denied") => {
-      setResolvingId(approvalId);
-      setResolveErrorId(null);
-      try {
-        await api.resolveApproval(approvalId, {
-          decision,
-          decided_by: "operator",
-          decided_via: "command_center",
-        });
-        const decidedAt = new Date().toISOString();
-        setItems((prev) =>
-          prev.map((i) => {
-            if (i.kind !== "approval" || i.missionId !== missionId || i.approval.id !== approvalId) {
-              return i;
-            }
-            return {
-              ...i,
-              approval: {
-                ...i.approval,
-                status: decision,
-                decided_at: decidedAt,
-                decided_by: "operator",
-                decided_via: "command_center",
-              },
-            };
-          })
-        );
-        void liveRef.current.refetchPendingApprovals();
-      } catch {
-        setResolveErrorId(approvalId);
-      } finally {
-        setResolvingId(null);
-      }
+    (approvalId: string, missionId: string, decision: "approved" | "denied") => {
+      void resolve(approvalId, decision, {
+        onSuccess: () => {
+          const decidedAt = new Date().toISOString();
+          setItems((prev) =>
+            prev.map((i) => {
+              if (i.kind !== "approval" || i.missionId !== missionId || i.approval.id !== approvalId) {
+                return i;
+              }
+              return {
+                ...i,
+                approval: {
+                  ...i.approval,
+                  status: decision,
+                  decided_at: decidedAt,
+                  decided_by: "operator",
+                  decided_via: "command_center",
+                },
+              };
+            })
+          );
+        },
+      });
     },
-    []
+    [resolve]
   );
 
   const processMissionTick = useCallback(
@@ -229,7 +220,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
               {
                 id: `status-await-${ev.id}`,
                 kind: "status",
-                text: "Awaiting approval.",
+                text: `${OPERATOR_PHASE_LABELS.awaiting_approval}.`,
               },
             ];
           });
@@ -271,7 +262,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
             if (hadCard) return next;
             const line =
               decisionRaw === "approved"
-                ? operatorCopy.approvalExecutionResumed
+                ? deriveOperatorMissionPhase(mission, sorted, pending, null).label
                 : decisionRaw === "denied"
                   ? operatorCopy.approvalDeniedBlocked
                   : operatorCopy.approvalDecisionRecorded;
@@ -383,7 +374,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
             {
               id: `blocked-${missionId}`,
               kind: "status",
-              text: "Mission blocked.",
+              text: `${OPERATOR_PHASE_LABELS.blocked}.`,
             },
           ];
         });
@@ -404,7 +395,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
               {
                 id: `status-done-${missionId}`,
                 kind: "status",
-                text: "Mission complete.",
+                text: `${OPERATOR_PHASE_LABELS.complete}.`,
               },
             ];
           });
@@ -544,8 +535,9 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
                   <InlineApprovalCard
                     approval={item.approval}
                     missionId={item.missionId}
-                    resolving={resolvingId === item.approval.id}
-                    resolveError={resolveErrorId === item.approval.id ? "err" : null}
+                    resolving={resolvingApprovalId === item.approval.id}
+                    resolveError={resolveErrorApprovalId === item.approval.id ? "err" : null}
+                    recentlyResolvedDecision={recentlyResolvedDecisionFor(item.approval.id)}
                     onApprove={() => void resolveApproval(item.approval.id, item.missionId, "approved")}
                     onDeny={() => void resolveApproval(item.approval.id, item.missionId, "denied")}
                   />

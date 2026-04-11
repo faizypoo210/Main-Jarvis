@@ -9,6 +9,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+# Single source for approval surface strings (coordinator + Command Center + operator scripts).
+ApprovalSurface = Literal["voice", "command_center", "system", "sms"]
+
 
 class ApprovalCreate(BaseModel):
     mission_id: UUID
@@ -21,9 +24,9 @@ class ApprovalCreate(BaseModel):
     command_text: str | None = None
     dashclaw_decision_id: str | None = None
     requested_by: str
-    requested_via: str = Field(
+    requested_via: ApprovalSurface = Field(
         ...,
-        description="voice | command_center | system | sms",
+        description="Must be one of: voice | command_center | system | sms (see ApprovalSurface).",
     )
     expires_at: datetime | None = None
 
@@ -31,9 +34,9 @@ class ApprovalCreate(BaseModel):
 class ApprovalDecision(BaseModel):
     decision: Literal["approved", "denied"]
     decided_by: str
-    decided_via: str = Field(
+    decided_via: ApprovalSurface = Field(
         ...,
-        description="voice | command_center | system | sms",
+        description="Must be one of: voice | command_center | system | sms (see ApprovalSurface).",
     )
     decision_notes: str | None = None
 

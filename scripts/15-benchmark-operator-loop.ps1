@@ -12,6 +12,7 @@
     - Optional: invoke 14-rehearse-live-stack.ps1 and attach wall-clock + event-derived timings if pass
 
   Outputs: console summary + JSON under docs/reports/
+  Live-stack classification: scripts/lib/Parse-LiveStackHarnessOutput.ps1 (shared with scripts/16-verify-harness-semantics.ps1).
 
 .PARAMETER ControlPlaneUrl
 .PARAMETER IncludeLiveStack
@@ -37,6 +38,15 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
+$HarnessLib = Join-Path $PSScriptRoot 'lib\Parse-LiveStackHarnessOutput.ps1'
+if (Test-Path -LiteralPath $HarnessLib) {
+    . $HarnessLib
+} else {
+    throw "Missing harness parser: $HarnessLib"
+}
+$ApLib = Join-Path $PSScriptRoot 'lib\ApprovalPayloadContract.ps1'
+if (-not (Test-Path -LiteralPath $ApLib)) { throw "Missing $ApLib" }
+. $ApLib
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     $OutputDir = Join-Path $RepoRoot "docs\reports"
 }
@@ -122,7 +132,7 @@ function Invoke-SseTtfbCurl {
 
 function New-ReportRoot {
     return @{
-        schema_version = '1.0'
+        schema_version = '1.1'
         timestamp_utc    = (Get-Date).ToUniversalTime().ToString('o')
         environment_notes = @{}
         rehearsals       = @()
@@ -193,6 +203,10 @@ $synthetic = @{
     anomalies  = @()
     http_roundtrip_ms = @{}
     event_deltas_ms   = @{}
+    hard_failure   = $false
+    outcome_class  = $null
+    classification = $null
+    known_findings = @()
 }
 
 try {
@@ -204,20 +218,32 @@ try {
     }
 
     $cmdText = 'Benchmark operator loop: synthetic path; status only.'
-    $cmdBody = @{ text = $cmdText; source = 'command_center' } | ConvertTo-Json -Compress
+    $cmdBody = @{
+        text    = $cmdText
+        source  = 'command_center'
+        context = @{
+            rehearsal_mode       = 'synthetic_api_only'
+            skip_runtime_publish = $true
+        }
+    } | ConvertTo-Json -Compress -Depth 6
     $swCmd = Measure-StopwatchMs { Invoke-RestMethod -Uri "$Api/commands" -Method Post -Headers $Headers -Body $cmdBody -TimeoutSec 60 }
     $MissionId = $swCmd.result.mission_id.ToString()
     $synthetic.mission_id = $MissionId
     $synthetic.http_roundtrip_ms['command_submission'] = $swCmd.ms
 
-    $apBody = @{
-        mission_id    = $MissionId
-        action_type   = 'Benchmark execution step'
-        risk_class    = 'amber'
-        reason        = 'Operator benchmark — synthetic approval path.'
-        requested_by  = 'benchmark_operator_loop'
-        requested_via = 'command_center'
-    } | ConvertTo-Json -Compress
+    $apBodyObj = New-SyntheticApprovalCreatePayload `
+        -MissionId $MissionId `
+        -CommandText $cmdText `
+        -ActionType 'Benchmark execution step' `
+        -Reason 'Operator benchmark synthetic approval path.' `
+        -RequestedBy 'benchmark_operator_loop' `
+        -RequestedVia 'command_center' `
+        -RiskClass 'amber'
+    $apValidate = Test-ApprovalCreatePayload -Payload $apBodyObj
+    if (-not $apValidate.Valid) {
+        throw "Approval payload validation failed: $($apValidate.Errors -join '; '). $($apValidate.ContractRef)"
+    }
+    $apBody = ConvertTo-ApprovalCreateJson -Payload $apBodyObj
 
     $swAp = Measure-StopwatchMs { Invoke-RestMethod -Uri "$Api/approvals" -Method Post -Headers $Headers -Body $apBody -TimeoutSec 60 }
     $ApprovalId = $swAp.result.id.ToString()
@@ -286,11 +312,15 @@ catch {
     $report.notes += "Synthetic path exception: $($_.Exception.Message)"
 }
 
+$synthetic.hard_failure = -not $synthetic.pass
+$synthetic.outcome_class = if ($synthetic.pass) { 'pass' } else { 'hard_fail' }
+$synthetic.classification = $null
+
 $report.rehearsals += $synthetic
 
 Write-Host ""
 Write-Host "=== Synthetic rehearsal ===" -ForegroundColor Cyan
-Write-Host "  mission_id=$($synthetic.mission_id) pass=$($synthetic.pass)" -ForegroundColor $(if ($synthetic.pass) { 'Green' } else { 'Red' })
+Write-Host "  mission_id=$($synthetic.mission_id) outcome=$($synthetic.outcome_class) hard_failure=$($synthetic.hard_failure)" -ForegroundColor $(if (-not $synthetic.hard_failure) { 'Green' } else { 'Red' })
 Write-Host "  HTTP round-trips (ms): $($synthetic.http_roundtrip_ms | ConvertTo-Json -Compress)" -ForegroundColor DarkGray
 Write-Host "  Event deltas (API truth, ms): $($synthetic.event_deltas_ms | ConvertTo-Json -Compress)" -ForegroundColor DarkGray
 
@@ -305,6 +335,10 @@ if ($IncludeLiveStack) {
         event_deltas_ms = @{}
         anomalies  = @()
         note       = 'Wall time includes coordinator/executor/DashClaw/OpenClaw; see LIVE_STACK_FAIL for stage on failure.'
+        hard_failure   = $false
+        outcome_class  = $null
+        classification = $null
+        known_findings = @()
     }
     $script14 = Join-Path $PSScriptRoot "14-rehearse-live-stack.ps1"
     if (-not (Test-Path $script14)) {
@@ -344,17 +378,21 @@ if ($IncludeLiveStack) {
         if ($stdout) { Write-Host $stdout }
         if ($stderr -and $stderr.Trim().Length -gt 0) { Write-Host $stderr -ForegroundColor DarkYellow }
         $text = ($stdout + "`n" + $stderr)
-        if ($text -match 'LIVE_STACK_PASS mission_id=([a-f0-9-]+)') {
-            $live.mission_id = $Matches[1]
-            $live.pass = ($lsCode -eq 0)
+        $parsed = Get-LiveStackHarnessParseResult -CombinedOutput $text -ExitCode $lsCode
+        $live.hard_failure = $parsed.hard_failure
+        $live.outcome_class = $parsed.outcome_class
+        $live.classification = $parsed.classification
+        $live.mission_id = $parsed.mission_id
+        $live.pass = $parsed.pass
+        $live.known_findings = @($parsed.known_findings)
+        if ($parsed.failure_stage) {
+            $live.stages['failure'] = $parsed.failure_stage
         }
-        if ($text -match 'LIVE_STACK_FAIL stage=(\w+)') {
-            $live.stages['failure'] = $Matches[1]
-            $live.pass = $false
+        if ($parsed.parse_confidence -eq 'low' -and $parsed.parse_note) {
+            $live.anomalies += $parsed.parse_note
         }
-        if ($lsCode -ne 0) { $live.pass = $false }
 
-        if ($live.pass -and $live.mission_id) {
+        if ((-not $live.hard_failure) -and $live.mission_id) {
             try {
                 $ev = Invoke-RestMethod -Uri "$Api/missions/$($live.mission_id)/events" -Method Get -TimeoutSec 30
                 $tc = Get-FirstEventTime -Events $ev -EventType 'created'
@@ -370,29 +408,36 @@ if ($IncludeLiveStack) {
             }
         }
 
-        Write-Host "  LIVE_STACK wall_ms=$($live.wall_clock_total_ms) pass=$($live.pass) mission_id=$($live.mission_id)" -ForegroundColor $(if ($live.pass) { 'Green' } else { 'Red' })
+        Write-Host "  LIVE_STACK wall_ms=$($live.wall_clock_total_ms) outcome=$($live.outcome_class) hard_failure=$($live.hard_failure) mission_id=$($live.mission_id)" -ForegroundColor $(if (-not $live.hard_failure) { 'Green' } else { 'Red' })
         $report.rehearsals += $live
         }
     }
 }
 
-# --- Write JSON ---
-$allPass = $true
-foreach ($r in $report.rehearsals) {
-    if (-not $r.pass) { $allPass = $false; break }
-}
-$report['overall_pass'] = $allPass
+# --- Summary (schema 1.1): shared with 16-verify-harness-semantics.ps1 ---
+$summary = Get-HarnessReportSummary -Rehearsals @($report.rehearsals)
+$report['overall_pass'] = $summary.overall_pass
+$report['overall_strict_pass'] = $summary.overall_strict_pass
+$report['summary_has_known_harness_findings'] = $summary.summary_has_known_harness_findings
+$anyHard = -not $summary.overall_pass
+$hasHarnessFindings = $summary.summary_has_known_harness_findings
 
 $fileStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
 $outFile = Join-Path $OutputDir "operator-benchmark-$fileStamp.json"
 $report | ConvertTo-Json -Depth 12 | Set-Content -Path $outFile -Encoding UTF8
 
 Write-Host ""
-Write-Host "Report written: $outFile" -ForegroundColor Green
-Write-Host "overall_pass=$allPass" -ForegroundColor $(if ($allPass) { 'Green' } else { 'Red' })
-
-$exitCode = 0
-foreach ($r in $report.rehearsals) {
-    if (-not $r.pass) { $exitCode = 1 }
+Write-Host "=== Operator benchmark summary ===" -ForegroundColor Cyan
+switch ($summary.runtime_health_label) {
+    'healthy' { Write-Host "Runtime health: healthy" -ForegroundColor Green }
+    'healthy-with-known-harness-findings' { Write-Host "Runtime health: healthy-with-known-harness-findings" -ForegroundColor Yellow }
+    'failing' { Write-Host "Runtime health: failing (hard_failure in one or more rehearsals)" -ForegroundColor Red }
+    default { Write-Host "Runtime health: $($summary.runtime_health_label)" -ForegroundColor DarkGray }
 }
+Write-Host "overall_pass=$($report.overall_pass)  (true = no hard runtime failures)" -ForegroundColor $(if ($report.overall_pass) { 'Green' } else { 'Red' })
+Write-Host "overall_strict_pass=$($report.overall_strict_pass)  (true = ideal path: synthetic + live both outcome_class pass)" -ForegroundColor $(if ($report.overall_strict_pass) { 'Green' } else { 'DarkGray' })
+Write-Host ""
+Write-Host "Report written: $outFile" -ForegroundColor Green
+
+$exitCode = if ($anyHard) { 1 } else { 0 }
 exit $exitCode

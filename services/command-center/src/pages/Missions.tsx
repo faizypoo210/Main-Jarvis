@@ -1,7 +1,15 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { ListTodo } from "lucide-react";
 import { MissionList } from "../components/missions/MissionList";
-import { useMissions } from "../hooks/useControlPlane";
+import { useControlPlaneLive, useMissions } from "../hooks/useControlPlane";
+import {
+  getMissionOverviewTriageBucket,
+  OVERVIEW_TRIAGE_SEARCH_PARAM,
+  overviewTriageHandoffLabels,
+  parseOverviewTriageSearchParam,
+  sortMissionsForOperatorListing,
+} from "../lib/missionListPriority";
 
 const tabs = ["All", "Active", "Awaiting Approval", "Complete", "Failed"] as const;
 
@@ -33,13 +41,52 @@ function MissionCardSkeleton() {
 
 export function Missions() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("All");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const live = useControlPlaneLive();
   const { missions: raw, loading, error } = useMissions({ limit: 500 });
 
+  const triageParam = useMemo(
+    () => parseOverviewTriageSearchParam(searchParams.get(OVERVIEW_TRIAGE_SEARCH_PARAM)),
+    [searchParams]
+  );
+
+  useEffect(() => {
+    if (triageParam) setTab("All");
+  }, [triageParam]);
+
+  const clearTriageHandoff = useCallback(() => {
+    setSearchParams({}, { replace: true });
+  }, [setSearchParams]);
+
+  const selectTab = useCallback(
+    (t: (typeof tabs)[number]) => {
+      setTab(t);
+      if (searchParams.get(OVERVIEW_TRIAGE_SEARCH_PARAM)) {
+        setSearchParams({}, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams]
+  );
+
   const filtered = useMemo(() => {
+    if (triageParam) {
+      const matches = raw.filter((m) => {
+        const ev = live.eventsByMissionId[m.id] ?? [];
+        return getMissionOverviewTriageBucket(m, ev, live.pendingApprovals, null) === triageParam;
+      });
+      return sortMissionsForOperatorListing(
+        matches,
+        live.eventsByMissionId,
+        live.pendingApprovals,
+        null
+      );
+    }
     const want = tabToStatus(tab);
     if (!want) return raw;
     return raw.filter((m) => m.status === want);
-  }, [raw, tab]);
+  }, [raw, tab, triageParam, live.eventsByMissionId, live.pendingApprovals]);
+
+  const handoffLabel = triageParam != null ? overviewTriageHandoffLabels[triageParam] : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -59,12 +106,29 @@ export function Missions() {
           New Mission
         </button>
       </div>
+      {triageParam && handoffLabel ? (
+        <div
+          className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--bg-border)] px-4 py-2 md:px-6"
+          role="status"
+        >
+          <p className="text-xs text-[var(--text-muted)]">
+            Overview handoff: <span className="text-[var(--text-secondary)]">{handoffLabel}</span>
+          </p>
+          <button
+            type="button"
+            onClick={clearTriageHandoff}
+            className="text-xs font-medium text-[var(--text-muted)] underline decoration-[var(--bg-border)] underline-offset-2 transition-colors hover:text-[var(--text-secondary)] focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-blue)]/40"
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : null}
       <div className="flex gap-2 overflow-x-auto border-b border-[var(--bg-border)] px-4 py-2 md:px-6">
         {tabs.map((t) => (
           <button
             key={t}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => selectTab(t)}
             className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-150 ease-linear ${
               tab === t
                 ? "bg-[var(--accent-blue-glow)] text-[var(--accent-blue)]"
@@ -85,7 +149,18 @@ export function Missions() {
         ) : !loading && filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
             <ListTodo className="h-10 w-10 text-[var(--text-muted)] opacity-50" aria-hidden />
-            <p className="text-sm text-[var(--text-muted)]">No missions yet</p>
+            <p className="text-sm text-[var(--text-muted)]">
+              {triageParam ? "No missions in this overview view." : "No missions yet"}
+            </p>
+            {triageParam ? (
+              <Link
+                to="/missions"
+                replace
+                className="text-xs font-medium text-[var(--text-muted)] underline-offset-2 hover:text-[var(--text-secondary)] focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-blue)]/40"
+              >
+                Show all missions
+              </Link>
+            ) : null}
           </div>
         ) : (
           <MissionList missions={filtered} />

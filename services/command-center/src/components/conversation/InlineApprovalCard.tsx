@@ -1,6 +1,8 @@
 import { ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { RiskBadge, type Risk } from "../common/RiskBadge";
+import { approvalPostDecisionLine } from "../../lib/approvalPresentation";
+import { operatorCopy } from "../../lib/operatorCopy";
 import type { Approval } from "../../lib/types";
 
 function toRisk(r: string): Risk {
@@ -14,6 +16,7 @@ export function InlineApprovalCard({
   onDeny,
   resolving,
   resolveError,
+  recentlyResolvedDecision,
 }: {
   approval: Approval;
   missionId: string;
@@ -21,14 +24,17 @@ export function InlineApprovalCard({
   onDeny: () => void | Promise<void>;
   resolving?: boolean;
   resolveError?: string | null;
+  recentlyResolvedDecision?: "approved" | "denied" | null;
 }) {
   const navigate = useNavigate();
   const pending = approval.status === "pending";
+  const showRaceSuccess = Boolean(pending && recentlyResolvedDecision != null && !resolving);
 
   return (
     <div
       className="ml-0 max-w-[min(100%,28rem)] rounded-xl border border-[var(--bg-border)] px-4 py-3.5"
       style={{ backgroundColor: "var(--bg-surface)" }}
+      aria-busy={resolving === true ? "true" : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -49,12 +55,25 @@ export function InlineApprovalCard({
           </p>
         </div>
       </div>
-      {pending ? (
+      {showRaceSuccess ? (
+        <div className="mt-4 rounded-lg border border-[var(--bg-border)] bg-[var(--bg-void)]/80 px-3 py-2.5">
+          <p className="text-xs font-medium text-[var(--text-secondary)]" role="status">
+            {approvalPostDecisionLine(recentlyResolvedDecision!)}
+          </p>
+          <p className="mt-1 text-[10px] text-[var(--text-muted)]">{operatorCopy.approvalRefreshingState}</p>
+        </div>
+      ) : pending ? (
         <div className="mt-4 flex flex-col gap-2">
+          {resolving ? (
+            <p className="text-xs text-[var(--text-muted)]" role="status" aria-live="polite">
+              {operatorCopy.approvalRecording}
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               disabled={resolving}
+              aria-disabled={resolving === true}
               onClick={() => void onApprove()}
               className="min-h-[40px] rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-200/95 transition-colors hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -63,6 +82,7 @@ export function InlineApprovalCard({
             <button
               type="button"
               disabled={resolving}
+              aria-disabled={resolving === true}
               onClick={() => void onDeny()}
               className="min-h-[40px] rounded-lg border border-[var(--bg-border)] bg-transparent px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)]/60 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -78,7 +98,7 @@ export function InlineApprovalCard({
             </button>
           </div>
           {resolveError ? (
-            <p className="text-xs text-[var(--status-red)]">Could not update approval. Try again.</p>
+            <p className="text-xs text-[var(--status-red)]">{operatorCopy.approvalResolveFailed}</p>
           ) : null}
         </div>
       ) : (

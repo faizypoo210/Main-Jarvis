@@ -32,6 +32,8 @@ Other event types (`created`, `approval_requested`, `approval_resolved`, `receip
 
 The mission detail route uses this for **one** hydration round-trip, then relies on SSE + targeted approval/receipt refresh (debounced) so the UI stays aligned without redundant full reloads on every global event.
 
+**Operator-facing phase** (Awaiting approval, Execution updated, Complete, etc.) is **not** a separate realtime channel: the client derives it from the same bundle + pending-approval list + live events. See [MISSION_TIMING.md](./MISSION_TIMING.md#operator-phase-line-mission-detail-readouts-cards).
+
 ## Enriched mission event payloads (existing)
 
 | `event_type`          | Payload highlights |

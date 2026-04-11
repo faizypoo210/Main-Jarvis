@@ -1,35 +1,14 @@
-import { useCallback, useState } from "react";
-import * as api from "../lib/api";
+import { useCallback } from "react";
 import { ApprovalInbox } from "../components/approvals/ApprovalInbox";
-import { usePendingApprovals } from "../hooks/useControlPlane";
+import { usePendingApprovals, useResolveApprovalAction } from "../hooks/useControlPlane";
 
 export function Approvals() {
-  const { approvals, loading, error, refetch } = usePendingApprovals();
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolveErrorId, setResolveErrorId] = useState<string | null>(null);
+  const { approvals, loading, error } = usePendingApprovals();
+  const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
+    useResolveApprovalAction();
 
-  const resolve = useCallback(
-    async (id: string, decision: "approved" | "denied") => {
-      setResolvingId(id);
-      setResolveErrorId(null);
-      try {
-        await api.resolveApproval(id, {
-          decision,
-          decided_by: "operator",
-          decided_via: "command_center",
-        });
-        await refetch();
-      } catch {
-        setResolveErrorId(id);
-      } finally {
-        setResolvingId(null);
-      }
-    },
-    [refetch]
-  );
-
-  const onApprove = useCallback((id: string) => resolve(id, "approved"), [resolve]);
-  const onDeny = useCallback((id: string) => resolve(id, "denied"), [resolve]);
+  const onApprove = useCallback((id: string) => void resolve(id, "approved"), [resolve]);
+  const onDeny = useCallback((id: string) => void resolve(id, "denied"), [resolve]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -46,8 +25,9 @@ export function Approvals() {
             approvals={approvals}
             onApprove={onApprove}
             onDeny={onDeny}
-            resolvingId={resolvingId}
-            resolveErrorId={resolveErrorId}
+            resolvingId={resolvingApprovalId}
+            resolveErrorId={resolveErrorApprovalId}
+            recentlyResolvedDecisionFor={recentlyResolvedDecisionFor}
           />
         )}
       </div>

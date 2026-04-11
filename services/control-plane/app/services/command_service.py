@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,16 @@ from app.services.event_service import EventService
 STREAM_COMMANDS = "jarvis.commands"
 
 log = get_logger(__name__)
+
+
+def _should_skip_runtime_publish(context: dict[str, Any] | None) -> bool:
+    """Narrow opt-in: synthetic API rehearsals skip Redis so they do not collide with coordinator/executor."""
+    if not context:
+        return False
+    if context.get("rehearsal_mode") != "synthetic_api_only":
+        return False
+    v = context.get("skip_runtime_publish")
+    return v is True or v == "true" or v == 1
 
 
 async def _publish_jarvis_command(
@@ -83,11 +94,17 @@ class CommandService:
 
         await self._session.commit()
 
-        await _publish_jarvis_command(
-            str(mission.id),
-            data.text,
-            data.source,
-        )
+        if not _should_skip_runtime_publish(data.context):
+            await _publish_jarvis_command(
+                str(mission.id),
+                data.text,
+                data.source,
+            )
+        else:
+            log.info(
+                "skipping jarvis.commands publish (synthetic rehearsal; mission_id=%s)",
+                mission.id,
+            )
 
         return CommandResponse(
             mission_id=mission.id,

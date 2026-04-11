@@ -1,0 +1,51 @@
+﻿{
+    "sse":  {
+                "stream_url":  "http://127.0.0.1:8001/api/v1/updates/stream",
+                "interpretation":  "HTTP client time to first byte; proxy for reconnect readiness, not browser UI or server-side disconnect.",
+                "notes":  [
+                              "time_starttransfer (seconds-\u003ems); first response byte",
+                              "time_starttransfer (seconds-\u003ems); first response byte"
+                          ],
+                "second_connect_ok":  true,
+                "first_connect_ok":  true,
+                "first_connect_ttfb_ms":  3,
+                "second_connect_ttfb_ms":  2
+            },
+    "timestamp_utc":  "2026-04-11T09:20:37.3930000Z",
+    "schema_version":  "1.0",
+    "overall_pass":  false,
+    "notes":  [
+                  "Synthetic path exception: The remote server returned an error: (400) Bad Request."
+              ],
+    "environment_notes":  {
+                              "ps_version":  "5.1.26100.7920",
+                              "skip_sse_probe":  false,
+                              "operator_notes":  "manual bring-up after env repair",
+                              "hostname":  "FAIZ",
+                              "include_live_stack":  false,
+                              "control_plane_url":  "http://127.0.0.1:8001"
+                          },
+    "rehearsals":  [
+                       {
+                           "stages":  {
+                                          "health":  "pass"
+                                      },
+                           "pass":  false,
+                           "type":  "synthetic",
+                           "anomalies":  [
+                                             "The remote server returned an error: (400) Bad Request."
+                                         ],
+                           "mission_id":  "c0e4fd96-1c89-4122-89d2-793516e3ae72",
+                           "event_deltas_ms":  {
+
+                                               },
+                           "http_roundtrip_ms":  {
+                                                     "command_submission":  33,
+                                                     "health":  15
+                                                 },
+                           "timings_ms":  {
+
+                                          }
+                       }
+                   ]
+}

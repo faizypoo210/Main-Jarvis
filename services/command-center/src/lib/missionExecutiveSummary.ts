@@ -1,14 +1,27 @@
 import type { Approval, Mission, MissionEvent, Receipt } from "./types";
 import { operatorCopy } from "./operatorCopy";
+import { deriveLatestExecutionResult } from "./missionLatestResult";
+import { deriveMissionStalenessHint } from "./missionListPriority";
+import { deriveOperatorMissionPhase, type OperatorMissionPhase } from "./missionPhase";
+
+/** Pending rows for a mission from the shared approvals list (same source as thread / right panel). */
+export function getPendingApprovalsForMission(missionId: string, approvals: Approval[]): Approval[] {
+  return approvals.filter((a) => a.mission_id === missionId && a.status === "pending");
+}
 
 /** Operator-facing one-screen read on mission state (no extra API). */
 export type ExecutiveMissionSummary = {
   status: string;
+  /** Derived presentation phase — same as mission detail header / readout (not a second backend field). */
+  phase: OperatorMissionPhase;
+  phaseLabel: string;
   lastEventLine: string | null;
   lastEventAt: string | null;
   blockerLine: string | null;
   latestReceiptLine: string | null;
   pendingApprovalLine: string | null;
+  /** Optional compact queue timing (derived; same anchors as mission list ordering). */
+  stalenessHint: string | null;
   /** True when timeline/receipts are empty and mission is still warming up. */
   isSparse: boolean;
 };
@@ -104,6 +117,8 @@ export function deriveExecutiveMissionSummary(
   approvals: Approval[],
   receipts: Receipt[] | null
 ): ExecutiveMissionSummary {
+  const phaseView = deriveOperatorMissionPhase(mission, events, approvals, receipts);
+
   const sortedEv = [...events].sort((a, b) => b.created_at.localeCompare(a.created_at));
   const lastMeaningful = sortedEv[0] ?? null;
 
@@ -120,18 +135,8 @@ export function deriveExecutiveMissionSummary(
     pendingApprovalLine = "Approval pending";
   }
 
-  const lastReceipt = receipts?.length
-    ? [...receipts].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
-    : null;
-  let latestReceiptLine: string | null = null;
-  if (lastReceipt) {
-    const sum = lastReceipt.summary?.trim();
-    latestReceiptLine = sum
-      ? `${lastReceipt.receipt_type} · ${sum.slice(0, 120)}`
-      : `${lastReceipt.receipt_type} · ${
-          mission.status === "failed" ? operatorCopy.receiptNoSummaryFailed : operatorCopy.receiptNoSummary
-        }`;
-  }
+  const latestExec = deriveLatestExecutionResult(mission, events, receipts);
+  const latestReceiptLine = latestExec.hasResult ? latestExec.resultDetailLine : null;
 
   const lastStatusEv = lastStatusChangeEvent(events);
   const blockerLine = blockerFromMission(mission, lastStatusEv);
@@ -143,13 +148,18 @@ export function deriveExecutiveMissionSummary(
     mission.status !== "blocked" &&
     mission.status !== "failed";
 
+  const stalenessHint = deriveMissionStalenessHint(mission, events, phaseView.phase);
+
   return {
     status: mission.status,
+    phase: phaseView.phase,
+    phaseLabel: phaseView.label,
     lastEventLine: lastMeaningful ? describeEventOneLine(lastMeaningful) : null,
     lastEventAt: lastMeaningful?.created_at ?? null,
     blockerLine,
     latestReceiptLine,
     pendingApprovalLine,
+    stalenessHint,
     isSparse,
   };
 }
@@ -182,6 +192,8 @@ export function formatExecutionMetaParts(meta: CompactExecutionMeta): string[] {
 /** Whether `ExecutiveMissionCardLine` will render a line (vs. falling back to description). */
 export function hasExecutiveCardLine(summary: ExecutiveMissionSummary): boolean {
   return (
+    summary.phaseLabel.trim().length > 0 ||
+    summary.stalenessHint != null ||
     summary.pendingApprovalLine != null ||
     summary.blockerLine != null ||
     summary.lastEventLine != null ||

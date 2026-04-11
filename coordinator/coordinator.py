@@ -270,6 +270,8 @@ class Coordinator:
                 )
 
             elif decision == "requires_approval":
+                # ApprovalCreate — keep fields aligned with services/control-plane/app/schemas/approvals.py
+                # and operator scripts: scripts/lib/ApprovalPayloadContract.ps1
                 approval_body: dict[str, Any] = {
                     "mission_id": mission_id,
                     "action_type": action_type,

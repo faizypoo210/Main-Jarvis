@@ -2,13 +2,9 @@ import { Bell, Mic, Pause, Play, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { StreamPhase } from "../../contexts/ControlPlaneLiveContext";
-import { useControlPlaneLive, usePendingApprovals } from "../../hooks/useControlPlane";
-import * as api from "../../lib/api";
-import {
-  countPendingElsewhere,
-  derivePostApprovalPhase,
-  getFocusedPendingApproval,
-} from "../../lib/voiceApproval";
+import { useControlPlaneLive, usePendingApprovals, useResolveApprovalAction } from "../../hooks/useControlPlane";
+import { deriveOperatorMissionPhase } from "../../lib/missionPhase";
+import { countPendingElsewhere, getFocusedPendingApproval } from "../../lib/voiceApproval";
 import { VoiceApprovalBrief } from "./VoiceApprovalBrief";
 import { VoiceOrb, type VoiceOrbState } from "./VoiceOrb";
 
@@ -54,6 +50,13 @@ export function VoiceMode({
   const navigate = useNavigate();
   const live = useControlPlaneLive();
   const { approvals } = usePendingApprovals();
+  const {
+    resolve,
+    resolvingApprovalId,
+    resolveErrorApprovalId,
+    clearResolveError,
+    recentlyResolvedDecisionFor,
+  } = useResolveApprovalAction();
 
   const mission = threadMissionId ? live.missionById[threadMissionId] ?? null : null;
   const events = threadMissionId ? live.eventsByMissionId[threadMissionId] ?? [] : [];
@@ -67,7 +70,13 @@ export function VoiceMode({
     () => countPendingElsewhere(threadMissionId ?? null, approvals),
     [threadMissionId, approvals]
   );
-  const postApprovalPhase = useMemo(() => derivePostApprovalPhase(mission, events), [mission, events]);
+  const focusedPhase = useMemo(
+    () =>
+      mission
+        ? deriveOperatorMissionPhase(mission, events, approvals, null)
+        : null,
+    [mission, events, approvals]
+  );
 
   const totalPending = useMemo(
     () => approvals.filter((a) => a.status === "pending").length,
@@ -80,9 +89,6 @@ export function VoiceMode({
   const [reply, setReply] = useState("");
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resolvingApproval, setResolvingApproval] = useState(false);
-  const [resolveApprovalError, setResolveApprovalError] = useState(false);
-
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -114,20 +120,10 @@ export function VoiceMode({
   }, [wsState, recording, serverOrb, governanceOrb]);
 
   const missionLoopLine = useMemo(() => {
-    if (threadMissionStatus === "awaiting_approval" && !focusedPending) {
-      return "Governance syncing.";
-    }
-    if (threadMissionStatus === "active") {
-      if (postApprovalPhase === "awaiting_result") return "Awaiting execution output.";
-      if (postApprovalPhase === "resumed") return "Execution updated.";
-      return "Mission active.";
-    }
-    if (threadMissionStatus === "complete") return "Mission complete.";
-    if (threadMissionStatus === "failed") return "Mission ended in failure.";
-    if (threadMissionStatus === "blocked") return "Mission blocked.";
-    if (threadMissionStatus === "pending") return "Mission pending.";
-    return null;
-  }, [threadMissionStatus, focusedPending, postApprovalPhase]);
+    if (!mission || !focusedPhase) return null;
+    if (focusedPending) return null;
+    return focusedPhase.label;
+  }, [mission, focusedPhase, focusedPending]);
 
   const stopRecordingTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -146,28 +142,28 @@ export function VoiceMode({
   }, [stopRecordingTracks]);
 
   const handleResolve = useCallback(
-    async (decision: "approved" | "denied") => {
+    (decision: "approved" | "denied") => {
       if (!focusedPending) return;
-      setResolvingApproval(true);
-      setResolveApprovalError(false);
-      try {
-        await api.resolveApproval(focusedPending.id, {
-          decision,
-          decided_by: "operator",
-          decided_via: "command_center",
-        });
-        await live.refetchPendingApprovals();
-        if (threadMissionId?.trim()) {
-          await live.bootstrapMission(threadMissionId);
-        }
-      } catch {
-        setResolveApprovalError(true);
-      } finally {
-        setResolvingApproval(false);
-      }
+      void resolve(focusedPending.id, decision, {
+        onSuccess: async () => {
+          if (threadMissionId?.trim()) {
+            await live.bootstrapMission(threadMissionId);
+          }
+        },
+      });
     },
-    [focusedPending, live, threadMissionId]
+    [focusedPending, resolve, live, threadMissionId]
   );
+
+  const voiceResolving = Boolean(
+    focusedPending && resolvingApprovalId === focusedPending.id
+  );
+  const voiceResolveError = Boolean(
+    focusedPending && resolveErrorApprovalId === focusedPending.id
+  );
+  const voiceRecentlyResolvedDecision = focusedPending
+    ? recentlyResolvedDecisionFor(focusedPending.id)
+    : null;
 
   const handleViewMission = useCallback(() => {
     if (!threadMissionId?.trim()) return;
@@ -181,7 +177,7 @@ export function VoiceMode({
     setTranscript("");
     setReply("");
     setError(null);
-    setResolveApprovalError(false);
+    clearResolveError();
     setWsState("connecting");
     setServerOrb("idle");
 
@@ -294,7 +290,7 @@ export function VoiceMode({
       }
       wsRef.current = null;
     };
-  }, [open]);
+  }, [open, clearResolveError]);
 
   const startRecording = useCallback(async () => {
     if (wsRef.current?.readyState !== WebSocket.OPEN) {
@@ -433,8 +429,9 @@ export function VoiceMode({
             onViewMission={handleViewMission}
             onApprove={() => void handleResolve("approved")}
             onDeny={() => void handleResolve("denied")}
-            resolving={resolvingApproval}
-            resolveError={resolveApprovalError}
+            resolving={voiceResolving}
+            resolveError={voiceResolveError}
+            recentlyResolvedDecision={voiceRecentlyResolvedDecision}
           />
         ) : null}
 

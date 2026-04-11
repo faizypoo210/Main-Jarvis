@@ -31,18 +31,23 @@ function sortEventsChronological(events: MissionEvent[]): MissionEvent[] {
 export function MissionTimeline({
   events,
   missionStatus,
+  phaseLabel,
 }: {
   events: MissionEvent[];
   /** Optional: tailor empty copy when the mission is waiting on governance. */
   missionStatus?: string;
+  /** Derived operator phase (same as mission detail header) — empty timeline only. */
+  phaseLabel?: string | null;
 }) {
   const sorted = sortEventsChronological(events);
 
   if (sorted.length === 0) {
     const empty =
-      missionStatus === "awaiting_approval"
-        ? "Awaiting first execution update — approval may be pending."
-        : "Awaiting first execution update";
+      phaseLabel?.trim()
+        ? `No timeline events yet — ${phaseLabel.trim()}.`
+        : missionStatus === "awaiting_approval"
+          ? "Awaiting first execution update — approval may be pending."
+          : "Awaiting first execution update";
     return <p className="text-xs leading-relaxed text-[var(--text-secondary)]">{empty}</p>;
   }
 

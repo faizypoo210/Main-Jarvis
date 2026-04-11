@@ -18,18 +18,95 @@
 
 .PARAMETER ControlPlaneUrl
   Base URL without trailing slash.
+.PARAMETER SkipRedisIsolationVerify
+  Do not compare XLEN on jarvis.commands before/after the synthetic command (default: verify when Redis is reachable).
+.PARAMETER RedisContainer
+  Docker Redis container name for redis-cli via docker exec (default jarvis-redis).
 #>
 param(
-    [string]$ControlPlaneUrl = ""
+    [string]$ControlPlaneUrl = "",
+    [switch]$SkipRedisIsolationVerify,
+    [string]$RedisContainer = "jarvis-redis"
 )
+
+$ApLib = Join-Path $PSScriptRoot 'lib\ApprovalPayloadContract.ps1'
+if (-not (Test-Path -LiteralPath $ApLib)) { throw "Missing $ApLib" }
+. $ApLib
 
 $ErrorActionPreference = 'Stop'
 $script:FailCount = 0
+$script:HasContractDrift = $false
 
 function Write-Stage($m) { Write-Host "" ; Write-Host "=== $m ===" -ForegroundColor Cyan }
 function Write-Pass($m) { Write-Host "[PASS] $m" -ForegroundColor Green }
-function Write-Fail($m) { Write-Host "[FAIL] $m" -ForegroundColor Red; $script:FailCount++ }
+function Write-Fail {
+    param([string]$m, [switch]$ContractDrift)
+    Write-Host "[FAIL] $m" -ForegroundColor Red
+    $script:FailCount++
+    if ($ContractDrift) { $script:HasContractDrift = $true }
+}
 function Write-Info($m) { Write-Host "       $m" -ForegroundColor DarkGray }
+
+function Get-RestErrorDetails {
+    param($ErrorRecord)
+    $status = $null
+    $body = $null
+    $msg = $ErrorRecord.Exception.Message
+    if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+        $body = $ErrorRecord.ErrorDetails.Message.Trim()
+    }
+    $ex = $ErrorRecord.Exception
+    if ($null -ne $ex.Response) {
+        $resp = $ex.Response
+        try {
+            if ($resp -is [System.Net.Http.HttpResponseMessage]) {
+                $status = [int]$resp.StatusCode
+                if ([string]::IsNullOrWhiteSpace($body) -and $null -ne $resp.Content) {
+                    $body = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                }
+            }
+            else {
+                $sc = $resp.StatusCode
+                if ($null -ne $sc) {
+                    if ($sc -is [int]) { $status = $sc }
+                    else { $status = [int]$sc }
+                }
+                if ([string]::IsNullOrWhiteSpace($body)) {
+                    $stream = $resp.GetResponseStream()
+                    if ($null -ne $stream) {
+                        $reader = New-Object System.IO.StreamReader($stream)
+                        $body = $reader.ReadToEnd()
+                    }
+                }
+            }
+        }
+        catch {}
+    }
+    if ($null -eq $status -and $msg -match '\((\d{3})\)') { $status = [int]$Matches[1] }
+    if ($null -eq $status -and $msg -match '422') { $status = 422 }
+    if ($null -eq $status -and $msg -match '401') { $status = 401 }
+    if ($null -eq $status -and $msg -match '404') { $status = 404 }
+    return @{ StatusCode = $status; Body = $body; Message = $msg }
+}
+
+function Write-GoldenPathSyntheticClassLine {
+    $class = if ($script:FailCount -eq 0) {
+        'pass'
+    }
+    elseif ($script:HasContractDrift) {
+        'contract_drift'
+    }
+    else {
+        'precondition_fail'
+    }
+    Write-Host "GOLDEN_PATH_SYNTHETIC_CLASS=$class"
+}
+
+function Exit-GoldenPath {
+    param([int]$Code)
+    Write-GoldenPathSyntheticClassLine
+    exit $Code
+}
 
 function Get-ApiKey {
     $k = [Environment]::GetEnvironmentVariable('CONTROL_PLANE_API_KEY', 'User')
@@ -47,6 +124,36 @@ function Get-CpBase {
     return $u.TrimEnd('/')
 }
 
+function Invoke-RedisCli {
+    param([string[]]$RedisArgs)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        if (Get-Command docker -ErrorAction SilentlyContinue) {
+            $running = docker inspect -f '{{.State.Running}}' $RedisContainer 2>$null
+            if ($running -eq 'true') {
+                return docker exec $RedisContainer redis-cli @RedisArgs 2>&1 | Out-String
+            }
+        }
+        if (Get-Command redis-cli -ErrorAction SilentlyContinue) {
+            return & redis-cli @RedisArgs 2>&1 | Out-String
+        }
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return $null
+}
+
+function Get-JarvisCommandsStreamLength {
+    $out = Invoke-RedisCli -RedisArgs @('XLEN', 'jarvis.commands')
+    if ($null -eq $out) { return $null }
+    $trim = $out.Trim()
+    if ($trim -match '^(\d+)\s*$') { return [long]$Matches[1] }
+    if ($trim -match '^ERR') { return $null }
+    if ($trim -match '(\d+)') { return [long]$Matches[1] }
+    return $null
+}
+
 $Base = Get-CpBase -Url $ControlPlaneUrl
 $Api = "$Base/api/v1"
 $ApiKey = Get-ApiKey
@@ -58,7 +165,7 @@ Write-Host "Base: $Base" -ForegroundColor DarkGray
 if ([string]::IsNullOrWhiteSpace($ApiKey)) {
     Write-Fail "CONTROL_PLANE_API_KEY is not set (mutations require x-api-key)."
     Write-Info "Set User env CONTROL_PLANE_API_KEY or pass JARVIS_SMOKE_API_KEY."
-    exit 1
+    Exit-GoldenPath 1
 }
 
 $Headers = @{
@@ -74,43 +181,104 @@ try {
 }
 catch {
     Write-Fail ('GET /health failed: ' + $_.Exception.Message)
-    exit 1
+    Exit-GoldenPath 1
 }
 
 # --- Stage B: command to mission ---
 Write-Stage "B - Command intake (mission created)"
 $cmdText = 'Golden path rehearsal: acknowledge with a brief status only.'
-$cmdBody = @{ text = $cmdText; source = 'command_center' } | ConvertTo-Json -Compress
+# Isolate from Redis/coordinator: control plane skips jarvis.commands publish when both markers are set (see command_service.py).
+$cmdBody = @{
+    text    = $cmdText
+    source  = 'command_center'
+    context = @{
+        rehearsal_mode       = 'synthetic_api_only'
+        skip_runtime_publish = $true
+    }
+} | ConvertTo-Json -Compress -Depth 6
+
+$redisLenBefore = $null
+if (-not $SkipRedisIsolationVerify) {
+    $redisLenBefore = Get-JarvisCommandsStreamLength
+    if ($null -eq $redisLenBefore) {
+        Write-Info "[SKIP] Redis jarvis.commands XLEN unavailable — isolation verify skipped (not a failure)."
+    } else {
+        Write-Info "Redis jarvis.commands XLEN before POST /commands: $redisLenBefore"
+    }
+}
+
 try {
     $cmdResp = Invoke-RestMethod -Uri "$Api/commands" -Method Post -Headers $Headers -Body $cmdBody -TimeoutSec 60
 }
 catch {
-    Write-Fail ('POST /api/v1/commands failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    if ($detail.Length -gt 1200) { $detail = $detail.Substring(0, 1200) + '...' }
+    Write-Fail "POST /api/v1/commands failed: HTTP $($info.StatusCode) $detail"
+    if ($info.Body -and $info.Body.Length -lt 2000) { Write-Info "Response body: $($info.Body)" }
+    Exit-GoldenPath 1
 }
 $MissionId = $cmdResp.mission_id.ToString()
 Write-Pass "POST /api/v1/commands - mission_id=$MissionId status=$($cmdResp.mission_status)"
 
+if (-not $SkipRedisIsolationVerify -and ($null -ne $redisLenBefore)) {
+    $redisLenAfter = Get-JarvisCommandsStreamLength
+    if ($null -eq $redisLenAfter) {
+        Write-Info "[SKIP] Redis XLEN after command unavailable — compare skipped."
+    } elseif ($redisLenAfter -eq $redisLenBefore) {
+        Write-Pass "Redis jarvis.commands length unchanged (synthetic isolation verified; no coordinator publish)"
+    } else {
+        Write-Fail "Redis jarvis.commands length changed ($redisLenBefore -> $redisLenAfter); expected no XADD for synthetic rehearsal. If another process published to the stream, retry or use -SkipRedisIsolationVerify."
+    }
+}
+
 # --- Stage C: request approval (governed path) ---
 Write-Stage "C - Approval requested (POST /approvals)"
-$apBody = @{
-    mission_id   = $MissionId
-    action_type  = 'Rehearsal execution step'
-    risk_class   = 'amber'
-    reason       = 'Operator rehearsal - confirm before synthetic completion.'
-    requested_by = 'golden_path_rehearsal'
-    requested_via = 'command_center'
-} | ConvertTo-Json -Compress
+$apBodyObj = New-SyntheticApprovalCreatePayload `
+    -MissionId $MissionId `
+    -CommandText $cmdText `
+    -ActionType 'Rehearsal execution step' `
+    -Reason 'Operator rehearsal - confirm before synthetic completion.' `
+    -RequestedBy 'golden_path_rehearsal' `
+    -RequestedVia 'command_center' `
+    -RiskClass 'amber'
+$apValidate = Test-ApprovalCreatePayload -Payload $apBodyObj
+if (-not $apValidate.Valid) {
+    $script:HasContractDrift = $true
+    Write-Fail "Approval payload failed local validation (contract drift before POST): $($apValidate.Errors -join '; ')"
+    Write-Info $apValidate.ContractRef
+    Exit-GoldenPath 1
+}
+$apBody = ConvertTo-ApprovalCreateJson -Payload $apBodyObj
 
 try {
     $ap = Invoke-RestMethod -Uri "$Api/approvals" -Method Post -Headers $Headers -Body $apBody -TimeoutSec 60
 }
 catch {
-    Write-Fail ('POST /api/v1/approvals failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    if ($detail.Length -gt 1200) { $detail = $detail.Substring(0, 1200) + '...' }
+    Write-Fail "POST /api/v1/approvals failed: HTTP $($info.StatusCode) $detail"
+    if ($info.StatusCode -eq 422) {
+        Write-Info "422: ApprovalCreate contract drift (server rejected body). Compare scripts/lib/ApprovalPayloadContract.ps1 with services/control-plane/app/schemas/approvals.py; requested_via must be voice|command_center|system|sms."
+    }
+    if ($info.StatusCode -eq 401) {
+        Write-Info "401: x-api-key must match server CONTROL_PLANE_API_KEY when auth is enabled."
+    }
+    if ($info.StatusCode -eq 404) {
+        Write-Info "404: mission not found for approval (wrong base URL or stale mission_id)."
+    }
+    if ($info.Body -and $info.Body.Length -lt 2500) { Write-Info "Response body: $($info.Body)" }
+    Exit-GoldenPath 1
 }
 $ApprovalId = $ap.id.ToString()
-if ($ap.status -ne 'pending') { Write-Fail "New approval should be pending" }
+if ($ap.status -ne 'pending') { Write-Fail "New approval should be pending" -ContractDrift }
 else { Write-Pass "POST /api/v1/approvals - approval_id=$ApprovalId pending" }
 
 # --- Stage D: pending list contains this mission ---
@@ -119,15 +287,20 @@ try {
     $pending = Invoke-RestMethod -Uri "$Api/approvals/pending" -Method Get -TimeoutSec 30
 }
 catch {
-    Write-Fail ('GET /api/v1/approvals/pending failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    Write-Fail "GET /api/v1/approvals/pending failed: HTTP $($info.StatusCode) $detail"
+    Exit-GoldenPath 1
 }
 $match = @($pending) | Where-Object { $_.mission_id.ToString() -eq $MissionId -and $_.status -eq 'pending' }
 if ($match.Count -ge 1) {
     Write-Pass "GET /approvals/pending includes mission (at least one pending row)"
 }
 else {
-    Write-Fail "Pending list missing mission $MissionId"
+    Write-Fail "Pending list missing mission $MissionId" -ContractDrift
 }
 
 # --- Stage E: approve ---
@@ -141,14 +314,20 @@ try {
     $dec = Invoke-RestMethod -Uri "$Api/approvals/$ApprovalId/decision" -Method Post -Headers $Headers -Body $decBody -TimeoutSec 60
 }
 catch {
-    Write-Fail ('POST /api/v1/approvals/{id}/decision failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    Write-Fail "POST /api/v1/approvals/{id}/decision failed: HTTP $($info.StatusCode) $detail"
+    if ($info.Body -and $info.Body.Length -lt 2000) { Write-Info "Response body: $($info.Body)" }
+    Exit-GoldenPath 1
 }
 if ($dec.status -eq 'approved') {
     Write-Pass "Decision recorded - approval status=approved"
 }
 else {
-    Write-Fail "Expected approval status approved, got $($dec.status)"
+    Write-Fail "Expected approval status approved, got $($dec.status)" -ContractDrift
 }
 
 # --- Stage F: mission active ---
@@ -158,12 +337,17 @@ try {
     $m = Invoke-RestMethod -Uri "$Api/missions/$MissionId" -Method Get -TimeoutSec 30
 }
 catch {
-    Write-Fail ('GET /api/v1/missions/{id} failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    Write-Fail "GET /api/v1/missions/{id} failed: HTTP $($info.StatusCode) $detail"
+    Exit-GoldenPath 1
 }
 if ($m.status -ne 'active') {
-    Write-Fail "Mission status should be active after approve, got $($m.status)"
-    exit 1
+    Write-Fail "Mission status should be active after approve, got $($m.status)" -ContractDrift
+    Exit-GoldenPath 1
 }
 Write-Pass "Mission status is active"
 
@@ -187,8 +371,14 @@ try {
     $rc = Invoke-RestMethod -Uri "$Api/receipts" -Method Post -Headers $Headers -Body $rcBody -TimeoutSec 60
 }
 catch {
-    Write-Fail ('POST /api/v1/receipts failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    Write-Fail "POST /api/v1/receipts failed: HTTP $($info.StatusCode) $detail"
+    if ($info.Body -and $info.Body.Length -lt 2000) { Write-Info "Response body: $($info.Body)" }
+    Exit-GoldenPath 1
 }
 Write-Pass "POST /api/v1/receipts - receipt_id=$($rc.id)"
 
@@ -198,8 +388,13 @@ try {
     $bundle = Invoke-RestMethod -Uri "$Api/missions/$MissionId/bundle" -Method Get -TimeoutSec 30
 }
 catch {
-    Write-Fail ('GET /api/v1/missions/{id}/bundle failed: ' + $_.Exception.Message)
-    exit 1
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    if ($null -ne $info.StatusCode -and ($info.StatusCode -eq 422 -or $info.StatusCode -eq 400)) {
+        $script:HasContractDrift = $true
+    }
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    Write-Fail "GET /api/v1/missions/{id}/bundle failed: HTTP $($info.StatusCode) $detail"
+    Exit-GoldenPath 1
 }
 
 $evs = @($bundle.events)
@@ -209,10 +404,10 @@ $hasApReq = $types -contains 'approval_requested'
 $hasApRes = $types -contains 'approval_resolved'
 $hasRcpt = $types -contains 'receipt_recorded'
 
-if ($hasCreated) { Write-Pass "Events include created" } else { Write-Fail "Events missing created" }
-if ($hasApReq) { Write-Pass "Events include approval_requested" } else { Write-Fail "Events missing approval_requested" }
-if ($hasApRes) { Write-Pass "Events include approval_resolved" } else { Write-Fail "Events missing approval_resolved" }
-if ($hasRcpt) { Write-Pass "Events include receipt_recorded" } else { Write-Fail "Events missing receipt_recorded" }
+if ($hasCreated) { Write-Pass "Events include created" } else { Write-Fail "Events missing created" -ContractDrift }
+if ($hasApReq) { Write-Pass "Events include approval_requested" } else { Write-Fail "Events missing approval_requested" -ContractDrift }
+if ($hasApRes) { Write-Pass "Events include approval_resolved" } else { Write-Fail "Events missing approval_resolved" -ContractDrift }
+if ($hasRcpt) { Write-Pass "Events include receipt_recorded" } else { Write-Fail "Events missing receipt_recorded" -ContractDrift }
 
 $appr = @($bundle.approvals)
 $approvedRows = @($appr | Where-Object { $_.status -eq 'approved' })
@@ -220,7 +415,7 @@ if ($approvedRows.Count -ge 1) {
     Write-Pass "Bundle approvals include at least one approved row"
 }
 else {
-    Write-Fail "Bundle approvals missing approved row"
+    Write-Fail "Bundle approvals missing approved row" -ContractDrift
 }
 
 $recs = @($bundle.receipts)
@@ -228,7 +423,7 @@ if ($recs.Count -ge 1) {
     Write-Pass "Bundle receipts count >= 1"
 }
 else {
-    Write-Fail "Bundle receipts empty"
+    Write-Fail "Bundle receipts empty" -ContractDrift
 }
 
 $metaOk = $false
@@ -251,7 +446,7 @@ Write-Host ""
 if ($script:FailCount -eq 0) {
     Write-Host "GOLDEN_PATH_REHEARSAL_PASS mission_id=$MissionId" -ForegroundColor Green
     Write-Host "Open Command Center: /missions/$MissionId" -ForegroundColor DarkGray
-    exit 0
+    Exit-GoldenPath 0
 }
 Write-Host "GOLDEN_PATH_REHEARSAL_FAIL failures=$($script:FailCount)" -ForegroundColor Red
-exit 1
+Exit-GoldenPath 1

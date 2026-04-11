@@ -8,7 +8,7 @@ When Composio or similar is configured, typical surfaces may include:
 - Google Calendar: read/create events, availability  
 - Slack: channels, messages  
 - Notion: pages and databases  
-- GitHub: repos, issues, PRs
+- GitHub: repos, issues, PRs  
 
 **Actual** tool availability depends on OpenClaw configuration, auth profiles, and Composio setup on the machine. This list is **policy intent**, not a guarantee every action works in every environment.
 

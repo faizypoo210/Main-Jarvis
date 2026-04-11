@@ -13,6 +13,7 @@ from app.api.routes import (
     approvals,
     commands,
     github_integration,
+    gmail_integration,
     health,
     heartbeat,
     missions,
@@ -62,6 +63,11 @@ app.include_router(
     github_integration.router,
     prefix=f"{api_v1_prefix}/missions",
     tags=["integrations-github"],
+)
+app.include_router(
+    gmail_integration.router,
+    prefix=f"{api_v1_prefix}/missions",
+    tags=["integrations-gmail"],
 )
 app.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
 app.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])

@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     JARVIS_HEALTH_OLLAMA_URL: str = "http://127.0.0.1:11434/api/tags"
     # GitHub REST (governed create-issue workflow only). Machine-local secret; never logged.
     JARVIS_GITHUB_TOKEN: str = ""
+    # Gmail API (governed create-draft only). Use access token and/or OAuth refresh — see INTEGRATIONS_GMAIL.md.
+    JARVIS_GMAIL_ACCESS_TOKEN: str = ""
+    JARVIS_GMAIL_REFRESH_TOKEN: str = ""
+    JARVIS_GMAIL_CLIENT_ID: str = ""
+    JARVIS_GMAIL_CLIENT_SECRET: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

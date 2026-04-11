@@ -17,6 +17,7 @@ Jarvis is a **layered** system: a **governed control plane** (missions, timeline
 | Voice STT/TTS and control-plane/Redis integration | `voice/` |
 | Workspace persona/policy **mirrors** (not mission state) | `config/workspace/` — **`governance-manifest.json`** defines the canonical file set; **`docs/OPENCLAW_WORKSPACE_FILES.md`** explains roles vs control plane |
 | **GitHub create-issue workflow** | Approval + structured contract + REST adapter in control plane | `app/services/github_issue_workflow.py`, `docs/INTEGRATIONS_GITHUB.md` | **Not** Composio/OpenClaw; requires **`JARVIS_GITHUB_TOKEN`** on the API host |
+| **Gmail create-draft workflow** | Approval + Gmail API `drafts.create` via control plane | `app/services/gmail_draft_workflow.py`, `docs/INTEGRATIONS_GMAIL.md` | **Not** send/inbox automation; requires **`JARVIS_GMAIL_ACCESS_TOKEN`** and/or refresh OAuth env vars |
 | Deployment, smoke, golden-path, benchmark scripts | `scripts/` |
 | High-level architecture and spec narrative | `context/ARCHITECTURE.md`, `context/JARVIS_SPEC.md` |
 | Operational docs (security, sync, evals, lanes) | `docs/` |
@@ -97,6 +98,7 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 | Workspace pack audit | `.\scripts\11-audit-workspace-governance.ps1` from repo root |
 | Workspace sync to OpenClaw | `.\scripts\10-sync-openclaw-workspace.ps1` |
 | GitHub issue workflow | `docs/INTEGRATIONS_GITHUB.md`; API under `/api/v1/missions/.../integrations/github/create-issue` |
+| Gmail draft workflow | `docs/INTEGRATIONS_GMAIL.md`; API under `/api/v1/missions/.../integrations/gmail/create-draft` |
 | Broader deployment phases | `DEPLOYMENT_STATUS.md`, `docs/E2E_SMOKE_TEST.md` |
 
 ## Known limitations

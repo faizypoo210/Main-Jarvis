@@ -179,6 +179,10 @@ class ApprovalService:
                 from app.services.github_issue_workflow import execute_github_issue_after_approval
 
                 await execute_github_issue_after_approval(self._session, updated)
+            elif updated.action_type == "gmail_create_draft":
+                from app.services.gmail_draft_workflow import execute_gmail_draft_after_approval
+
+                await execute_gmail_draft_after_approval(self._session, updated)
             else:
                 await _publish_execution_resume(str(mid), cmd_text, str(aid))
 

@@ -68,6 +68,25 @@ class ReceiptService:
             for k in ("issue_number", "html_url", "repo", "title"):
                 if k in payload and k not in ev_payload:
                     ev_payload[k] = payload[k]
+        if receipt_type in ("gmail_draft_created", "gmail_draft_failed"):
+            gm = payload.get("gmail")
+            if isinstance(gm, dict):
+                ev_payload["gmail"] = {
+                    k: gm[k]
+                    for k in (
+                        "draft_id",
+                        "message_id",
+                        "thread_id",
+                        "subject",
+                        "to_preview",
+                        "snippet",
+                        "gmail_url",
+                    )
+                    if k in gm
+                }
+            for k in ("draft_id", "subject", "to_preview", "gmail_url"):
+                if k in payload and k not in ev_payload:
+                    ev_payload[k] = payload[k]
         await MissionEventRepository.create(
             self._session,
             mission_id=mission_id,

@@ -41,6 +41,16 @@ _ATTENTION_SQL = """(
         AND rx.created_at <= me.created_at + interval '3 seconds'
     )
   )
+  OR (
+    me.event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = me.mission_id
+        AND rx.receipt_type = 'gmail_draft_failed'
+        AND rx.created_at >= me.created_at - interval '3 seconds'
+        AND rx.created_at <= me.created_at + interval '3 seconds'
+    )
+  )
 )"""
 
 
@@ -144,11 +154,26 @@ def _title_summary_status(
         summary = _truncate(" ".join(parts)) or title
         return title, summary, "pending" if pending else mission_status
     if event_type == "integration_action_requested":
+        prov = str(p.get("provider") or "")
+        if prov == "gmail":
+            subj = str(p.get("subject") or "")
+            tp = str(p.get("to_preview") or "")
+            title = "Integration action requested"
+            summary = f"Gmail create_draft · {tp}" + (f" · {subj}" if subj else "")
+            return title, _truncate(summary) or title, "pending"
         repo = str(p.get("repo") or "")
         title = "Integration action requested"
         summary = f"GitHub create_issue · {repo}" if repo else "GitHub integration requested"
         return title, summary, "pending"
     if event_type == "integration_action_executed":
+        if str(p.get("provider") or "") == "gmail":
+            subj = str(p.get("subject") or "")
+            did = str(p.get("draft_id") or "")
+            gurl = str(p.get("gmail_url") or "")
+            summary = (f"{subj}" if subj else "Draft created") + (f" · draft {did}" if did else "")
+            if gurl:
+                summary = f"{summary} · {gurl}"
+            return "Gmail draft created", _truncate(summary) or "Draft saved", "complete"
         repo = str(p.get("repo") or "")
         num = p.get("issue_number")
         url = str(p.get("html_url") or "")
@@ -157,9 +182,11 @@ def _title_summary_status(
             summary = f"{summary} · {url}"
         return "GitHub issue created", _truncate(summary) or "Issue created", "complete"
     if event_type == "integration_action_failed":
+        prov = str(p.get("provider") or "")
         code = str(p.get("error_code") or "")
         summary = str(p.get("error_message") or "Integration action failed")
-        return "Integration action failed", _truncate(f"{code}: {summary}") if code else _truncate(summary) or "Failed", "failed"
+        prefix = "Gmail draft failed" if prov == "gmail" else "Integration action failed"
+        return prefix, _truncate(f"{code}: {summary}") if code else _truncate(summary) or "Failed", "failed"
     if event_type == "receipt_recorded":
         rt = str(p.get("receipt_type") or "receipt")
         src = str(p.get("source") or "")
@@ -168,6 +195,10 @@ def _title_summary_status(
             title = "GitHub issue created"
         elif rt == "github_issue_failed":
             title = "GitHub issue failed"
+        elif rt == "gmail_draft_created":
+            title = "Gmail draft created"
+        elif rt == "gmail_draft_failed":
+            title = "Gmail draft failed"
         elif rt == "openclaw_execution":
             title = "Execution receipt recorded"
         else:
@@ -190,6 +221,19 @@ def _title_summary_status(
             elif rp.get("html_url"):
                 line = f"{line} · {rp.get('html_url')}"
             return title, _truncate(line) or title, "succeeded" if rt == "github_issue_created" else "failed"
+        if rt in ("gmail_draft_created", "gmail_draft_failed"):
+            gm = rp.get("gmail") if isinstance(rp.get("gmail"), dict) else {}
+            line = f"{rt}"
+            if isinstance(gm, dict):
+                if gm.get("to_preview"):
+                    line = f"{line} · {gm.get('to_preview')}"
+                if gm.get("subject"):
+                    line = f"{line} · {gm.get('subject')}"
+                if gm.get("draft_id"):
+                    line = f"{line} · draft {gm.get('draft_id')}"
+                if gm.get("gmail_url"):
+                    line = f"{line} · {gm.get('gmail_url')}"
+            return title, _truncate(line) or title, "succeeded" if rt == "gmail_draft_created" else "failed"
         if "success" in rp:
             ok = rp.get("success")
             st = "succeeded" if ok is True else "failed" if ok is False else "unknown"
@@ -299,7 +343,18 @@ def _meta(
         "integration_action_executed",
         "integration_action_failed",
     ):
-        for k in ("provider", "action", "repo", "title", "issue_number", "html_url", "error_code"):
+        for k in (
+            "provider",
+            "action",
+            "repo",
+            "title",
+            "issue_number",
+            "html_url",
+            "error_code",
+            "to_preview",
+            "draft_id",
+            "gmail_url",
+        ):
             if k in p:
                 meta[k] = p.get(k)
     if event_type == "receipt_recorded":
@@ -380,6 +435,16 @@ _ATTENTION_COUNT = """(
       SELECT 1 FROM receipts rx
       WHERE rx.mission_id = mission_events.mission_id
         AND rx.receipt_type = 'github_issue_failed'
+        AND rx.created_at >= mission_events.created_at - interval '3 seconds'
+        AND rx.created_at <= mission_events.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = mission_events.mission_id
+        AND rx.receipt_type = 'gmail_draft_failed'
         AND rx.created_at >= mission_events.created_at - interval '3 seconds'
         AND rx.created_at <= mission_events.created_at + interval '3 seconds'
     )

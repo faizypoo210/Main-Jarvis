@@ -1,4 +1,9 @@
-"""JARVIS executor worker: consume jarvis.execution, call OpenClaw, record receipts, broadcast updates."""
+"""JARVIS executor worker: consume jarvis.execution, call OpenClaw, record receipts, broadcast updates.
+
+TRUTH_SOURCE: posts execution receipts via control plane POST /api/v1/receipts (see app/schemas/receipts.py).
+MACHINE_CONFIG_REQUIRED: OPENCLAW_CMD, valid %USERPROFILE%\\.openclaw\\ config for gateway auth and models.
+UPSTREAM_DEPENDENCY: OpenClaw CLI + gateway behavior; executor does not embed provider secrets.
+"""
 
 from __future__ import annotations
 

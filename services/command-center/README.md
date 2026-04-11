@@ -18,7 +18,7 @@ The UI expects the control plane API at [http://localhost:8001](http://localhost
 
 - **Overview** — conversational thread; mission drill-down uses routes, not huge inline dumps.
 - **Missions** — list; each row links to **`/missions/:missionId`** (mission detail: timeline, approvals, receipts).
-- **Shell focus** — `threadMissionId` in `AppShell` outlet context keeps the **right panel** aligned with the mission the operator is inspecting (thread command, detail page, or future entry points).
+- **Shell focus** — `threadMissionId` state in `AppShell` (passed to routed children and the **right panel**) keeps the rail aligned with the mission the operator is inspecting (thread command, detail page, or future entry points).
 
 ## Live updates
 
@@ -32,7 +32,7 @@ Mission detail shows compact **Timing** (derived from timeline events + `updated
 
 ## Voice mode
 
-Voice uses the **same shell focus** as the thread, right panel, and mission detail: `threadMissionId` from `AppShell` (outlet context). It does **not** maintain a separate mission pointer.
+Voice uses the **same shell focus** as the thread, right panel, and mission detail: `threadMissionId` from `AppShell`. It does **not** maintain a separate mission pointer.
 
 **Approval-aware state (visible now)**
 

@@ -1,4 +1,8 @@
-"""Approval schemas."""
+"""Approval schemas.
+
+TRUTH_SOURCE: canonical HTTP contract for POST /api/v1/approvals and decision payloads.
+Scripts must stay aligned: scripts/lib/ApprovalPayloadContract.ps1, coordinator approval branches.
+"""
 
 from __future__ import annotations
 

@@ -18,6 +18,7 @@ export default function App() {
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />
+        {/* PLACEHOLDER: nav targets — no dedicated API-backed pages yet (see STATUS.md). */}
         <Route path="integrations" element={<PlaceholderPage title="Integrations" />} />
         <Route path="workers" element={<PlaceholderPage title="Workers" />} />
         <Route path="cost" element={<PlaceholderPage title="Cost & Usage" />} />

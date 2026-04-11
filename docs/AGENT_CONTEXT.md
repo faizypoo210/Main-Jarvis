@@ -70,7 +70,7 @@ This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). **P
 | Location | Role |
 |----------|------|
 | **`F:\Jarvis` (services, coordinator, executor, voice, …)** | **Executable source** — missions and state live in Control Plane + DB |
-| **`F:\Jarvis\config\workspace\*.md`** | **Tracked mirrors** of persona/policy files (SOUL, AGENTS, TOOLS; add IDENTITY, USERS when ready). Versioned in git; not authoritative until synced to live |
+| **`F:\Jarvis\config\workspace\*.md`** | **Tracked mirrors** of persona/policy files (core: SOUL, AGENTS, TOOLS; optional IDENTITY/USERS). Versioned in git; not authoritative until synced to live |
 | **`%USERPROFILE%\.openclaw\workspace\main\`** | **Live** markdown OpenClaw reads at runtime. Update by running `scripts/10-sync-openclaw-workspace.ps1` or edit in place |
 
 **Governance:** Persona/context files shape how models sound; `AGENTS.md` / `TOOLS.md` shape allowed behavior; **mission/control-plane state** remains separate and authoritative (FastAPI + PostgreSQL).

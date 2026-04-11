@@ -1,4 +1,9 @@
-"""JARVIS Event Coordinator: Redis Streams router, DashClaw guard/outcomes, control plane status."""
+"""JARVIS Event Coordinator: Redis Streams router, DashClaw guard/outcomes, control plane status.
+
+TRUTH_SOURCE: stream names and control-plane HTTP calls are the integration contract for this worker.
+UPSTREAM_DEPENDENCY: DashClaw API shape and Redis stream semantics.
+MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, DASHCLAW_* env; coordinator is stateless on disk.
+"""
 
 from __future__ import annotations
 

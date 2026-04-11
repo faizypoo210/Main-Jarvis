@@ -1,4 +1,7 @@
-"""Command intake schemas."""
+"""Command intake schemas.
+
+TRUTH_SOURCE: POST /api/v1/commands body and response; rehearsal scripts may set context.* for Redis isolation.
+"""
 
 from __future__ import annotations
 

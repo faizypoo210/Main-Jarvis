@@ -1,5 +1,9 @@
 """
 JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, Ollama (default qwen3:4b), pyttsx3 TTS, Redis streams.
+
+MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Ollama/Whisper env; local .env beside this file.
+UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to CI here.
+TRUTH_SOURCE: intent forwarding targets control plane HTTP; mission truth remains control plane + DB.
 """
 
 from __future__ import annotations

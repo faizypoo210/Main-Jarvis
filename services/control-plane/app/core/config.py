@@ -1,4 +1,8 @@
-"""Application settings from environment variables."""
+"""Application settings from environment variables.
+
+TRUTH_SOURCE: .env keys documented in services/control-plane/.env.example; required for boot.
+MACHINE_CONFIG_REQUIRED: DATABASE_URL, SECRET_KEY, and optional CONTROL_PLANE_API_KEY on the host.
+"""
 
 from __future__ import annotations
 

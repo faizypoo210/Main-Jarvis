@@ -1,3 +1,4 @@
+# TRUTH_SOURCE: PowerShell mirror of ApprovalCreate for operator scripts — must match services/control-plane/app/schemas/approvals.py.
 # Shared synthetic POST /api/v1/approvals body for operator scripts (ApprovalCreate).
 # Canonical contract: services/control-plane/app/schemas/approvals.py
 # Coordinator-style reference: coordinator/coordinator.py (requires_approval branch).

@@ -1,12 +1,14 @@
 # OpenClaw workspace sync
 
+**What each markdown file is for** (SOUL, AGENTS, TOOLS, MEMORY, etc.): see **[`OPENCLAW_WORKSPACE_FILES.md`](./OPENCLAW_WORKSPACE_FILES.md)**.
+
 ## Three locations (do not confuse them)
 
 1. **`F:\Jarvis` (git repo)**  
    Source code, services, scripts, and **tracked markdown mirrors** under `config/workspace/`.
 
 2. **`config/workspace/*.md` (tracked mirrors)**  
-   Reviewable copies of persona/policy files. **Not** the runtime source by themselves until synced. Missing files (`IDENTITY.md`, `USERS.md`) are **expected paths only** until you add them.
+   Reviewable copies of persona/policy files. **Not** the runtime source by themselves until synced. **`IDENTITY.md`** and **`USERS.md`** are **optional**—if absent, the sync script skips them (`[MISSING-SOURCE]`); **`SOUL.md`** is usually enough for identity.
 
 3. **`%USERPROFILE%\.openclaw\workspace\main\` (live)**  
    What OpenClaw Gateway uses at runtime. Update by editing mirrors in the repo and running **`scripts/10-sync-openclaw-workspace.ps1`**, or edit live files directly (then consider copying back into the repo for version control).

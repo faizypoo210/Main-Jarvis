@@ -1,5 +1,7 @@
 # Model lanes (local vs cloud execution)
 
+> **Truth boundary:** model lane choice does **not** move mission authority off the control plane. For ownership and machine config, see [`../REPO_TRUTH.md`](../REPO_TRUTH.md) and [`../MACHINE_SETUP_STATUS.md`](../MACHINE_SETUP_STATUS.md).
+
 This document describes how **two model lanes** are used in JARVIS without changing control-plane authority.
 
 ## Roles

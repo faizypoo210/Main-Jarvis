@@ -35,8 +35,11 @@ Authoritative backend for missions, timeline events, approvals, receipts, worker
 | POST | `/api/v1/commands` | Intake command → mission + `mission_events` row |
 | GET | `/api/v1/missions` | List missions (filters: `status`, `created_by`, `limit`, `offset`) |
 | GET | `/api/v1/missions/{id}` | Single mission |
+| — | `/api/v1/missions/{id}/events`, `/approvals`, `/receipts`, `/bundle` | Mission-scoped reads |
+| — | `/api/v1/approvals`, `/api/v1/receipts` | Create/list/decide approvals; create/get receipts |
+| GET | `/api/v1/updates/stream` | SSE (see `app/api/routes/updates.py`) |
 
-Approvals, receipts, and updates routes are stubbed for future wiring.
+**PARTIAL:** Database models for workers, integrations, and cost events exist; dedicated REST surfaces for those domains may lag the schema—see root `STATUS.md`.
 
 ## Rules
 

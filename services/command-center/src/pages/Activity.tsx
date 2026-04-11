@@ -1,5 +1,6 @@
 import { Activity as ActivityIcon } from "lucide-react";
 
+/** PLACEHOLDER: unified activity stream (connectors, workers, mission events) not implemented yet. */
 export function Activity() {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">

@@ -14,6 +14,8 @@
   Outputs: console summary + JSON under docs/reports/
   Live-stack classification: scripts/lib/Parse-LiveStackHarnessOutput.ps1 (shared with scripts/16-verify-harness-semantics.ps1).
 
+  FRAGILE_ASSUMPTIONS: control plane up with reachable DB; curl optional for SSE probe; live-stack leg needs Redis + coordinator + executor + gateway as per LIVE_STACK_REHEARSAL.md.
+
 .PARAMETER ControlPlaneUrl
 .PARAMETER IncludeLiveStack
   Run scripts/14-rehearse-live-stack.ps1 after synthetic (requires Redis/coordinator/executor).

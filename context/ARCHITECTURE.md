@@ -1,5 +1,7 @@
 # JARVIS Architecture
 
+For **repo ownership, placeholders, and verification commands**, see also the root **`REPO_TRUTH.md`**, **`SYSTEM_MAP.md`**, **`STATUS.md`**, and **`MACHINE_SETUP_STATUS.md`**. This file stays a short operational map; those files are the honesty ledger.
+
 ## Authority and UI
 
 - **Control Plane** (`http://localhost:8001`, FastAPI) is the **authoritative** store for missions, commands, approvals, and receipts.  

@@ -1,4 +1,7 @@
-"""Receipt schemas."""
+"""Receipt schemas.
+
+TRUTH_SOURCE: POST /api/v1/receipts (executors and golden-path scripts use the same shape).
+"""
 
 from __future__ import annotations
 

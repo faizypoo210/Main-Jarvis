@@ -3,6 +3,19 @@
 Personal autonomous AI assistant: **Command Center** (operator UI), **Control Plane** (authoritative API), **Voice Server**, **Coordinator** (Redis), **Executor** (OpenClaw CLI), plus OpenClaw Gateway, LobsterBoard, Ollama, Composio, and DashClaw.  
 Deployed on Windows 11 (single-machine / LAN dev; see `docs/SECURITY_REVIEW.md`).
 
+## Repo truth (what this codebase actually owns)
+
+Jarvis is **multi-part**, not a single deployable monolith. Before changing behavior or docs, read:
+
+| Doc | Use |
+|-----|-----|
+| [`REPO_TRUTH.md`](REPO_TRUTH.md) | Ownership, out-of-repo dependencies, authority boundaries, reality labels, verification |
+| [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Components, flows, approvals/receipts locations, in-repo vs machine-local |
+| [`STATUS.md`](STATUS.md) | Implemented vs partial vs placeholder surfaces |
+| [`MACHINE_SETUP_STATUS.md`](MACHINE_SETUP_STATUS.md) | Env, secrets, OpenClaw paths, prerequisites checklist |
+
+The **`REPO_TRUTH.md`** doc includes a **“Major mechanisms”** section (mission authority, Redis, coordinator, executor, OpenClaw split, voice, verification) so GitHub has explicit context for the parts that matter most—even though live OpenClaw config on disk is not in git. **`docs/OPENCLAW_WORKSPACE_FILES.md`** maps **`SOUL.md`**, **`AGENTS.md`**, **`TOOLS.md`**, and related workspace files to their **behavioral** role (persona vs mission state in the control plane).
+
 ## Canonical architecture
 
 | Role | Port | Purpose |
@@ -101,7 +114,7 @@ Config files with secrets (not in repo):
 | What | Where |
 |------|--------|
 | **Executable source** | This repo (`services/`, `coordinator/`, `executor/`, …) |
-| **Tracked markdown mirrors** | `config/workspace/` (`SOUL.md`, `AGENTS.md`, `TOOLS.md`; add `IDENTITY.md` / `USERS.md` when ready) |
+| **Tracked markdown mirrors** | `config/workspace/` (`SOUL.md`, `AGENTS.md`, `TOOLS.md`; optional `IDENTITY.md` / `USERS.md` if you split persona later) |
 | **Live files OpenClaw reads** | `%USERPROFILE%\.openclaw\workspace\main\` (sync with `scripts/10-sync-openclaw-workspace.ps1`) |
 | **Mission state (authoritative)** | Control Plane API + PostgreSQL — not in workspace markdown |
 

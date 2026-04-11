@@ -22,7 +22,11 @@ Deployed on Windows 11 (10.0.0.249).
 - Local IP: 10.0.0.249
 - All services accessible on home WiFi at http://10.0.0.249:<port>
 
-## Repo StructureF:\Jarvis
+## Repo structure
+
+`F:\Jarvis\`
+
+```
 ├── .cursor/rules/          # Cursor AI rules (loaded on every prompt)
 ├── config/                 # Service configs (secrets redacted)
 │   └── workspace/          # OpenClaw agent identity files
@@ -31,10 +35,14 @@ Deployed on Windows 11 (10.0.0.249).
 │       ├── MEMORY.md       # Persistent operator context
 │       └── TOOLS.md        # Composio integration capabilities
 ├── context/                # Architecture docs and full system spec
+├── docs/                   # AGENT_CONTEXT.md — codebase map for AI agents
 ├── scripts/                # Deployment scripts organized by phase
 ├── jarvis.ps1              # Master startup — runs the full stack
 ├── START_HERE.md           # Cursor agent entry point
-└── DEPLOYMENT_STATUS.md    # Live phase checklist## Starting JARVIS
+└── DEPLOYMENT_STATUS.md    # Live phase checklist
+```
+
+## Starting JARVIS
 
 ```powershell
 cd F:\Jarvis
@@ -82,6 +90,11 @@ Config files with secrets (not in repo):
 
 See context/ARCHITECTURE.md for full service map and data flow.
 See context/JARVIS_SPEC.md for the complete system specification.
+
+## For AI agents
+
+- **Codebase map (modules, ports, entrypoints):** [docs/AGENT_CONTEXT.md](docs/AGENT_CONTEXT.md)
+- **Policy/persona (OpenClaw workspace):** `%USERPROFILE%\.openclaw\workspace\main\` — not a duplicate of application source; pair with this repo when reasoning about Jarvis.
 
 ## Roadmap
 

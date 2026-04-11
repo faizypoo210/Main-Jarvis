@@ -32,3 +32,8 @@ must use host.docker.internal, NOT localhost.
 - LobsterBoard: https://github.com/Curbob/LobsterBoard
 
 ## Local IP for phone access: 10.0.0.249
+
+## Jarvis repository (this workspace)
+- **Root:** `F:\Jarvis` — all control plane, coordinator, executor, voice, and command-center **source** lives here.
+- **Agent codebase map:** `docs/AGENT_CONTEXT.md` (modules, ports, entrypoints).
+- **OpenClaw policy/persona files** live under `%USERPROFILE%\.openclaw\workspace\main\`; they complement but do not replace code in this repo.

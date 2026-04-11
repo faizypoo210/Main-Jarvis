@@ -6,7 +6,8 @@ UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to
 TRUTH_SOURCE: intent forwarding targets control plane HTTP; mission truth remains control plane + DB.
 
 Voice approval v1: approval_voice.try_handle_voice_approval; briefing_voice.try_handle_voice_briefing (read-only).
-Both run before POST /commands. "Read that again" repeats the last briefing or approval reply (ephemeral).
+Voice governed action requests v1: governed_action_voice.try_handle_governed_action_voice (approval creation only).
+Handlers run before POST /commands. "Read that again" repeats the last briefing, governed, or approval reply (ephemeral).
 """
 
 from __future__ import annotations
@@ -36,6 +37,11 @@ from redis.asyncio import Redis
 
 from approval_voice import forget_voice_approval_state, try_handle_voice_approval
 from briefing_voice import forget_voice_briefing_state, try_handle_voice_briefing
+from governed_action_voice import (
+    forget_voice_governed_action_state,
+    note_voice_command_mission,
+    try_handle_governed_action_voice,
+)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
@@ -86,6 +92,7 @@ def _norm_for_intent(text: str) -> str:
 def _forget_voice_session(ws_key: int) -> None:
     forget_voice_approval_state(ws_key)
     forget_voice_briefing_state(ws_key)
+    forget_voice_governed_action_state(ws_key)
     _last_voice_reply.pop(ws_key, None)
 
 
@@ -379,6 +386,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _speak_local(briefing_reply, kind="briefing")
                 continue
 
+            governed_reply = await try_handle_governed_action_voice(
+                text,
+                ws_key,
+                control_plane_url=CONTROL_PLANE_URL,
+                api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
+            )
+            if governed_reply is not None:
+                _last_voice_reply[ws_key] = governed_reply
+                await _speak_local(governed_reply, kind="governed_action")
+                continue
+
             approval_reply = await try_handle_voice_approval(
                 text,
                 ws_key,
@@ -391,8 +409,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             mission_id = await post_command_to_control_plane(text)
-
             if mission_id is not None:
+                note_voice_command_mission(ws_key, mission_id)
                 user_ollama = (
                     f"The user said: '{text}'. Mission ID {mission_id} has been created."
                 )

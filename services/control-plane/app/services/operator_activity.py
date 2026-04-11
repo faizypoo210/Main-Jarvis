@@ -90,7 +90,13 @@ def _truncate(s: str | None, n: int = 240) -> str | None:
 
 
 def _kind_and_category(event_type: str) -> tuple[str, str]:
-    if event_type in ("approval_requested", "approval_resolved"):
+    if event_type in (
+        "approval_requested",
+        "approval_resolved",
+        "approval_reminder_sent",
+        "approval_reminder_failed",
+        "approval_escalated",
+    ):
         return "approval", "approval"
     if event_type in (
         "integration_action_requested",
@@ -152,6 +158,21 @@ def _title_summary_status(
         by = str(p.get("decided_by") or "")
         summary = f"Decision: {dec}" + (f" · by {by}" if by else "")
         return title, summary, dec if dec in ("approved", "denied") else "resolved"
+    if event_type == "approval_reminder_sent":
+        ch = str(p.get("channel") or "")
+        sm = _truncate(f"Outbound reminder recorded ({ch}). Approval still pending.")
+        return ("Approval reminder sent", sm or "Approval reminder sent", "pending")
+    if event_type == "approval_reminder_failed":
+        en = str(p.get("error_note") or "")
+        nt = str(p.get("notification_type") or "")
+        sm = _truncate(f"{nt} delivery failed. {en}".strip())
+        return ("Approval reminder failed", sm or "Reminder delivery failed.", "attention")
+    if event_type == "approval_escalated":
+        return (
+            "Approval escalation sent",
+            "Escalation SMS recorded; approval still pending.",
+            "pending",
+        )
     if event_type == "routing_decided":
         req = str(p.get("requested_lane") or "")
         act = str(p.get("actual_lane") or "")
@@ -501,6 +522,19 @@ def _meta(
         aid = p.get("approval_id")
         if aid:
             meta["approval_id"] = str(aid)
+    if event_type in (
+        "approval_reminder_sent",
+        "approval_reminder_failed",
+        "approval_escalated",
+    ):
+        aid = p.get("approval_id")
+        if aid:
+            meta["approval_id"] = str(aid)
+        for k in ("notification_type", "channel", "status", "dedupe_key"):
+            if k in p and p.get(k) is not None:
+                meta[k] = p.get(k)
+        if p.get("error_note"):
+            meta["error_note"] = str(p.get("error_note"))[:500]
     if event_type == "routing_decided":
         for k in (
             "requested_lane",
@@ -689,7 +723,12 @@ def _category_sql_me(category: str | None) -> str:
             ")"
         )
     if category == "approval":
-        return "AND me.event_type IN ('approval_requested', 'approval_resolved')"
+        return (
+            "AND me.event_type IN ("
+            "'approval_requested', 'approval_resolved', "
+            "'approval_reminder_sent', 'approval_reminder_failed', 'approval_escalated'"
+            ")"
+        )
     if category == "execution":
         return "AND me.event_type = 'receipt_recorded'"
     if category == "attention":
@@ -738,7 +777,10 @@ async def fetch_activity_summary(session: AsyncSession, *, window_days: int = 7)
             f"""
             SELECT COUNT(*)::int FROM mission_events
             WHERE created_at >= NOW() - {win}
-              AND event_type IN ('approval_requested', 'approval_resolved')
+              AND event_type IN (
+                'approval_requested', 'approval_resolved',
+                'approval_reminder_sent', 'approval_reminder_failed', 'approval_escalated'
+              )
             """
         )
     )

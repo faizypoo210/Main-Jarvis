@@ -24,6 +24,7 @@ if config.config_file_name is not None:
 from app.models.base import Base  # noqa: E402
 from app.models import (  # noqa: E402, F401
     approval,
+    approval_reminder,
     cost_event,
     heartbeat_finding,
     integration,

@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     JARVIS_TWILIO_WEBHOOK_BASE_URL: str = ""
     JARVIS_TWILIO_INBOUND_SKIP_SIGNATURE_VALIDATION: bool = False
     JARVIS_TWILIO_INBOUND_DECIDED_BY: str = "sms_operator"
+    # Approval reminders + escalation v1 (heartbeat; persisted in approval_reminders)
+    APPROVAL_REMINDERS_ENABLED: bool = False
+    APPROVAL_REMINDER_FIRST_MINUTES: int = 60
+    APPROVAL_REMINDER_REPEAT_MINUTES: int = 120
+    APPROVAL_ESCALATION_MINUTES: int = 360
+    APPROVAL_REMINDER_MAX_ATTEMPTS: int = 3
+    APPROVAL_REMINDER_SMS_ENABLED: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

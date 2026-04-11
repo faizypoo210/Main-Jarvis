@@ -1,6 +1,7 @@
 """ORM models."""
 
 from app.models.approval import Approval
+from app.models.approval_reminder import ApprovalReminder
 from app.models.approval_sms_token import ApprovalSmsToken
 from app.models.base import Base
 from app.models.cost_event import CostEvent
@@ -18,6 +19,7 @@ __all__ = [
     "Mission",
     "MissionEvent",
     "Approval",
+    "ApprovalReminder",
     "ApprovalSmsToken",
     "Receipt",
     "Worker",

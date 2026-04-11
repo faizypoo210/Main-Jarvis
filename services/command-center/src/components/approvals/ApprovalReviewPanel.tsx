@@ -126,6 +126,62 @@ export function ApprovalReviewPanel({
                   </section>
                 ) : null}
 
+                {bundle?.reminder_summary ? (
+                  <section className="space-y-2 text-xs">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                      Reminders &amp; escalation
+                    </h3>
+                    <div className="grid gap-1.5 text-[var(--text-secondary)]">
+                      {bundle.reminder_summary.reminder_sent_count === 0 &&
+                      !bundle.reminder_summary.escalation_sent &&
+                      !bundle.reminder_summary.last_attempt_at ? (
+                        <p className="text-[var(--text-muted)]">No reminder or escalation attempts recorded yet.</p>
+                      ) : (
+                        <>
+                          <p>
+                            <span className="text-[var(--text-muted)]">Reminders sent</span>{" "}
+                            {bundle.reminder_summary.reminder_sent_count}
+                            {bundle.reminder_summary.escalation_sent ? (
+                              <span className="text-[var(--text-muted)]"> · escalation SMS sent</span>
+                            ) : null}
+                          </p>
+                          {bundle.reminder_summary.last_reminder_at ? (
+                            <p>
+                              <span className="text-[var(--text-muted)]">Last reminder</span>{" "}
+                              {new Date(bundle.reminder_summary.last_reminder_at).toLocaleString()}
+                            </p>
+                          ) : null}
+                          {bundle.reminder_summary.last_escalation_at ? (
+                            <p>
+                              <span className="text-[var(--text-muted)]">Last escalation</span>{" "}
+                              {new Date(bundle.reminder_summary.last_escalation_at).toLocaleString()}
+                            </p>
+                          ) : null}
+                          {bundle.reminder_summary.last_attempt_at ? (
+                            <p>
+                              <span className="text-[var(--text-muted)]">Last attempt</span>{" "}
+                              {new Date(bundle.reminder_summary.last_attempt_at).toLocaleString()}
+                              {bundle.reminder_summary.last_channel ? (
+                                <span className="text-[var(--text-muted)]">
+                                  {" "}
+                                  ({bundle.reminder_summary.last_channel}
+                                  {bundle.reminder_summary.last_status
+                                    ? ` · ${bundle.reminder_summary.last_status}`
+                                    : ""}
+                                  )
+                                </span>
+                              ) : null}
+                            </p>
+                          ) : null}
+                          {bundle.reminder_summary.last_note ? (
+                            <p className="text-[var(--text-muted)]">{bundle.reminder_summary.last_note}</p>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </section>
+                ) : null}
+
                 {pk.operator_effect ? (
                   <section>
                     <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">

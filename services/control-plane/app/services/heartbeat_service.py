@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import engine
 from app.models.heartbeat_finding import HeartbeatFinding
+from app.services.approval_reminder_service import run_approval_reminder_cycle
 from app.services.cost_guardrail_service import collect_cost_guardrail_candidates
 from app.repositories.heartbeat_finding_repo import HeartbeatFindingRepository
 from app.schemas.heartbeat import HeartbeatFindingRead, HeartbeatOperatorResponse, HeartbeatRunResponse
@@ -366,6 +367,7 @@ async def _upsert_candidate(session: AsyncSession, c: _Candidate, now: datetime)
 
 async def run_heartbeat_cycle(session: AsyncSession) -> HeartbeatRunResponse:
     now = datetime.now(UTC)
+    await run_approval_reminder_cycle(session)
     candidates = await _collect_candidates(session)
     keys = {c.dedupe_key for c in candidates}
 

@@ -104,6 +104,18 @@ export interface BundleDataQuality {
   notes: string[];
 }
 
+/** Persisted reminder/escalation attempts (approval_reminders); optional on older bundles */
+export interface ApprovalReminderSummary {
+  reminder_sent_count: number;
+  escalation_sent: boolean;
+  last_reminder_at?: string | null;
+  last_escalation_at?: string | null;
+  last_attempt_at?: string | null;
+  last_channel?: string | null;
+  last_status?: string | null;
+  last_note?: string | null;
+}
+
 export interface ApprovalBundleResponse {
   generated_at: string;
   approval: Approval;
@@ -113,6 +125,7 @@ export interface ApprovalBundleResponse {
   recent_events: MissionEventSnippet[];
   related_receipts: ReceiptSnippet[];
   data_quality: BundleDataQuality;
+  reminder_summary?: ApprovalReminderSummary | null;
   notes: string[];
 }
 

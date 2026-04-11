@@ -30,8 +30,17 @@ If SMS is disabled or Twilio is incomplete, **approval creation is unchanged**; 
 
 Table `approval_sms_tokens`: one row per approval with unique `sms_code`, `status` (`pending` | `used`), timestamps, and optional delivery notes. No secrets.
 
+## Reminder and escalation SMS (v1)
+
+When **`APPROVAL_REMINDERS_ENABLED=true`**, the control plane evaluates **pending** approvals during **`POST /api/v1/heartbeat/run`** (before other heartbeat findings). It persists each attempt in **`approval_reminders`** with a stable **`dedupe_key`** so the same logical reminder is not re-sent every tick.
+
+- **SMS delivery** uses the **same** operator number and **`approval_sms_tokens.sms_code`** as the initial approval SMS (concise `REMINDER` / `ESCALATION` copy; reply instructions unchanged).
+- **`APPROVAL_REMINDER_SMS_ENABLED`** must be true **and** the same Twilio + `JARVIS_SMS_APPROVALS_ENABLED` gates as initial SMS must pass, or the row is recorded as **`skipped`** (approvals stay valid; no spammy retries).
+- Mission events: **`approval_reminder_sent`**, **`approval_reminder_failed`**, **`approval_escalated`** (skipped attempts are **not** mirrored to mission events, only to `approval_reminders`).
+- Operator surfaces: **`GET /api/v1/approvals/{id}/bundle`** includes **`reminder_summary`**; heartbeat may emit **`approval_escalation_pending`** when an escalation SMS was **sent** but the approval is still pending.
+
 ## Verification
 
-1. `alembic upgrade head` (migration `007_approval_sms_tokens`).
+1. `alembic upgrade head` (migrations `007_approval_sms_tokens`, `008_approval_reminders`).
 2. Set env, expose webhook URL to Twilio, create a pending approval with a configured stack.
 3. Reply to the SMS with `APPROVE <code>` and confirm mission events / `approval_resolved` in the timeline.

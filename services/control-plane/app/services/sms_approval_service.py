@@ -84,6 +84,15 @@ def _compact_sms_lines(
     return " ".join(p for p in parts if p).strip()
 
 
+async def send_operator_sms(body: str) -> tuple[bool, str]:
+    """Send outbound SMS to the configured operator number (Twilio). Used by approval reminders."""
+    s = get_settings()
+    to_e164 = (s.JARVIS_APPROVAL_SMS_TO_E164 or "").strip()
+    if not to_e164:
+        return False, "JARVIS_APPROVAL_SMS_TO_E164 not set"
+    return await _twilio_send_message(to_e164=to_e164, body=body)
+
+
 async def _twilio_send_message(*, to_e164: str, body: str) -> tuple[bool, str]:
     s = get_settings()
     sid = s.JARVIS_TWILIO_ACCOUNT_SID

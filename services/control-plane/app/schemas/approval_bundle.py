@@ -90,6 +90,21 @@ class BundleDataQuality(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class ApprovalReminderSummary(BaseModel):
+    """Persisted reminder/escalation attempts for this approval (no secrets)."""
+
+    reminder_sent_count: int = 0
+    escalation_sent: bool = False
+    last_reminder_at: datetime | None = None
+    last_escalation_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    last_channel: str | None = None
+    last_status: str | None = None
+    last_note: str | None = Field(
+        None, description="Delivery note or error tail from last attempt row"
+    )
+
+
 class ApprovalBundleResponse(BaseModel):
     generated_at: datetime
     approval: ApprovalRead
@@ -99,6 +114,10 @@ class ApprovalBundleResponse(BaseModel):
     recent_events: list[MissionEventSnippet] = Field(default_factory=list)
     related_receipts: list[ReceiptSnippet] = Field(default_factory=list)
     data_quality: BundleDataQuality
+    reminder_summary: ApprovalReminderSummary | None = Field(
+        None,
+        description="Reminder/escalation delivery state from approval_reminders",
+    )
     notes: list[str] = Field(
         default_factory=list,
         description="Short operator-facing notes (e.g. parse caveats); not a substitute for packet fields",

@@ -15,9 +15,11 @@ from app.repositories.approval_repo import ApprovalRepository
 from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.mission_repo import MissionRepository
 from app.repositories.receipt_repo import ReceiptRepository
+from app.repositories.approval_reminder_repo import ApprovalReminderRepository
 from app.schemas.approval_bundle import (
     ApprovalBundleResponse,
     ApprovalContextBlock,
+    ApprovalReminderSummary,
     ApprovalReviewPacket,
     BundleDataQuality,
     MissionEventSnippet,
@@ -372,6 +374,12 @@ def _event_summary(ev: MissionEvent) -> str:
         return f"{et}: {prov} {act}".strip()
     if et == "approval_requested":
         return f"approval_requested: {p.get('action_type', '')}"
+    if et == "approval_reminder_sent":
+        return f"reminder sent ({p.get('channel', '')})"
+    if et == "approval_reminder_failed":
+        return f"reminder failed ({p.get('notification_type', '')})"
+    if et == "approval_escalated":
+        return "escalation SMS sent"
     if et == "receipt_recorded":
         return f"receipt: {p.get('receipt_type', '')}"
     return et
@@ -560,16 +568,34 @@ async def build_approval_bundle_from_row(
         reason_line=approval_row.reason,
     )
 
+    agg = await ApprovalReminderRepository.aggregate_for_approval(session, approval_row.id)
+    latest = await ApprovalReminderRepository.latest_row(session, approval_row.id)
+    last_note: str | None = None
+    if latest:
+        last_note = (latest.notes or latest.error_note or "")[:400] or None
+    reminder_summary = ApprovalReminderSummary(
+        reminder_sent_count=int(agg["reminder_sent_count"]),
+        escalation_sent=bool(agg["escalation_sent"]),
+        last_reminder_at=agg["last_reminder_at"],
+        last_escalation_at=agg["last_escalation_at"],
+        last_attempt_at=agg["last_attempt_at"],
+        last_channel=latest.channel if latest else None,
+        last_status=latest.status if latest else None,
+        last_note=last_note,
+    )
+
     dq = BundleDataQuality(
         direct_from_store=[
             "approval row fields (mission_id, action_type, risk_class, reason, command_text, timestamps)",
             "mission row when present",
             "mission_events and receipts for this mission (bounded lists)",
+            "approval_reminders rows for this approval_id (reminder/escalation attempts)",
         ],
         derived=[
             "Review packet fields from command_text JSON via workflow contracts",
             "Merge preflight rows from integration_action_requested when approval_id matches",
             "Age in seconds from server UTC clock",
+            "Reminder summary aggregates from approval_reminders",
         ],
         notes=[
             "Secrets are not returned; values are contract-shaped or truncated previews only.",
@@ -586,6 +612,7 @@ async def build_approval_bundle_from_row(
         recent_events=event_snips,
         related_receipts=rc_snips,
         data_quality=dq,
+        reminder_summary=reminder_summary,
         notes=notes,
     )
 

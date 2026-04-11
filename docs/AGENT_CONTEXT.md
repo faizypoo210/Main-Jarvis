@@ -26,7 +26,7 @@ This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). **P
 |--------|------|------|
 | **Control plane** | `services/control-plane/` | FastAPI + PostgreSQL: missions, events, approvals, receipts; API key on mutation routes |
 | **Command Center** | `services/command-center/` | Vite/React UI (overview, missions, voice WebSocket client) |
-| **Voice server** | `voice/` | FastAPI + WebSocket: STT, Ollama, TTS; posts commands to control plane |
+| **Voice server** | `voice/` | FastAPI + WebSocket: STT, Ollama, TTS; posts commands to control plane; optional **Voice Approval v1** (`approval_voice.py`) lists/reads pending approvals and posts decisions with `decided_via: voice` |
 | **Coordinator** | `coordinator/` | Stateless: Redis Streams → DashClaw guard → control plane |
 | **Executor** | `executor/` | Redis `jarvis.execution` → OpenClaw CLI → receipts / control plane |
 

@@ -99,5 +99,6 @@ Use this page to confirm the rehearsal: **Timeline**, **Approvals**, **Receipts*
 
 ## Deferred (not part of this doc)
 
-- Spoken approve/deny through voice WebSocket.  
 - Automated browser/UI assertion (Playwright, etc.) — optional future work.
+
+**Voice:** Pending-approval list, bundle readout, and explicit approve/deny via WebSocket are implemented in `voice/approval_voice.py` (see `voice/README.md`). Mission truth remains the control plane; voice holds only ephemeral focus state per connection.

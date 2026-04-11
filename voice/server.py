@@ -4,6 +4,9 @@ JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, Ollama (default
 MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Ollama/Whisper env; local .env beside this file.
 UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to CI here.
 TRUTH_SOURCE: intent forwarding targets control plane HTTP; mission truth remains control plane + DB.
+
+Voice approval v1: approval_voice.try_handle_voice_approval runs before POST /commands; uses pending + bundle
+GETs and approval decision POST (decided_via=voice). Ephemeral focus state per WebSocket only.
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
+
+from approval_voice import forget_voice_approval_state, try_handle_voice_approval
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
@@ -269,6 +274,41 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             await _manager.send_json(websocket, {"type": "heard", "text": text})
 
+            ws_key = id(websocket)
+            approval_reply = await try_handle_voice_approval(
+                text,
+                ws_key,
+                control_plane_url=CONTROL_PLANE_URL,
+                api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
+            )
+            if approval_reply is not None:
+                await _manager.send_json(
+                    websocket, {"type": "reply", "text": approval_reply}
+                )
+                await _manager.send_json(
+                    websocket, {"type": "status", "state": "speaking"}
+                )
+                try:
+                    wav = await loop.run_in_executor(
+                        None, _tts_wav_bytes, approval_reply
+                    )
+                    b64 = base64.b64encode(wav).decode("ascii")
+                    await _manager.send_json(
+                        websocket,
+                        {
+                            "type": "tts",
+                            "kind": "approval",
+                            "text": approval_reply,
+                            "audio_b64": b64,
+                        },
+                    )
+                except Exception as e:
+                    log.exception("tts approval: %s", e)
+                await _manager.send_json(
+                    websocket, {"type": "status", "state": "idle"}
+                )
+                continue
+
             mission_id = await post_command_to_control_plane(text)
 
             if mission_id is not None:
@@ -322,6 +362,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except Exception as e:
         log.exception("websocket error: %s", e)
     finally:
+        forget_voice_approval_state(id(websocket))
         await _manager.disconnect(websocket)
 
 

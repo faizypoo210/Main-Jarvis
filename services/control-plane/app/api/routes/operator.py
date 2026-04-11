@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.auth import require_api_key
 from app.schemas.operator import (
     ActivitySummary,
     DailyReceiptCount,
@@ -20,6 +21,12 @@ from app.schemas.operator import (
     OperatorIntegrationsResponse,
     OperatorUsageResponse,
 )
+from app.schemas.operator_inbox import (
+    OperatorInboxAckResponse,
+    OperatorInboxDismissResponse,
+    OperatorInboxResponse,
+    OperatorInboxSnoozeBody,
+)
 from app.schemas.cost_events import OperatorCostEventsResponse
 from app.schemas.cost_guardrails import OperatorCostGuardrailsResponse
 from app.schemas.workers import OperatorWorkersResponse
@@ -28,8 +35,10 @@ from app.services.cost_guardrail_service import build_operator_cost_guardrails_r
 from app.services.cost_operator_service import fetch_operator_cost_events
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
 from app.services.operator_integrations import build_integrations_report
+from app.services.operator_inbox_service import build_operator_inbox_response
 from app.services.operator_value_evals import build_operator_value_evals
 from app.services.worker_registry_service import list_operator_workers
+from app.repositories.operator_inbox_state_repo import OperatorInboxStateRepository
 
 router = APIRouter()
 
@@ -279,3 +288,91 @@ async def operator_value_evals(
             detail="group_by must be omitted or 'day'",
         )
     return await build_operator_value_evals(session, window_hours=window_hours, group_by=group_by)
+
+
+_INBOX_GROUPS = frozenset({"all", "approvals", "system", "cost", "failures"})
+_INBOX_STATUS = frozenset({"open", "acknowledged", "snoozed", "dismissed", "all"})
+_INBOX_SEVERITY = frozenset({"urgent", "attention", "info"})
+_INBOX_SOURCE_KIND = frozenset(
+    {"approval", "heartbeat", "integration_failure", "mission_failure"}
+)
+
+
+@router.get("/operator/inbox", response_model=OperatorInboxResponse)
+async def operator_inbox(
+    session: AsyncSession = Depends(get_db),
+    group: str | None = Query(
+        None,
+        description="Tab filter: all | approvals | system | cost | failures",
+    ),
+    severity: str | None = Query(None, description="Optional: urgent | attention | info"),
+    source_kind: str | None = Query(
+        None,
+        description="Optional: approval | heartbeat | integration_failure | mission_failure",
+    ),
+    status: str = Query(
+        "open",
+        description="Item state: open | acknowledged | snoozed | dismissed | all",
+    ),
+    limit: int = Query(120, ge=1, le=300),
+) -> OperatorInboxResponse:
+    g = group or "all"
+    if g not in _INBOX_GROUPS:
+        raise HTTPException(status_code=400, detail="invalid group")
+    if status not in _INBOX_STATUS:
+        raise HTTPException(status_code=400, detail="invalid status")
+    if severity is not None and severity not in _INBOX_SEVERITY:
+        raise HTTPException(status_code=400, detail="invalid severity")
+    if source_kind is not None and source_kind not in _INBOX_SOURCE_KIND:
+        raise HTTPException(status_code=400, detail="invalid source_kind")
+    return await build_operator_inbox_response(
+        session,
+        group=g if g != "all" else None,
+        severity=severity,
+        source_kind=source_kind,
+        status_filter=status,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/operator/inbox/{item_key}/acknowledge",
+    response_model=OperatorInboxAckResponse,
+)
+async def operator_inbox_acknowledge(
+    item_key: str,
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> OperatorInboxAckResponse:
+    await OperatorInboxStateRepository.upsert_acknowledge(session, item_key)
+    await session.commit()
+    return OperatorInboxAckResponse(item_key=item_key)
+
+
+@router.post(
+    "/operator/inbox/{item_key}/snooze",
+    response_model=OperatorInboxAckResponse,
+)
+async def operator_inbox_snooze(
+    item_key: str,
+    body: OperatorInboxSnoozeBody,
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> OperatorInboxAckResponse:
+    await OperatorInboxStateRepository.upsert_snooze(session, item_key, minutes=body.minutes)
+    await session.commit()
+    return OperatorInboxAckResponse(item_key=item_key)
+
+
+@router.post(
+    "/operator/inbox/{item_key}/dismiss",
+    response_model=OperatorInboxDismissResponse,
+)
+async def operator_inbox_dismiss(
+    item_key: str,
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> OperatorInboxDismissResponse:
+    await OperatorInboxStateRepository.upsert_dismiss(session, item_key)
+    await session.commit()
+    return OperatorInboxDismissResponse(item_key=item_key)

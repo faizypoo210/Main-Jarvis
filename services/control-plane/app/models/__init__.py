@@ -8,6 +8,7 @@ from app.models.cost_event import CostEvent
 from app.models.heartbeat_finding import HeartbeatFinding
 from app.models.integration import Integration
 from app.models.memory_item import MemoryItem
+from app.models.operator_inbox_state import OperatorInboxState
 from app.models.mission import Mission
 from app.models.mission_event import MissionEvent
 from app.models.receipt import Receipt
@@ -27,5 +28,6 @@ __all__ = [
     "CostEvent",
     "SurfaceSession",
     "MemoryItem",
+    "OperatorInboxState",
     "HeartbeatFinding",
 ]

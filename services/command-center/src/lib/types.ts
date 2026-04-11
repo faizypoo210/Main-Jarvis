@@ -378,6 +378,45 @@ export interface OperatorActivityResponse {
   next_before: string | null;
 }
 
+/** GET /api/v1/operator/inbox */
+export type InboxGroupTab = "all" | "approvals" | "system" | "cost" | "failures";
+export type InboxStatusFilter = "open" | "acknowledged" | "snoozed" | "dismissed" | "all";
+
+export interface OperatorInboxCounts {
+  urgent: number;
+  attention: number;
+  info: number;
+  approvals_pending: number;
+  heartbeat_open: number;
+  cost_alerts: number;
+  total_visible: number;
+}
+
+export interface OperatorInboxItemRead {
+  item_key: string;
+  source_kind: string;
+  inbox_group: string;
+  severity: string;
+  status: string;
+  headline: string;
+  summary: string;
+  action_label: string;
+  mission_id: UUID | null;
+  approval_id: UUID | null;
+  related_href: string;
+  created_at: string;
+  updated_at: string;
+  acknowledged_at: string | null;
+  snoozed_until: string | null;
+  meta: Record<string, unknown>;
+}
+
+export interface OperatorInboxResponse {
+  generated_at: string;
+  counts: OperatorInboxCounts;
+  items: OperatorInboxItemRead[];
+}
+
 /** GET /api/v1/operator/integrations */
 export interface IntegrationHubSummary {
   total: number;

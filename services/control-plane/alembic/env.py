@@ -31,6 +31,7 @@ from app.models import (  # noqa: E402, F401
     memory_item,
     mission,
     mission_event,
+    operator_inbox_state,
     receipt,
     surface_session,
     worker,

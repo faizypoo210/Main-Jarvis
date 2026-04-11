@@ -12,6 +12,7 @@ import { Memory } from "./pages/Memory";
 import { SystemHealth } from "./pages/SystemHealth";
 import { Workers } from "./pages/Workers";
 import { Evals } from "./pages/Evals";
+import { Inbox } from "./pages/Inbox";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<AppShell />}>
         <Route index element={<Overview />} />
+        <Route path="inbox" element={<Inbox />} />
         <Route path="missions/:missionId" element={<MissionDetail />} />
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />

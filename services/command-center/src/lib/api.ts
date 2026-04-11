@@ -17,6 +17,7 @@ import type {
   MissionBundle,
   MissionEvent,
   OperatorActivityResponse,
+  OperatorInboxResponse,
   OperatorIntegrationsResponse,
   OperatorCostEventsResponse,
   OperatorCostGuardrailsResponse,
@@ -418,6 +419,50 @@ export async function getOperatorActivity(params?: {
   const qs = q.toString();
   return requestJson<OperatorActivityResponse>(
     `${BASE}/operator/activity${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getOperatorInbox(params?: {
+  group?: string;
+  severity?: string;
+  source_kind?: string;
+  status?: string;
+  limit?: number;
+}): Promise<OperatorInboxResponse> {
+  const q = new URLSearchParams();
+  if (params?.group) q.set("group", params.group);
+  if (params?.severity) q.set("severity", params.severity);
+  if (params?.source_kind) q.set("source_kind", params.source_kind);
+  if (params?.status) q.set("status", params.status);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return requestJson<OperatorInboxResponse>(`${BASE}/operator/inbox${qs ? `?${qs}` : ""}`);
+}
+
+export async function postOperatorInboxAcknowledge(itemKey: string): Promise<{ ok: boolean; item_key: string }> {
+  const enc = encodeURIComponent(itemKey);
+  return requestJson<{ ok: boolean; item_key: string }>(
+    `${BASE}/operator/inbox/${enc}/acknowledge`,
+    { method: "POST", body: "{}" }
+  );
+}
+
+export async function postOperatorInboxSnooze(
+  itemKey: string,
+  minutes: number
+): Promise<{ ok: boolean; item_key: string }> {
+  const enc = encodeURIComponent(itemKey);
+  return requestJson<{ ok: boolean; item_key: string }>(
+    `${BASE}/operator/inbox/${enc}/snooze`,
+    { method: "POST", body: JSON.stringify({ minutes }) }
+  );
+}
+
+export async function postOperatorInboxDismiss(itemKey: string): Promise<{ ok: boolean; item_key: string }> {
+  const enc = encodeURIComponent(itemKey);
+  return requestJson<{ ok: boolean; item_key: string }>(
+    `${BASE}/operator/inbox/${enc}/dismiss`,
+    { method: "POST", body: "{}" }
   );
 }
 

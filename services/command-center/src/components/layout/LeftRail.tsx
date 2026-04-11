@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Cpu,
   Heart,
+  Inbox,
   LayoutDashboard,
   Plug,
   Settings,
@@ -17,6 +18,7 @@ import { LiveLinkIndicator } from "./LiveLinkIndicator";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/missions", label: "Missions", icon: Target, badge: "missions" as const },
   { to: "/approvals", label: "Approvals", icon: ShieldCheck, badge: "approvals" as const },
   { to: "/activity", label: "Activity", icon: Activity },

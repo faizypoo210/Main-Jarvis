@@ -132,7 +132,7 @@ Writes a **dated markdown file** under **`docs/reports/`** (`day-wrap-YYYY-MM-DD
 | Block | Role |
 |--------|------|
 | `19-smoke-governed-action-catalog.ps1` | `GET /api/v1/operator/action-catalog` + six expected `approval_action_type` values |
-| `19-smoke-operator-surfaces.ps1` | `GET` operator inbox, workers, cost guardrails, cost events |
+| `19-smoke-operator-surfaces.ps1` | `GET` operator inbox, heartbeat, workers, cost guardrails, cost events |
 | `08-final-report.ps1` | Same Phase 8 aggregate as above (optional `-SkipPhase8`) |
 | `npm run build` in `services/command-center` | Typecheck + Vite build when `node_modules` exists (optional `-SkipCommandCenterBuild`) |
 | `08-smoke-workspace-governance.ps1` | Workspace manifest audit |

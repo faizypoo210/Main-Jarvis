@@ -207,6 +207,7 @@ foreach ($r in $rows) {
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine('- **Governed action catalog** - `GET /api/v1/operator/action-catalog` + six `approval_action_type` rows.')
 [void]$sb.AppendLine('- **Operator inbox** - `GET /api/v1/operator/inbox`.')
+[void]$sb.AppendLine('- **Operator heartbeat** - `GET /api/v1/operator/heartbeat` (same read path as Phase 8 smoke when stack is up).')
 [void]$sb.AppendLine('- **Workers registry (read)** - `GET /api/v1/operator/workers`.')
 [void]$sb.AppendLine('- **Cost** - `GET /api/v1/operator/cost-guardrails`, `GET /api/v1/operator/cost-events`.')
 [void]$sb.AppendLine('- **Phase 8 aggregate** - infrastructure, gateway, LAN, operator bundle from `08-smoke-operator-control-plane.ps1`, workspace governance (unless skipped).')

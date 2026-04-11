@@ -45,6 +45,7 @@ function Add-Result { param([bool]$Ok) if ($Ok) { $script:pass++ } else { $scrip
 
 $checks = @(
     @{ Uri = "$Api/operator/inbox?limit=5"; Name = 'GET /api/v1/operator/inbox?limit=5' }
+    @{ Uri = "$Api/operator/heartbeat"; Name = 'GET /api/v1/operator/heartbeat' }
     @{ Uri = "$Api/operator/workers"; Name = 'GET /api/v1/operator/workers' }
     @{ Uri = "$Api/operator/cost-guardrails"; Name = 'GET /api/v1/operator/cost-guardrails' }
     @{ Uri = "$Api/operator/cost-events?limit=5"; Name = 'GET /api/v1/operator/cost-events?limit=5' }

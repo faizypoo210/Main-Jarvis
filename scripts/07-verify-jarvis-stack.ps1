@@ -34,15 +34,25 @@ function Test-DockerContainerRunning([string]$Name) {
     }
 }
 
+$IncludeMc = ($env:JARVIS_INCLUDE_MISSION_CONTROL -eq '1')
+
 $rows = @(
     @{ Service = 'PostgreSQL (jarvis-postgres)'; Port = 5432; Check = { Test-DockerContainerRunning 'jarvis-postgres' } },
     @{ Service = 'Redis (jarvis-redis)';       Port = 6379; Check = { Test-DockerContainerRunning 'jarvis-redis' } },
-    @{ Service = 'Mission Control UI';         Port = 3000; Check = { Test-TcpListen 3000 } },
-    @{ Service = 'Mission Control API';        Port = 3001; Check = { Test-TcpListen 3001 } },
-    @{ Service = 'OpenClaw Gateway';            Port = 18789; Check = { Test-TcpListen 18789 } },
-    @{ Service = 'LobsterBoard';                Port = 8080; Check = { Test-TcpListen 8080 } },
-    @{ Service = 'Ollama (optional)';            Port = 11434; Check = { Test-TcpListen 11434 }; Optional = $true }
+    @{ Service = 'Control Plane API';          Port = 8001; Check = { Test-TcpListen 8001 } },
+    @{ Service = 'Command Center (Vite)';      Port = 5173; Check = { Test-TcpListen 5173 } },
+    @{ Service = 'Voice Server';               Port = 8000; Check = { Test-TcpListen 8000 } },
+    @{ Service = 'OpenClaw Gateway';           Port = 18789; Check = { Test-TcpListen 18789 } },
+    @{ Service = 'LobsterBoard';              Port = 8080; Check = { Test-TcpListen 8080 } },
+    @{ Service = 'Ollama (optional)';         Port = 11434; Check = { Test-TcpListen 11434 }; Optional = $true }
 )
+
+if ($IncludeMc) {
+    $rows += @(
+        @{ Service = 'Mission Control UI (legacy)'; Port = 3000; Check = { Test-TcpListen 3000 } },
+        @{ Service = 'Mission Control API (legacy)'; Port = 3001; Check = { Test-TcpListen 3001 } }
+    )
+}
 
 Write-Host ""
 Write-Host "========== Stack status ==========" -ForegroundColor Cyan
@@ -52,10 +62,10 @@ foreach ($r in $rows) {
     $st = if ($ok) { 'UP' } else { 'DOWN' }
     if (-not $ok -and -not $r.Optional) { $coreOk = $false }
     if ($r.Optional -and -not $ok) {
-        Write-Host ("{0,-28} Port={1,-6} {2} (optional)" -f $r.Service, $r.Port, $st) -ForegroundColor Yellow
+        Write-Host ("{0,-32} Port={1,-6} {2} (optional)" -f $r.Service, $r.Port, $st) -ForegroundColor Yellow
     } else {
         $color = if ($ok) { 'Green' } else { 'Red' }
-        Write-Host ("{0,-28} Port={1,-6} {2}" -f $r.Service, $r.Port, $st) -ForegroundColor $color
+        Write-Host ("{0,-32} Port={1,-6} {2}" -f $r.Service, $r.Port, $st) -ForegroundColor $color
     }
 }
 

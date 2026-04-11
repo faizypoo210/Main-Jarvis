@@ -4,36 +4,29 @@ alwaysApply: true
 ---
 # JARVIS Stack Reference
 
-## Credentials (use exactly)
-- PostgreSQL user: jarvis
-- PostgreSQL password: jarvis_secure_password_2026
-- PostgreSQL database: jarvis_missions
-- PostgreSQL port: 5432
-- Redis port: 6379
-- Gateway token: 1aa716114e74097698e1ffe4be8d550f181f291afa1b86db
-- Auth token: +ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN
-- DashClaw API key: 62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=
+## Credentials
+- PostgreSQL user/password/database: see `services/control-plane/.env.example` and Phase 1 setup (never commit real passwords).
+- Gateway token: set User env `JARVIS_OPENCLAW_GATEWAY_TOKEN` or maintain `%USERPROFILE%\.openclaw\openclaw.json` manually — **do not commit tokens** to git.
+- Deprecated openclaw-mission-control (optional): `JARVIS_MISSION_CONTROL_TOKEN` only if you still run 3000/3001.
+- Composio, DashClaw, MiniMax, and other vendors: follow each provider’s docs; store keys in User env or OpenClaw `auth-profiles.json` only on the machine.
 
-## Service Ports
-- Mission Control frontend: 3000
-- Mission Control backend: 3001
-- OpenClaw Gateway: 18789
-- LobsterBoard: 8080
-- Ollama: 11434
-- PostgreSQL: 5432
-- Redis: 6379
+## Service Ports (canonical)
+- Control Plane (FastAPI): **8001**
+- Voice Server: **8000**
+- Command Center (Vite): **5173**
+- OpenClaw Gateway: **18789**
+- LobsterBoard: **8080**
+- Ollama: **11434**
+- PostgreSQL: **5432**
+- Redis: **6379**
+- Legacy openclaw-mission-control (optional / deprecated): 3000 / 3001
 
 ## Docker Networking Rule
 All references from inside Docker containers to host services
 must use host.docker.internal, NOT localhost.
 
 ## Repos
-- Mission Control: https://github.com/abhi1693/openclaw-mission-control
+- openclaw-mission-control (deprecated UI, optional): https://github.com/abhi1693/openclaw-mission-control
 - LobsterBoard: https://github.com/Curbob/LobsterBoard
 
 ## Local IP for phone access: 10.0.0.249
-
-## Jarvis repository (this workspace)
-- **Root:** `F:\Jarvis` — all control plane, coordinator, executor, voice, and command-center **source** lives here.
-- **Agent codebase map:** `docs/AGENT_CONTEXT.md` (modules, ports, entrypoints).
-- **OpenClaw policy/persona files** live under `%USERPROFILE%\.openclaw\workspace\main\`; they complement but do not replace code in this repo.

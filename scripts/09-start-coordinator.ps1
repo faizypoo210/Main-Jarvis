@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Start JARVIS Event Coordinator (Redis ↔ Mission Control ↔ DashClaw).
+# Start JARVIS Event Coordinator (Redis ↔ Control Plane ↔ DashClaw).
 $ErrorActionPreference = 'Stop'
 
 $JarvisRoot = Split-Path -Parent $PSScriptRoot

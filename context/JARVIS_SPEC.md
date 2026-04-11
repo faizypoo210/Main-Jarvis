@@ -56,7 +56,7 @@ cursor .
 
 ## Day 5: Ollama + GPU
 - [ ] Ollama installed
-- [ ] phi4-mini downloaded
+- [ ] qwen3:4b downloaded
 - [ ] GPU acceleration verified
 - [ ] OpenClaw integration tested
 
@@ -175,7 +175,7 @@ REQUIREMENTS:
      REDIS_URL=redis://host.docker.internal:6379
      OPENCLAW_GATEWAY_URL=http://host.docker.internal:18789
      OPENCLAW_GATEWAY_TOKEN=1aa716114e74097698e1ffe4be8d550f181f291afa1b86db
-     AUTH_TOKEN=+ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN
+     AUTH_TOKEN=(set in Mission Control .env — never commit real tokens)
      DASHCLAW_BASE_URL=https://jarvis-dashclaw.vercel.app
      DASHCLAW_API_KEY=62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=
      ENABLE_DASHCLAW=true
@@ -252,7 +252,7 @@ REQUIREMENTS:
          "provider": "anthropic"
        },
        "local": {
-         "model": "phi4-mini",
+         "model": "qwen3:4b",
          "provider": "ollama",
          "baseUrl": "http://localhost:11434",
          "temperature": 0.3
@@ -338,7 +338,7 @@ REQUIREMENTS:
      * OpenClaw gateway URL: http://localhost:18789
      * Gateway token: 1aa716114e74097698e1ffe4be8d550f181f291afa1b86db
      * Mission Control base URL: http://localhost:3000
-     * Mission Control auth token: +ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN
+     * Mission Control auth token: (set in `.env` — not in repo)
      * DashClaw base URL: https://jarvis-dashclaw.vercel.app
      * DashClaw API key: 62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=
    
@@ -394,7 +394,7 @@ start http://localhost:8080
 ```
 Phase 5: Install Ollama with GPU acceleration
 
-TASK: Install Ollama, download phi4-mini, verify GPU
+TASK: Install Ollama, download qwen3:4b, verify GPU
 
 REQUIREMENTS:
 1. Create `scripts/05-install-ollama.ps1` that:
@@ -403,16 +403,16 @@ REQUIREMENTS:
    - Waits for installation to complete
    - Verifies ollama command is available
 
-2. Create `scripts/05-setup-phi4.ps1` that:
+2. Create `scripts/05-pull-model.ps1` that:
    - Checks NVIDIA GPU with nvidia-smi
    - Verifies CUDA is detected
-   - Pulls phi4-mini model: ollama pull phi4-mini
+   - Pulls qwen3:4b model: ollama pull qwen3:4b
    - Lists installed models: ollama list
-   - Tests model: ollama run phi4-mini "Hello, I'm Jarvis"
+   - Tests model: ollama run qwen3:4b "Hello, I'm Jarvis"
    - Verifies GPU is being used (check for CUDA in output)
 
 3. Create `scripts/05-integrate-ollama-openclaw.ps1` that:
-   - Updates OpenClaw config to include local agent with phi4-mini
+   - Updates OpenClaw config to include local agent with qwen3:4b
    - Tests local agent: openclaw chat --agent local "What can you do?"
    - Compares response time vs cloud model
 
@@ -430,8 +430,8 @@ Generate all files now.
 # Install Ollama
 .\scripts\05-install-ollama.ps1
 
-# Setup phi4-mini
-.\scripts\05-setup-phi4.ps1
+# Setup qwen3:4b
+.\scripts\05-pull-model.ps1
 
 # Integrate with OpenClaw
 .\scripts\05-integrate-ollama-openclaw.ps1

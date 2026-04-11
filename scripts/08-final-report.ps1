@@ -52,7 +52,7 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine('========================')
 [void]$sb.AppendLine("Infrastructure:     $mInfra passed")
 [void]$sb.AppendLine("Gateway + Agent:    $mGw passed")
-[void]$sb.AppendLine("Mission Control:    $mMc passed")
+[void]$sb.AppendLine("Legacy openclaw-mission-control API (optional): $mMc passed")
 [void]$sb.AppendLine("LAN Access:         $mLan passed")
 [void]$sb.AppendLine("Full Flow:          $mFlow passed")
 [void]$sb.AppendLine('========================')
@@ -63,7 +63,7 @@ Set-Content -Path $ReportPath -Value $sb.ToString() -Encoding UTF8
 Write-Host $sb.ToString()
 
 if (-not $corePass) {
-    Write-Host "Core checks failed (infrastructure, gateway, or LAN)." -ForegroundColor Red
+    Write-Host "Core checks failed (infrastructure, gateway, or LAN). Legacy mission-control suite is optional." -ForegroundColor Red
     exit 1
 }
 Write-Host "Phase 8 core checks passed." -ForegroundColor Green

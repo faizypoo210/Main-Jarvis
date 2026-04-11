@@ -1,7 +1,4 @@
 ﻿# AGENTS.md — Delegation Rules
-
-> **Codebase:** All Jarvis application source lives in **`F:\Jarvis`**. See **`docs/AGENT_CONTEXT.md`** for the full module map. Authoritative OpenClaw policy files live in **`%USERPROFILE%\.openclaw\workspace\main\`** (this `config/workspace/` path may hold a short mirror only).
-
 ## Available Workers
 - executor: Handles approved tool execution and system actions
 - researcher: Web search, data gathering, summarization
@@ -12,5 +9,5 @@
 - Multi-step workflows → create a mission, not a one-shot response
 - When uncertain about risk level → ask, don't assume
 ## Approval Channels
-Approvals can come from: voice, web UI (Mission Control), or SMS.
+Approvals can come from: voice, web UI (Command Center), or SMS.
 Wait for explicit confirmation. Do not proceed on implied consent.

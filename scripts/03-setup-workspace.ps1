@@ -1,6 +1,9 @@
 <#
 .SYNOPSIS
-  Creates %USERPROFILE%\.openclaw\workspace\main and writes SOUL.md, AGENTS.md, MEMORY.md with the exact JARVIS content.
+  Bootstrap: creates %USERPROFILE%\.openclaw\workspace\main and writes SOUL.md, AGENTS.md, MEMORY.md (Phase 3 scaffold).
+
+  For ongoing sync of approved mirrors (SOUL, AGENTS, IDENTITY, USERS, TOOLS), use scripts\10-sync-openclaw-workspace.ps1
+  after files exist under config\workspace\. IDENTITY.md / USERS.md are not generated here (add to repo when ready).
 #>
 $ErrorActionPreference = "Stop"
 
@@ -41,7 +44,7 @@ $agents = @'
 - Multi-step workflows → create a mission, not a one-shot response
 - When uncertain about risk level → ask, don't assume
 ## Approval Channels
-Approvals can come from: voice, web UI (Mission Control), or SMS.
+Approvals can come from: voice, web UI (Command Center), or SMS.
 Wait for explicit confirmation. Do not proceed on implied consent.
 '@
 
@@ -51,7 +54,7 @@ Operator: Faiz
 System: JARVIS
 Started: 2026
 Primary machine: Windows 11, 10.0.0.249
-Mission Control: http://localhost:3000
+Command Center: http://localhost:5173 | Control Plane: http://localhost:8001
 DashClaw: https://jarvis-dashclaw.vercel.app
 '@
 

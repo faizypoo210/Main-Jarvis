@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Verifies gateway port, openclaw status, gateway health (WS + token), optional agent chat if ANTHROPIC_API_KEY is set, and GET http://localhost:18789/ (never uses openclaw doctor).
+  Verifies gateway port, openclaw status, gateway health (WS + token), optional agent chat, and GET http://localhost:18789/ (never uses openclaw doctor).
+  Optional agent test: set User env JARVIS_RUN_AGENT_VERIFY=1 (uses whatever model/credentials are configured in OpenClaw).
 #>
 $ErrorActionPreference = "Stop"
 
@@ -57,9 +58,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok "gateway health OK"
 
-Write-Step "--- Test message to main agent ---"
-if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable("OPENAI_API_KEY", "User"))) {
-    Write-Warn "Skipping agent chat: User ANTHROPIC_API_KEY is not set. Run .\scripts\03-configure-openclaw.ps1 (interactive), then restart the gateway (.\scripts\03-start-gateway.ps1), then re-run this script."
+Write-Step "--- Test message to main agent (optional) ---"
+$runAgent = [Environment]::GetEnvironmentVariable("JARVIS_RUN_AGENT_VERIFY", "User")
+if ([string]::IsNullOrWhiteSpace($runAgent)) { $runAgent = $env:JARVIS_RUN_AGENT_VERIFY }
+if ($runAgent -ne "1") {
+    Write-Warn "Skipping agent chat (set User env JARVIS_RUN_AGENT_VERIFY=1 to enable; requires working provider credentials in auth-profiles / env per OpenClaw)."
 } else {
     $msg = "Jarvis, confirm you are online."
     openclaw agent --agent main -m $msg
@@ -79,7 +82,7 @@ try {
     exit 1
 }
 
-Write-Step "--- Mission Control vs gateway (localhost) ---"
-Write-Host "Mission Control API: http://localhost:3001  |  Gateway: http://localhost:18789" -ForegroundColor DarkGray
+Write-Step "--- Related services (localhost) ---"
+Write-Host "Control Plane: http://localhost:8001  |  Command Center: http://localhost:5173  |  Gateway: http://localhost:18789" -ForegroundColor DarkGray
 Write-Ok "Phase 3 verification complete."
 exit 0

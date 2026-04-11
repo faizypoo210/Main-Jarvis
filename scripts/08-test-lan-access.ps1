@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Phase 8: LAN IP HTTP probes (read-only); exits 0 only if all 5 pass.
+# Phase 8: LAN IP HTTP probes for canonical stack (read-only); exits 0 only if all 5 pass.
 $ErrorActionPreference = 'Continue'
 
 $Lan = '10.0.0.249'
@@ -25,27 +25,27 @@ function Test-Step {
 
 Write-Host "=== 08-test-lan-access (read-only) ===" -ForegroundColor Cyan
 
-Test-Step "GET http://${Lan}:3000" {
-    $r = Invoke-WebRequest -Uri "http://${Lan}:3000" -UseBasicParsing -TimeoutSec 20
+Test-Step "GET http://${Lan}:5173 (Command Center)" {
+    $r = Invoke-WebRequest -Uri "http://${Lan}:5173" -UseBasicParsing -TimeoutSec 20
     return ($r.StatusCode -eq 200)
 }
 
-Test-Step "GET http://${Lan}:3001/health" {
-    $r = Invoke-WebRequest -Uri "http://${Lan}:3001/health" -UseBasicParsing -TimeoutSec 20
+Test-Step "GET http://${Lan}:8001/health (Control Plane)" {
+    $r = Invoke-WebRequest -Uri "http://${Lan}:8001/health" -UseBasicParsing -TimeoutSec 20
     return ($r.StatusCode -eq 200)
 }
 
-Test-Step "GET http://${Lan}:18789" {
+Test-Step "GET http://${Lan}:18789 (OpenClaw Gateway)" {
     $r = Invoke-WebRequest -Uri "http://${Lan}:18789" -UseBasicParsing -TimeoutSec 20
     return ($r.StatusCode -eq 200)
 }
 
-Test-Step "GET http://${Lan}:8080" {
+Test-Step "GET http://${Lan}:8080 (LobsterBoard)" {
     $r = Invoke-WebRequest -Uri "http://${Lan}:8080" -UseBasicParsing -TimeoutSec 20
     return ($r.StatusCode -eq 200)
 }
 
-Test-Step "GET http://${Lan}:11434" {
+Test-Step "GET http://${Lan}:11434 (Ollama)" {
     $r = Invoke-WebRequest -Uri "http://${Lan}:11434" -UseBasicParsing -TimeoutSec 20
     return ($r.StatusCode -eq 200)
 }

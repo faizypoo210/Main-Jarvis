@@ -4,11 +4,12 @@ $ErrorActionPreference = 'Continue'
 
 $LanIp = '10.0.0.249'
 $urls = @(
-    @{ Label = 'Mission Control UI';  Url = "http://${LanIp}:3000" },
-    @{ Label = 'Mission Control API'; Url = "http://${LanIp}:3001/health" },
-    @{ Label = 'OpenClaw Gateway';    Url = "http://${LanIp}:18789" },
-    @{ Label = 'LobsterBoard';        Url = "http://${LanIp}:8080" },
-    @{ Label = 'Ollama';              Url = "http://${LanIp}:11434" }
+    @{ Label = 'Command Center (primary UI)'; Url = "http://${LanIp}:5173" },
+    @{ Label = 'Control Plane /health';      Url = "http://${LanIp}:8001/health" },
+    @{ Label = 'Voice Server';              Url = "http://${LanIp}:8000" },
+    @{ Label = 'OpenClaw Gateway';          Url = "http://${LanIp}:18789" },
+    @{ Label = 'LobsterBoard';              Url = "http://${LanIp}:8080" },
+    @{ Label = 'Ollama';                    Url = "http://${LanIp}:11434" }
 )
 
 Write-Host "LAN base address: $LanIp (same WiFi as this PC)" -ForegroundColor Cyan

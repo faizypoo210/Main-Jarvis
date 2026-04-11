@@ -6,10 +6,10 @@ alwaysApply: true
 
 ## Phase order (never skip, never reorder)
 1. Docker + Databases
-2. Mission Control
+2. Legacy openclaw-mission-control (**optional** — skip; Command Center + Control Plane are canonical)
 3. OpenClaw Gateway
 4. LobsterBoard
-5. Ollama + GPU
+5. Ollama + GPU (`qwen3:4b` default)
 6. Composio
 7. Phone Access + Firewall
 8. End-to-End Testing

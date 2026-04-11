@@ -1,18 +1,12 @@
 #Requires -Version 5.1
-# Phase 8: Mission Control API checks (creates/deletes one test task; uses Bearer auth).
+# Phase 8: OPTIONAL legacy Mission Control API checks (creates/deletes one test task; uses Bearer auth).
+# Set User env JARVIS_MISSION_CONTROL_TOKEN to your Mission Control API token, or this suite is skipped.
 $ErrorActionPreference = 'Continue'
 
 $BaseUrl = 'http://localhost:3001'
 $Bearer = [Environment]::GetEnvironmentVariable('JARVIS_MISSION_CONTROL_TOKEN', 'User')
 if ([string]::IsNullOrEmpty($Bearer)) {
     $Bearer = [Environment]::GetEnvironmentVariable('JARVIS_MISSION_CONTROL_TOKEN', 'Process')
-}
-if ([string]::IsNullOrEmpty($Bearer)) {
-    $Bearer = '+ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN'
-}
-
-$headers = @{
-    Authorization = "Bearer $Bearer"
 }
 
 $pass = 0
@@ -35,7 +29,17 @@ function Test-Step {
     }
 }
 
-Write-Host "=== 08-test-mission-control ===" -ForegroundColor Cyan
+Write-Host "=== 08-test-mission-control (optional legacy) ===" -ForegroundColor Cyan
+
+if ([string]::IsNullOrWhiteSpace($Bearer)) {
+    Write-Host "[SKIP] No JARVIS_MISSION_CONTROL_TOKEN — optional Mission Control suite not run (canonical stack uses Command Center + Control Plane)." -ForegroundColor Yellow
+    Write-Host "PHASE8 missioncontrol 0 0"
+    exit 0
+}
+
+$headers = @{
+    Authorization = "Bearer $Bearer"
+}
 
 $script:TestBoardId = $null
 $script:TestTaskId = $null

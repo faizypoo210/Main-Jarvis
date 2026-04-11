@@ -35,9 +35,9 @@ def _open(url: str) -> None:
 def stop_jarvis(icon, item):
     import subprocess
 
-    # Kill by port - covers voice(8000), lobsterboard(8080),
-    # mission control(3000,3001), openclaw(18789)
-    for port in [8000, 8080, 3000, 3001, 18789]:
+    # Kill by port - covers voice(8000), command-center/vite(5173), control-plane(8001),
+    # lobsterboard(8080), optional mission control(3000,3001), openclaw(18789)
+    for port in [8000, 5173, 8001, 8080, 3000, 3001, 18789]:
         subprocess.run(
             f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :{port} ^| findstr LISTENING\') do taskkill /F /PID %a',
             shell=True, capture_output=True
@@ -82,9 +82,11 @@ def main() -> None:
         image,
         "JARVIS",
         menu=pystray.Menu(
-            item("Open Jarvis", lambda i, it: _open("http://localhost:8000")),
-            item("Open Dashboard", lambda i, it: _open("http://localhost:8080")),
-            item("Open Mission Control", lambda i, it: _open("http://localhost:3000")),
+            item("Open Command Center", lambda i, it: _open("http://localhost:5173")),
+            item("Open Control Plane (API)", lambda i, it: _open("http://localhost:8001/docs")),
+            item("Open Voice Server", lambda i, it: _open("http://localhost:8000")),
+            item("Open LobsterBoard", lambda i, it: _open("http://localhost:8080")),
+            item("Open Mission Control (legacy)", lambda i, it: _open("http://localhost:3000")),
             pystray.Menu.SEPARATOR,
             item("Stop JARVIS", stop_jarvis),
             item("Exit Tray", _on_exit),

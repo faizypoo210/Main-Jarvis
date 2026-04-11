@@ -3,7 +3,7 @@
 **Repository root (source of truth for code):** `F:\Jarvis`  
 **Typical LAN IP for this machine:** `10.0.0.249` (service URLs often use this host).
 
-This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). Policy and persona live in `%USERPROFILE%\.openclaw\workspace\main\` (SOUL, AGENTS, TOOLS, etc.); **application source** lives **only** under `F:\Jarvis`.
+This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). **Persona/policy markdown** is edited either live under `%USERPROFILE%\.openclaw\workspace\main\` or as **tracked mirrors** in `F:\Jarvis\config\workspace\` (sync via `scripts/10-sync-openclaw-workspace.ps1`). **Application source** lives **only** under `F:\Jarvis` code directories.
 
 ---
 
@@ -64,15 +64,17 @@ This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). Pol
 
 ---
 
-## OpenClaw workspace vs this repository
+## Three-way split: code, mirrors, live workspace
 
-| Location | Contents |
-|----------|----------|
-| `%USERPROFILE%\.openclaw\workspace\main\` | SOUL, AGENTS, IDENTITY, TOOLS, USERS — **policy and identity** |
-| `F:\Jarvis\config\workspace\` | Optional **tracked snippets** / mirrors; not a substitute for the live `.openclaw` workspace |
-| **`F:\Jarvis` (git repo)** | **All executable code and infra scripts** |
+| Location | Role |
+|----------|------|
+| **`F:\Jarvis` (services, coordinator, executor, voice, …)** | **Executable source** — missions and state live in Control Plane + DB |
+| **`F:\Jarvis\config\workspace\*.md`** | **Tracked mirrors** of persona/policy files (SOUL, AGENTS, TOOLS; add IDENTITY, USERS when ready). Versioned in git; not authoritative until synced to live |
+| **`%USERPROFILE%\.openclaw\workspace\main\`** | **Live** markdown OpenClaw reads at runtime. Update by running `scripts/10-sync-openclaw-workspace.ps1` or edit in place |
 
-When changing **behavior**, edit files under **`F:\Jarvis`**. When changing **operator policy or persona**, edit the files under **`.openclaw\workspace\main\`** (and keep any repo copies in sync if you use them).
+**Governance:** Persona/context files shape how models sound; `AGENTS.md` / `TOOLS.md` shape allowed behavior; **mission/control-plane state** remains separate and authoritative (FastAPI + PostgreSQL).
+
+Full detail: [WORKSPACE_SYNC.md](WORKSPACE_SYNC.md), [config/workspace/README.md](../config/workspace/README.md).
 
 ---
 

@@ -1,23 +1,23 @@
 {
   "version": 1,
-  "description": "JARVIS LobsterBoard template: REST endpoint specs (Bearer) plus importable LobsterBoard dashboard layout.",
+  "description": "JARVIS LobsterBoard template: REST endpoint specs (Bearer) plus importable LobsterBoard dashboard layout. Replace REPLACE_ME tokens from your local env; do not commit real secrets.",
   "widgetEndpoints": {
     "openclawGateway": {
       "title": "OpenClaw Gateway status",
       "url": "http://localhost:18789",
-      "authorization": "Bearer 1aa716114e74097698e1ffe4be8d550f181f291afa1b86db",
-      "notes": "Use Authorization on HTTP/WebSocket clients; Control UI is embedded below when available."
+      "authorization": "Bearer REPLACE_WITH_GATEWAY_TOKEN",
+      "notes": "Match token in %USERPROFILE%\\.openclaw\\openclaw.json (or JARVIS_OPENCLAW_GATEWAY_TOKEN)."
     },
     "missionControlActiveMissions": {
-      "title": "Mission Control active missions",
+      "title": "Legacy Mission Control — active missions (optional)",
       "url": "http://localhost:3001/api/v1/tasks?status=active",
-      "authorization": "Bearer +ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN",
+      "authorization": "Bearer REPLACE_WITH_MISSION_CONTROL_TOKEN",
       "refreshIntervalMs": 5000
     },
     "dashclawPendingApprovals": {
       "title": "DashClaw pending approvals",
       "url": "https://jarvis-dashclaw.vercel.app/api/approvals?status=pending",
-      "authorization": "Bearer 62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=",
+      "authorization": "Bearer REPLACE_WITH_DASHCLAW_KEY",
       "refreshIntervalMs": 2000
     },
     "systemStats": {
@@ -69,8 +69,8 @@
         "width": 600,
         "height": 420,
         "properties": {
-          "title": "Mission Control",
-          "embedUrl": "http://localhost:3000",
+          "title": "Command Center (primary UI)",
+          "embedUrl": "http://localhost:5173",
           "allowFullscreen": true
         }
       },

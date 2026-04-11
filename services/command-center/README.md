@@ -1,6 +1,6 @@
 # Jarvis Command Center
 
-Governed executive AI command surface — mission control, not a generic admin panel.
+Governed executive AI command surface for missions and approvals — not a generic admin panel.
 
 ## Run
 

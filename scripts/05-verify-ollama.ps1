@@ -1,8 +1,12 @@
 #Requires -Version 5.1
-# Phase 5: Verify Ollama service, phi4-mini, API generate, and OpenClaw Ollama plugin entry.
+# Phase 5: Verify Ollama service, default local model (OLLAMA_MODEL or qwen3:4b), API generate, and OpenClaw Ollama plugin entry.
 $ErrorActionPreference = 'Stop'
 
 Add-Type -AssemblyName System.Web.Extensions
+
+$Model = [Environment]::GetEnvironmentVariable('OLLAMA_MODEL', 'User')
+if ([string]::IsNullOrWhiteSpace($Model)) { $Model = $env:OLLAMA_MODEL }
+if ([string]::IsNullOrWhiteSpace($Model)) { $Model = 'qwen3:4b' }
 
 function Test-OllamaListening {
     $c = @(Get-NetTCPConnection -LocalPort 11434 -State Listen -ErrorAction SilentlyContinue)
@@ -30,12 +34,12 @@ $listOut = & ollama list 2>&1
 Write-Host "--- ollama list ---"
 Write-Host $listOut
 $text = $listOut | Out-String
-if ($text -notmatch 'phi4-mini') {
-    throw "phi4-mini not found in ollama list."
+if ($text -notmatch [regex]::Escape($Model)) {
+    throw "$Model not found in ollama list."
 }
 
 $body = @{
-    model  = 'phi4-mini'
+    model  = $Model
     prompt = 'Say: Jarvis local model online.'
     stream = $false
 } | ConvertTo-Json -Compress

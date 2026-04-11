@@ -38,13 +38,13 @@ Test-Step 'Redis (container + PING)' {
     return ($out -match 'PONG')
 }
 
-Test-Step 'Mission Control backend /health' {
-    $r = Invoke-WebRequest -Uri 'http://localhost:3001/health' -UseBasicParsing -TimeoutSec 15
+Test-Step 'Control Plane /health (8001)' {
+    $r = Invoke-WebRequest -Uri 'http://localhost:8001/health' -UseBasicParsing -TimeoutSec 15
     return ($r.StatusCode -eq 200)
 }
 
-Test-Step 'Mission Control frontend /' {
-    $r = Invoke-WebRequest -Uri 'http://localhost:3000' -UseBasicParsing -TimeoutSec 15
+Test-Step 'Command Center dev server (5173)' {
+    $r = Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 15
     return ($r.StatusCode -eq 200)
 }
 

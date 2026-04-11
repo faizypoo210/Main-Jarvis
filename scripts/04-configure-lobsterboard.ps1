@@ -38,9 +38,9 @@ if ($doc.lobsterBoard.widgets) {
 $meta = [ordered]@{
     id            = 'jarvis-dashboard'
     name          = 'JARVIS'
-    description   = 'Mission Control, OpenClaw Gateway, DashClaw, and local system stats (see jarvis-dashboard.json for REST/Bearer specs).'
+    description   = 'Command Center / Control Plane, OpenClaw Gateway, DashClaw, and local system stats (see jarvis-dashboard.json for REST/Bearer specs).'
     author        = 'JARVIS'
-    tags          = @('jarvis', 'mission-control', 'openclaw', 'dashclaw')
+    tags          = @('jarvis', 'command-center', 'openclaw', 'dashclaw')
     canvasSize    = '1920x1080'
     widgetCount   = $widgetCount
     requiresSetup = @()

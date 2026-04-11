@@ -1,5 +1,5 @@
 """
-JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, Ollama (phi4-mini), pyttsx3 TTS, Redis streams.
+JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, Ollama (default qwen3:4b), pyttsx3 TTS, Redis streams.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 # Override with CONTROL_PLANE_URL if the control plane listens elsewhere.
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
 OLLAMA_BASE = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "phi4-mini")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b")
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 if WHISPER_DEVICE == "cuda":
     WHISPER_COMPUTE = "float16"

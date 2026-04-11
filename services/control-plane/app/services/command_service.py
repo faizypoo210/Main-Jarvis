@@ -34,14 +34,17 @@ async def _publish_jarvis_command(
     mission_id: str,
     text: str,
     created_by: str,
+    context: dict[str, Any] | None = None,
 ) -> None:
     settings = get_settings()
     url = settings.REDIS_URL or "redis://localhost:6379"
-    payload = {
+    payload: dict[str, Any] = {
         "mission_id": mission_id,
         "text": text,
         "created_by": created_by,
     }
+    if context is not None:
+        payload["context"] = context
     r: Redis | None = None
     try:
         r = Redis.from_url(url, decode_responses=False)
@@ -99,6 +102,7 @@ class CommandService:
                 str(mission.id),
                 data.text,
                 data.source,
+                data.context,
             )
         else:
             log.info(

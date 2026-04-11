@@ -15,6 +15,7 @@ import sys
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -23,6 +24,11 @@ from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
 load_dotenv()
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from shared.routing import decide_route  # noqa: E402
 
 # Control plane (Jarvis API). Override via .env: CONTROL_PLANE_URL=http://localhost:8001
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001")
@@ -247,6 +253,12 @@ class Coordinator:
             risk = guard.get("risk_level")
             risk_s = str(risk).strip() if risk is not None else None
             risk_class = _normalize_risk_class(risk_s)
+            ctx_raw = data.get("context")
+            route = decide_route(
+                text=text,
+                context=ctx_raw if isinstance(ctx_raw, dict) else {},
+                risk_class=risk_s,
+            )
             dashclaw_decision_id = guard.get("decision_id") or guard.get("id")
             dashclaw_decision_id_s = (
                 str(dashclaw_decision_id).strip() if dashclaw_decision_id is not None else None
@@ -255,6 +267,15 @@ class Coordinator:
 
             if decision == "allow":
                 await post_to_control_plane(
+                    f"/api/v1/missions/{mission_id}/events",
+                    {
+                        "event_type": "routing_decided",
+                        "payload": route.to_mission_event_payload(pending_approval=False),
+                        "actor_type": "system",
+                        "actor_id": "coordinator",
+                    },
+                )
+                await post_to_control_plane(
                     f"/api/v1/missions/{mission_id}/status",
                     {"status": ST_ACTIVE},
                 )
@@ -262,6 +283,7 @@ class Coordinator:
                     "mission_id": mission_id,
                     "command": text,
                     "dashclaw_decision": decision,
+                    "routing": route.to_execution_dict(),
                 }
                 await redis.xadd(
                     STREAM_EXECUTION,
@@ -275,6 +297,15 @@ class Coordinator:
                 )
 
             elif decision == "requires_approval":
+                await post_to_control_plane(
+                    f"/api/v1/missions/{mission_id}/events",
+                    {
+                        "event_type": "routing_decided",
+                        "payload": route.to_mission_event_payload(pending_approval=True),
+                        "actor_type": "system",
+                        "actor_id": "coordinator",
+                    },
+                )
                 # ApprovalCreate — keep fields aligned with services/control-plane/app/schemas/approvals.py
                 # and operator scripts: scripts/lib/ApprovalPayloadContract.ps1
                 approval_body: dict[str, Any] = {

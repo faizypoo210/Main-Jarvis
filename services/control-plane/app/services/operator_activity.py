@@ -49,6 +49,9 @@ def _kind_and_category(event_type: str) -> tuple[str, str]:
         return "approval", "approval"
     if event_type == "receipt_recorded":
         return "receipt", "execution"
+    if event_type == "routing_decided":
+        # Category "mission" so mission-filtered activity includes routing without a new filter enum.
+        return "routing", "mission"
     if event_type in ("created", "mission_status_changed"):
         return "mission_event", "mission"
     return "mission_event", "mission"
@@ -96,6 +99,27 @@ def _title_summary_status(
         by = str(p.get("decided_by") or "")
         summary = f"Decision: {dec}" + (f" · by {by}" if by else "")
         return title, summary, dec if dec in ("approved", "denied") else "resolved"
+    if event_type == "routing_decided":
+        req = str(p.get("requested_lane") or "")
+        act = str(p.get("actual_lane") or "")
+        fb = p.get("fallback_applied") is True
+        pending = p.get("pending_approval") is True
+        if fb and req == "local_fast" and act == "gateway":
+            title = "Routing decided: local-fast, fell back to gateway"
+        elif act == "gateway":
+            title = "Routing decided: gateway"
+        elif act == "local_fast":
+            title = "Routing decided: local-fast"
+        else:
+            title = "Routing decided"
+        rs = str(p.get("reason_summary") or "").strip()
+        parts: list[str] = []
+        if rs:
+            parts.append(rs)
+        if pending:
+            parts.append("Execution deferred pending approval.")
+        summary = _truncate(" ".join(parts)) or title
+        return title, summary, "pending" if pending else mission_status
     if event_type == "receipt_recorded":
         rt = str(p.get("receipt_type") or "receipt")
         src = str(p.get("source") or "")
@@ -173,6 +197,16 @@ def _meta(
         aid = p.get("approval_id")
         if aid:
             meta["approval_id"] = str(aid)
+    if event_type == "routing_decided":
+        for k in (
+            "requested_lane",
+            "actual_lane",
+            "fallback_applied",
+            "reason_code",
+            "pending_approval",
+        ):
+            if k in p:
+                meta[k] = p.get(k)
     if event_type == "receipt_recorded":
         if p.get("receipt_type"):
             meta["receipt_type"] = str(p.get("receipt_type"))
@@ -185,7 +219,7 @@ def _meta(
             em = rp["execution_meta"]
             meta["execution_meta"] = {
                 k: em.get(k)
-                for k in ("lane", "gateway_model", "local_model", "resumed_from_approval")
+                for k in ("lane", "gateway_model", "local_model", "resumed_from_approval", "routing")
                 if k in em
             }
         if "success" in rp:
@@ -251,7 +285,9 @@ def _category_sql_me(category: str | None) -> str:
     if not category:
         return ""
     if category == "mission":
-        return "AND me.event_type IN ('created', 'mission_status_changed')"
+        return (
+            "AND me.event_type IN ('created', 'mission_status_changed', 'routing_decided')"
+        )
     if category == "approval":
         return "AND me.event_type IN ('approval_requested', 'approval_resolved')"
     if category == "execution":

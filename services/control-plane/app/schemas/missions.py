@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from app.schemas.approvals import ApprovalRead
@@ -26,6 +28,15 @@ class MissionCreate(BaseModel):
 
 class MissionStatusUpdate(BaseModel):
     status: str = Field(..., min_length=1, max_length=64)
+
+
+class MissionEventCreate(BaseModel):
+    """Append-only mission event (workers use API key; event_type must be allowed)."""
+
+    event_type: str = Field(..., min_length=1, max_length=128)
+    payload: dict[str, Any] | None = None
+    actor_type: str | None = Field(default="system", max_length=64)
+    actor_id: str | None = Field(default=None, max_length=256)
 
 
 class MissionRead(BaseModel):

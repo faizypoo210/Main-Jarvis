@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import require_api_key
 from app.core.db import get_db
 from app.schemas.approvals import ApprovalRead
-from app.schemas.missions import MissionBundleRead, MissionRead, MissionStatusUpdate
+from app.schemas.missions import (
+    MissionBundleRead,
+    MissionEventCreate,
+    MissionRead,
+    MissionStatusUpdate,
+)
 from app.schemas.receipts import ReceiptRead
 from app.schemas.updates import MissionEventRead
 from app.services.mission_service import MissionService
@@ -53,6 +58,18 @@ async def list_mission_events(
 ) -> list[MissionEventRead]:
     svc = MissionService(session)
     return await svc.list_mission_events(mission_id)
+
+
+@router.post("/{mission_id}/events", response_model=MissionEventRead)
+async def post_mission_event(
+    mission_id: UUID,
+    body: MissionEventCreate,
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> MissionEventRead:
+    """Append a mission event (workers: coordinator, etc.)."""
+    svc = MissionService(session)
+    return await svc.create_mission_event(mission_id, body)
 
 
 @router.get("/{mission_id}/approvals", response_model=list[ApprovalRead])

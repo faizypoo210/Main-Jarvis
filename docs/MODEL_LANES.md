@@ -60,6 +60,15 @@ Mission timeline events (`receipt_recorded`) mirror `execution_meta` for UI and 
 
 `jarvis.ps1` runs `11-verify-model-lanes.ps1 -Startup` after the gateway starts (warnings only).
 
+## Mission routing authority (control plane + coordinator)
+
+Mission commands (Command Center → Redis → coordinator → DashClaw → `jarvis.execution`) carry an explicit **routing decision** separate from OpenClaw’s **gateway model** string:
+
+- **`routing_decided`** mission events record the **requested** lane (`local_fast` vs `gateway`) from deterministic v1 heuristics, the **actual** lane used for the mission executor path, and **fallback** when the classifier preferred `local_fast` but execution still goes through the OpenClaw executor (the only mission execution path today).
+- **Executor receipts** (`execution_meta.routing`) include the same compact fields (no secrets).
+
+This is **routing authority + observability**: it does not add a second mission executor runtime. Voice and other surfaces may still use direct Ollama for fast acks; that path is separate from mission execution.
+
 ## Voice vs executor
 
 - **Voice** talks to Ollama **directly** for fast acks.

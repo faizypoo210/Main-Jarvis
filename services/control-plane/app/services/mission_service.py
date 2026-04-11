@@ -12,7 +12,7 @@ from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.mission_repo import MissionRepository
 from app.repositories.receipt_repo import ReceiptRepository
 from app.schemas.approvals import ApprovalRead
-from app.schemas.missions import MissionBundleRead, MissionRead
+from app.schemas.missions import MissionBundleRead, MissionEventCreate, MissionRead
 from app.schemas.receipts import ReceiptRead
 from app.schemas.updates import MissionEventRead
 
@@ -102,3 +102,24 @@ class MissionService:
                 detail="Mission not found",
             )
         return MissionRead.model_validate(mission)
+
+    async def create_mission_event(
+        self,
+        mission_id: UUID,
+        body: MissionEventCreate,
+    ) -> MissionEventRead:
+        mission = await self._repo.get_by_id(mission_id)
+        if mission is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mission not found",
+            )
+        event = await MissionEventRepository.create(
+            self._session,
+            mission_id=mission_id,
+            event_type=body.event_type,
+            actor_type=body.actor_type,
+            actor_id=body.actor_id,
+            payload=body.payload,
+        )
+        return MissionEventRead.model_validate(event)

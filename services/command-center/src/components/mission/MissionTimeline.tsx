@@ -3,8 +3,19 @@ import { formatRelativeTime } from "../../lib/format";
 import { ExecutionMetaLine } from "./ExecutionMetaLine";
 import { operatorCopy } from "../../lib/operatorCopy";
 
-function eventTitle(type: string): string {
-  switch (type) {
+function timelineEventTitle(ev: MissionEvent): string {
+  const p = ev.payload as Record<string, unknown> | null;
+  if (ev.event_type === "routing_decided" && p) {
+    const req = typeof p.requested_lane === "string" ? p.requested_lane : "";
+    const act = typeof p.actual_lane === "string" ? p.actual_lane : "";
+    const fb = p.fallback_applied === true;
+    if (fb && req === "local_fast" && act === "gateway") {
+      return "Routing decided: local-fast, fell back to gateway";
+    }
+    if (act === "gateway") return "Routing decided: gateway";
+    if (act === "local_fast") return "Routing decided: local-fast";
+  }
+  switch (ev.event_type) {
     case "created":
       return "Mission created";
     case "mission_status_changed":
@@ -16,7 +27,7 @@ function eventTitle(type: string): string {
     case "receipt_recorded":
       return "Receipt recorded";
     default:
-      return type.replace(/_/g, " ");
+      return ev.event_type.replace(/_/g, " ");
   }
 }
 
@@ -76,7 +87,7 @@ export function MissionTimeline({
             <div className={`min-w-0 flex-1 pb-6 ${isLast ? "pb-0" : ""}`}>
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-                  {eventTitle(ev.event_type)}
+                  {timelineEventTitle(ev)}
                 </span>
                 <span className="font-mono text-[10px] text-[var(--text-muted)]">
                   {formatRelativeTime(ev.created_at)}
@@ -98,6 +109,19 @@ export function MissionTimeline({
                   {typeof p.decision === "string" ? p.decision : ""}
                   {typeof p.decided_by === "string" ? ` · ${p.decided_by}` : ""}
                 </p>
+              ) : null}
+              {ev.event_type === "routing_decided" && p ? (
+                (typeof p.reason_summary === "string" && String(p.reason_summary).trim()) ||
+                p.pending_approval === true ? (
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+                    {typeof p.reason_summary === "string" && String(p.reason_summary).trim()
+                      ? String(p.reason_summary).trim()
+                      : null}
+                    {p.pending_approval === true ? (
+                      <span> Execution deferred pending approval.</span>
+                    ) : null}
+                  </p>
+                ) : null
               ) : null}
               {ev.event_type === "receipt_recorded" && p ? (
                 <div className="mt-2 space-y-2">

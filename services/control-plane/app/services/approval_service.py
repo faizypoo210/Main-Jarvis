@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -20,6 +22,11 @@ STREAM_EXECUTION = "jarvis.execution"
 
 log = get_logger(__name__)
 
+_JARVIS_ROOT = Path(__file__).resolve().parents[4]
+if str(_JARVIS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_JARVIS_ROOT))
+from shared.routing import decide_route  # noqa: E402
+
 
 async def _publish_execution_resume(
     mission_id: str,
@@ -28,11 +35,19 @@ async def _publish_execution_resume(
 ) -> None:
     settings = get_settings()
     url = settings.REDIS_URL or "redis://localhost:6379"
+    route = decide_route(text=command, context={}, risk_class=None)
+    routing = route.to_execution_dict()
+    routing["approval_sensitive"] = True
+    rs = str(routing.get("reason_summary") or "").strip()
+    routing["reason_summary"] = (
+        f"{rs} Resumed after approval." if rs else "Resumed after approval."
+    )
     payload = {
         "mission_id": mission_id,
         "command": command,
         "approval_id": approval_id,
         "resumed": True,
+        "routing": routing,
     }
     r: Redis | None = None
     try:

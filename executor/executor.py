@@ -121,6 +121,20 @@ def _auth_profiles_appear_configured() -> bool:
         return False
 
 
+_ROUTING_KEYS = frozenset(
+    {
+        "requested_lane",
+        "actual_lane",
+        "fallback_applied",
+        "reason_code",
+        "reason_summary",
+        "requires_tools",
+        "requires_long_running_execution",
+        "approval_sensitive",
+    }
+)
+
+
 def _build_execution_meta(
     data: dict[str, Any],
     *,
@@ -136,6 +150,11 @@ def _build_execution_meta(
     }
     if lane == "gateway":
         meta["auth_profiles_present"] = _auth_profiles_appear_configured()
+    raw_routing = data.get("routing")
+    if isinstance(raw_routing, dict):
+        routing = {k: raw_routing[k] for k in _ROUTING_KEYS if k in raw_routing}
+        if routing:
+            meta["routing"] = routing
     return meta
 
 

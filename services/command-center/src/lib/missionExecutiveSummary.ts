@@ -30,6 +30,8 @@ export type CompactExecutionMeta = {
   lane?: string;
   model?: string;
   resumedFromApproval?: boolean;
+  /** Compact routing authority line (from execution_meta.routing). */
+  routingLine?: string;
 };
 
 function eventTitle(type: string): string {
@@ -44,6 +46,8 @@ function eventTitle(type: string): string {
       return "Approval resolved";
     case "receipt_recorded":
       return "Receipt recorded";
+    case "routing_decided":
+      return "Routing decided";
     default:
       return type.replace(/_/g, " ");
   }
@@ -70,6 +74,22 @@ function describeEventOneLine(ev: MissionEvent): string {
       const decision = p && typeof p.decision === "string" ? p.decision : "recorded";
       const by = p && typeof p.decided_by === "string" ? p.decided_by : "";
       return by ? `Decision: ${decision} · ${by}` : `Decision: ${decision}`;
+    }
+    case "routing_decided": {
+      const req = p && typeof p.requested_lane === "string" ? p.requested_lane : "";
+      const act = p && typeof p.actual_lane === "string" ? p.actual_lane : "";
+      const fb = p && p.fallback_applied === true;
+      const pending = p && p.pending_approval === true;
+      let line = "Routing decided";
+      if (fb && req === "local_fast" && act === "gateway") {
+        line = "Routing: local-fast → gateway (fallback)";
+      } else if (act === "gateway") {
+        line = "Routing: gateway";
+      } else if (act === "local_fast") {
+        line = "Routing: local-fast";
+      }
+      if (pending) line = `${line} · pending approval`;
+      return line;
     }
     case "receipt_recorded": {
       const summary = p && typeof p.summary === "string" ? p.summary.trim() : "";
@@ -171,20 +191,38 @@ export function compactExecutionMeta(raw: unknown): CompactExecutionMeta | null 
   const model =
     typeof o.model === "string"
       ? o.model
-      : typeof o.model_id === "string"
-        ? o.model_id
-        : typeof o.model_name === "string"
-          ? o.model_name
-          : undefined;
+      : typeof o.gateway_model === "string"
+        ? o.gateway_model
+        : typeof o.model_id === "string"
+          ? o.model_id
+          : typeof o.model_name === "string"
+            ? o.model_name
+            : undefined;
   const resumedFromApproval = o.resumed_from_approval === true;
-  if (!lane && !model && !resumedFromApproval) return null;
-  return { lane, model, resumedFromApproval };
+  let routingLine: string | undefined;
+  const routing = o.routing;
+  if (routing && typeof routing === "object") {
+    const r = routing as Record<string, unknown>;
+    const req = typeof r.requested_lane === "string" ? r.requested_lane : "";
+    const act = typeof r.actual_lane === "string" ? r.actual_lane : "";
+    const fb = r.fallback_applied === true;
+    if (req && act) {
+      if (fb && req === "local_fast" && act === "gateway") {
+        routingLine = "route local-fast → gateway (fallback)";
+      } else {
+        routingLine = `route ${req} → ${act}`;
+      }
+    }
+  }
+  if (!lane && !model && !resumedFromApproval && !routingLine) return null;
+  return { lane, model, resumedFromApproval, routingLine };
 }
 
 export function formatExecutionMetaParts(meta: CompactExecutionMeta): string[] {
   const parts: string[] = [];
   if (meta.lane) parts.push(`Lane ${meta.lane}`);
   if (meta.model) parts.push(meta.model);
+  if (meta.routingLine) parts.push(meta.routingLine);
   if (meta.resumedFromApproval) parts.push("Resumed after approval");
   return parts;
 }

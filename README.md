@@ -9,14 +9,17 @@ Jarvis is **multi-part**, not a single deployable monolith. Before changing beha
 
 | Doc | Use |
 |-----|-----|
+| [`docs/ARCHITECTURE_V3.md`](docs/ARCHITECTURE_V3.md) | **Canonical architecture snapshot:** services, boundaries, state, flows, diagrams |
 | [`REPO_TRUTH.md`](REPO_TRUTH.md) | Ownership, out-of-repo dependencies, authority boundaries, reality labels, verification |
-| [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Components, flows, approvals/receipts locations, in-repo vs machine-local |
+| [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Short component map; complements Architecture V3 |
 | [`STATUS.md`](STATUS.md) | Implemented vs partial vs placeholder surfaces |
 | [`MACHINE_SETUP_STATUS.md`](MACHINE_SETUP_STATUS.md) | Env, secrets, OpenClaw paths, prerequisites checklist |
 
 The **`REPO_TRUTH.md`** doc includes a **“Major mechanisms”** section (mission authority, Redis, coordinator, executor, OpenClaw split, voice, verification) so GitHub has explicit context for the parts that matter most—even though live OpenClaw config on disk is not in git. **`docs/OPENCLAW_WORKSPACE_FILES.md`** maps **`SOUL.md`**, **`AGENTS.md`**, **`TOOLS.md`**, and related workspace files to their **behavioral** role (persona vs mission state in the control plane).
 
 ## Canonical architecture
+
+Full detail: **[`docs/ARCHITECTURE_V3.md`](docs/ARCHITECTURE_V3.md)** (service map, truth stores, flows, Mermaid diagrams).
 
 | Role | Port | Purpose |
 |------|------|---------|

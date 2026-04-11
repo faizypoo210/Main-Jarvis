@@ -1,5 +1,7 @@
 # Status ledger (honest, repo-grounded)
 
+**System architecture (services, boundaries, state, flows):** [`docs/ARCHITECTURE_V3.md`](docs/ARCHITECTURE_V3.md).
+
 Categorization of **major surfaces** as they exist **today** in this repository. Status reflects **code + docs inspection**, not roadmap promises.
 
 | Area | Status | Truth source | Note | Suggested verification |

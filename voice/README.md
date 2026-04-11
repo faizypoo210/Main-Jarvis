@@ -2,6 +2,8 @@
 
 FastAPI + WebSocket: STT (faster-whisper), optional Ollama acknowledgments, pyttsx3 TTS, Redis stream fan-out.
 
+**Where this fits in the system:** see repo [`docs/ARCHITECTURE_V3.md`](../docs/ARCHITECTURE_V3.md) (voice flow, boundaries vs mission `lane_truth`).
+
 ## Voice mission briefing + status readout (v1)
 
 Read-only summaries from existing operator GETs (no new mission state). Implemented in `briefing_voice.py`; ephemeral ranked mission list + cursor per WebSocket (not persisted).

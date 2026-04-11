@@ -1,8 +1,8 @@
 # System map (as reflected in this repo)
 
-Practical map of **what exists in git** and **what sits outside** it. For ownership and verification, see **`REPO_TRUTH.md`**.
+Practical map of **what exists in git** and **what sits outside** it. **Canonical architecture snapshot** (services, boundaries, state, flows, Mermaid): **`docs/ARCHITECTURE_V3.md`**. For ownership and verification, see **`REPO_TRUTH.md`**.
 
-**Mechanisms-first read:** for the table of crucial mechanisms (mission authority, Redis, coordinator, executor, OpenClaw split, voice, verification), see **`REPO_TRUTH.md` → “Major mechanisms (crucial for full context)”**. This file expands layout and flows.
+**Mechanisms-first read:** for the table of crucial mechanisms (mission authority, Redis, coordinator, executor, OpenClaw split, voice, verification), see **`REPO_TRUTH.md` → “Major mechanisms (crucial for full context)”**. This file expands layout and flows without duplicating Architecture V3.
 
 ## Major components
 
@@ -69,4 +69,4 @@ Executor ◄── jarvis.execution
 ## Command Center vs control plane
 
 - Command Center is a **client** of the control plane. It does not store authoritative mission rows.
-- **Placeholder routes** (integrations, workers, cost, system health) are not separate backends in this repo—they are UI stubs until backed by APIs.
+- Operator pages (**integrations**, **workers**, **cost & usage**, **system health**) are **API-backed** from the control plane (readiness and aggregates)—they are **not** separate backends; see **`STATUS.md`** and **`docs/ARCHITECTURE_V3.md`**.

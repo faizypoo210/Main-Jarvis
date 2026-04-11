@@ -6,6 +6,8 @@ This file is the **honesty contract** for the `faizypoo210/Main-Jarvis` reposito
 
 Jarvis is a **layered** system: a **governed control plane** (missions, timeline events, approvals, receipts, realtime updates, **durable operator memory**) plus **execution**, **coordination**, **operator UI**, and **voice**—with **OpenClaw**, **Redis**, **PostgreSQL**, and **machine-local** configuration living at known boundaries. **Mission state** (missions + mission-scoped events) is not the same as **memory state** (`memory_items`): memory is long-lived operator context, not a dump of chat or mission logs. This repo holds the application code and scripts for that stack; it does **not** replace vendor installers, cloud accounts, or files under `%USERPROFILE%\.openclaw\` unless explicitly synced from tracked mirrors.
 
+**Architecture snapshot (diagrams + service map):** [`docs/ARCHITECTURE_V3.md`](docs/ARCHITECTURE_V3.md). This file remains the **honesty contract** and detailed verification index; Architecture V3 is the concise **shape-of-system** reference.
+
 ## Repo ownership (in-repo)
 
 | Concern | Where truth lives in git |
@@ -119,4 +121,4 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 - **Control Plane** includes **`workers`** rows populated by **worker registry v1** (register + heartbeat APIs); **cost** events may still lack full CRUD—operator routes remain **read-only** aggregates for most domains (see `STATUS.md`).
 - **Coordinator** and **executor** require correct env and Redis stream consumers; misconfiguration surfaces as silent stalls or errors in logs, not as compile-time failures.
 
-For a feature-level ledger, see **`STATUS.md`**. For boxes-and-arrows, see **`SYSTEM_MAP.md`**.
+For a feature-level ledger, see **`STATUS.md`**. For system shape (services, diagrams, boundaries), see **`docs/ARCHITECTURE_V3.md`**. For a short component map, see **`SYSTEM_MAP.md`**.

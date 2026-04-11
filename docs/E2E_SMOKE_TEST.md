@@ -1,5 +1,7 @@
 # End-to-end smoke test (canonical Jarvis stack)
 
+**Architecture (services and flows):** [`ARCHITECTURE_V3.md`](ARCHITECTURE_V3.md).
+
 This document describes **`scripts/09-smoke-test-e2e.ps1`**, which proves the live pipeline:
 
 **Command Center / API** → **Control Plane** (`POST /api/v1/commands`) → **PostgreSQL** (mission + `created` event) → **Redis** `jarvis.commands` → **Coordinator** (DashClaw `/api/guard`) → **Redis** `jarvis.execution` → **Executor** (OpenClaw CLI) → **Control Plane** `POST /api/v1/receipts` → **mission event** `receipt_recorded` (with non-empty `payload.summary`) → **mission status** updated (`complete` / `failed`).

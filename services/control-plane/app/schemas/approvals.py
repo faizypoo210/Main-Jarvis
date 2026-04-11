@@ -2,6 +2,12 @@
 
 TRUTH_SOURCE: canonical HTTP contract for POST /api/v1/approvals and decision payloads.
 Scripts must stay aligned: scripts/lib/ApprovalPayloadContract.ps1, coordinator approval branches.
+
+Parity notes (keep in sync when changing fields or enums):
+- `requested_via` / `decided_via`: same closed set as `ApprovalSurface` (mirrored in PowerShell
+  `Get-ApprovalRequestedViaAllowedSet`).
+- `risk_class`: stored as string; operator scripts validate green|amber|red locally before POST.
+  The API does not enforce an enum so coordinator/DashClaw can evolve labels without breaking HTTP.
 """
 
 from __future__ import annotations

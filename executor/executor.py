@@ -3,6 +3,9 @@
 TRUTH_SOURCE: posts execution receipts via control plane POST /api/v1/receipts (see app/schemas/receipts.py).
 MACHINE_CONFIG_REQUIRED: OPENCLAW_CMD, valid %USERPROFILE%\\.openclaw\\ config for gateway auth and models.
 UPSTREAM_DEPENDENCY: OpenClaw CLI + gateway behavior; executor does not embed provider secrets.
+
+OpenClaw invocation: up to two attempts with backoff on a small set of transient failures; receipts
+include structured diagnostics (error_class, attempt_count, exit_code, stderr excerpt) without secrets.
 """
 
 from __future__ import annotations
@@ -11,7 +14,9 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +42,19 @@ CONSUMER_NAME = "executor-1"
 FALLBACK_ERROR = (
     "I encountered an issue executing that. Please check system logs."
 )
+
+OPENCLAW_MAX_ATTEMPTS = 2
+OPENCLAW_RETRY_BACKOFF_SEC = 5.0
+OPENCLAW_COMMUNICATE_TIMEOUT_SEC = 120
+
+# Stable set for receipts and logs (extend only with care — downstream may key on these strings).
+ERROR_CLASS_OK = "ok"
+ERROR_CLASS_TIMEOUT = "timeout"
+ERROR_CLASS_EMPTY_OUTPUT = "empty_output"
+ERROR_CLASS_LAUNCH_ERROR = "launch_error"
+ERROR_CLASS_NONZERO_EXIT = "nonzero_exit"
+ERROR_CLASS_AUTH_OR_CONFIG = "auth_or_config_error"
+ERROR_CLASS_UNKNOWN = "unknown"
 
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout, force=True)
 sys.stdout.reconfigure(line_buffering=True)
@@ -152,6 +170,300 @@ async def _ensure_group(redis: Redis, stream: str, group: str) -> None:
             raise
 
 
+def _sanitize_error_excerpt(text: str, max_len: int = 400) -> str:
+    """Truncate stderr/exception text for receipts; redact obvious secret patterns."""
+    if not text:
+        return ""
+    s = text.strip()
+    s = re.sub(r"(?i)(Bearer\s+)(\S+)", r"\1[REDACTED]", s)
+    s = re.sub(r"(?i)(api[_-]?key\s*[:=]\s*)(\S+)", r"\1[REDACTED]", s)
+    s = re.sub(r"(?i)(x-api-key\s*[:=]\s*)(\S+)", r"\1[REDACTED]", s)
+    if len(s) > max_len:
+        return s[: max_len - 3] + "..."
+    return s
+
+
+def _stderr_suggests_auth_or_config(stderr: str) -> bool:
+    low = stderr.lower()
+    return any(
+        needle in low
+        for needle in (
+            "401",
+            "403",
+            "unauthorized",
+            "forbidden",
+            "invalid credential",
+            "authentication",
+            "not authenticated",
+            "api key",
+            "invalid token",
+            "credential",
+        )
+    )
+
+
+def _failure_summary_for_user(error_class: str) -> str:
+    """User-visible failure line when classification is reliable enough to avoid a generic fallback."""
+    if error_class == ERROR_CLASS_TIMEOUT:
+        return (
+            "Execution timed out waiting for the agent. If this persists, try again or check "
+            "gateway load."
+        )
+    if error_class == ERROR_CLASS_EMPTY_OUTPUT:
+        return (
+            "The agent returned no usable output. Check OpenClaw/gateway configuration and "
+            "credentials."
+        )
+    if error_class == ERROR_CLASS_AUTH_OR_CONFIG:
+        return (
+            "Execution failed due to an authentication or configuration problem. Check OpenClaw "
+            "auth profiles and gateway settings."
+        )
+    if error_class == ERROR_CLASS_LAUNCH_ERROR:
+        return (
+            "Could not start the OpenClaw CLI. Verify OPENCLAW_CMD and that the CLI is installed."
+        )
+    if error_class == ERROR_CLASS_NONZERO_EXIT:
+        return "The agent process exited with an error. Check executor logs for details."
+    return FALLBACK_ERROR
+
+
+@dataclass
+class _OpenClawAttemptResult:
+    ok: bool
+    reply_text: str
+    error_class: str
+    exit_code: int | None
+    stderr_excerpt: str
+    retryable: bool
+
+
+def _classify_empty_or_stderr(
+    *,
+    stderr: str,
+    returncode: int | None,
+) -> str:
+    if _stderr_suggests_auth_or_config(stderr):
+        return ERROR_CLASS_AUTH_OR_CONFIG
+    if returncode is not None and returncode != 0:
+        return ERROR_CLASS_NONZERO_EXIT
+    return ERROR_CLASS_EMPTY_OUTPUT
+
+
+async def _call_openclaw_once(
+    session: aiohttp.ClientSession,
+    command_text: str,
+) -> _OpenClawAttemptResult:
+    """Single subprocess invocation; no retries."""
+    del session  # reserved for future (e.g. correlated HTTP); CLI path does not use it today.
+    proc: asyncio.subprocess.Process | None = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            OPENCLAW_CMD,
+            "agent",
+            "--agent",
+            "main",
+            "--message",
+            command_text,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError as e:
+        detail = _sanitize_error_excerpt(str(e))
+        log.warning(
+            json.dumps(
+                {
+                    "openclaw": "launch_failed",
+                    "error_class": ERROR_CLASS_LAUNCH_ERROR,
+                    "detail": detail,
+                }
+            )
+        )
+        return _OpenClawAttemptResult(
+            ok=False,
+            reply_text=FALLBACK_ERROR,
+            error_class=ERROR_CLASS_LAUNCH_ERROR,
+            exit_code=None,
+            stderr_excerpt=detail,
+            retryable=False,
+        )
+    except OSError as e:
+        detail = _sanitize_error_excerpt(str(e))
+        errno = getattr(e, "errno", None)
+        transient = errno in (11, 35, 10035)  # EAGAIN / EWOULDBLOCK (POSIX / Win)
+        log.warning(
+            json.dumps(
+                {
+                    "openclaw": "launch_failed",
+                    "error_class": ERROR_CLASS_LAUNCH_ERROR,
+                    "errno": errno,
+                    "detail": detail,
+                }
+            )
+        )
+        return _OpenClawAttemptResult(
+            ok=False,
+            reply_text=FALLBACK_ERROR,
+            error_class=ERROR_CLASS_LAUNCH_ERROR,
+            exit_code=None,
+            stderr_excerpt=detail,
+            retryable=transient,
+        )
+
+    assert proc is not None
+    try:
+        try:
+            stdout_b, stderr_b = await asyncio.wait_for(
+                proc.communicate(), timeout=OPENCLAW_COMMUNICATE_TIMEOUT_SEC
+            )
+        except asyncio.TimeoutError:
+            timed_out = True
+            proc.kill()
+            await proc.communicate()
+            log.warning(
+                json.dumps(
+                    {
+                        "openclaw": "timeout",
+                        "error_class": ERROR_CLASS_TIMEOUT,
+                        "communicate_timeout_sec": OPENCLAW_COMMUNICATE_TIMEOUT_SEC,
+                    }
+                )
+            )
+            return _OpenClawAttemptResult(
+                ok=False,
+                reply_text=FALLBACK_ERROR,
+                error_class=ERROR_CLASS_TIMEOUT,
+                exit_code=None,
+                stderr_excerpt="",
+                retryable=True,
+            )
+    except Exception as e:
+        detail = _sanitize_error_excerpt(str(e))
+        log.warning(
+            json.dumps(
+                {
+                    "openclaw": "communicate_failed",
+                    "error_class": ERROR_CLASS_UNKNOWN,
+                    "detail": detail,
+                }
+            )
+        )
+        return _OpenClawAttemptResult(
+            ok=False,
+            reply_text=FALLBACK_ERROR,
+            error_class=ERROR_CLASS_UNKNOWN,
+            exit_code=None,
+            stderr_excerpt=detail,
+            retryable=False,
+        )
+
+    stderr_raw = stderr_b.decode("utf-8", errors="replace") if stderr_b else ""
+    stderr_excerpt = _sanitize_error_excerpt(stderr_raw)
+    output = stdout_b.decode("utf-8", errors="replace") if stdout_b else ""
+
+    lines = output.splitlines()
+    clean_lines = []
+    skip_prefixes = ("🦞", "Config warnings", "╭", "╰", "│", "◇", "◆")
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(p) for p in skip_prefixes):
+            continue
+        clean_lines.append(stripped)
+
+    reply = "\n".join(clean_lines).strip()
+    exit_code = proc.returncode
+
+    if reply:
+        # Semantics preserved: non-empty cleaned stdout counts as success regardless of exit code.
+        return _OpenClawAttemptResult(
+            ok=True,
+            reply_text=reply,
+            error_class=ERROR_CLASS_OK,
+            exit_code=exit_code,
+            stderr_excerpt=stderr_excerpt if stderr_excerpt else "",
+            retryable=False,
+        )
+
+    ec = _classify_empty_or_stderr(stderr=stderr_raw, returncode=exit_code)
+    log.warning(
+        json.dumps(
+            {
+                "openclaw": "empty_or_failed",
+                "error_class": ec,
+                "exit_code": exit_code,
+                "stderr_excerpt": stderr_excerpt[:300],
+            }
+        )
+    )
+    return _OpenClawAttemptResult(
+        ok=False,
+        reply_text=FALLBACK_ERROR,
+        error_class=ec,
+        exit_code=exit_code,
+        stderr_excerpt=stderr_excerpt,
+        retryable=ec in (ERROR_CLASS_TIMEOUT, ERROR_CLASS_EMPTY_OUTPUT),
+    )
+
+
+async def _call_openclaw(
+    session: aiohttp.ClientSession,
+    command_text: str,
+    _session_id: str,
+) -> tuple[str, bool, dict[str, Any]]:
+    """Run OpenClaw with bounded retries; returns (reply text, success, receipt diagnostics)."""
+    del _session_id
+    last: _OpenClawAttemptResult | None = None
+    attempts_used = 0
+    for attempt in range(1, OPENCLAW_MAX_ATTEMPTS + 1):
+        attempts_used = attempt
+        log.info(
+            json.dumps(
+                {
+                    "openclaw": "attempt",
+                    "attempt": attempt,
+                    "max_attempts": OPENCLAW_MAX_ATTEMPTS,
+                }
+            )
+        )
+        last = await _call_openclaw_once(session, command_text)
+        if last.ok:
+            meta = {
+                "attempt_count": attempts_used,
+                "error_class": ERROR_CLASS_OK,
+                "exit_code": last.exit_code,
+                "stderr_excerpt": last.stderr_excerpt or "",
+                "final_success": True,
+            }
+            return last.reply_text, True, meta
+        if attempt < OPENCLAW_MAX_ATTEMPTS and last.retryable:
+            log.warning(
+                json.dumps(
+                    {
+                        "openclaw": "retry_scheduled",
+                        "after_sec": OPENCLAW_RETRY_BACKOFF_SEC,
+                        "error_class": last.error_class,
+                        "attempt": attempt,
+                    }
+                )
+            )
+            await asyncio.sleep(OPENCLAW_RETRY_BACKOFF_SEC)
+            continue
+        break
+
+    assert last is not None
+    user_msg = _failure_summary_for_user(last.error_class)
+    meta = {
+        "attempt_count": attempts_used,
+        "error_class": last.error_class,
+        "exit_code": last.exit_code,
+        "stderr_excerpt": last.stderr_excerpt,
+        "final_success": False,
+    }
+    return user_msg, False, meta
+
+
 async def _post_control_plane(
     session: aiohttp.ClientSession,
     path: str,
@@ -179,64 +491,6 @@ async def _post_control_plane(
                 {"control_plane": "fail", "path": path, "detail": str(e)}
             )
         )
-
-
-async def _call_openclaw(
-    session: aiohttp.ClientSession,
-    command_text: str,
-    _session_id: str,
-) -> tuple[str, bool]:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            OPENCLAW_CMD,
-            "agent",
-            "--agent",
-            "main",
-            "--message",
-            command_text,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.communicate()
-            log.warning(json.dumps({"openclaw": "timeout"}))
-            return FALLBACK_ERROR, False
-
-        output = stdout.decode("utf-8", errors="replace").strip()
-
-        # Strip the openclaw banner lines (start with emoji or known prefixes)
-        lines = output.splitlines()
-        clean_lines = []
-        skip_prefixes = ("🦞", "Config warnings", "╭", "╰", "│", "◇", "◆")
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if any(stripped.startswith(p) for p in skip_prefixes):
-                continue
-            clean_lines.append(stripped)
-
-        reply = "\n".join(clean_lines).strip()
-
-        if not reply:
-            log.warning(
-                json.dumps(
-                    {
-                        "openclaw": "empty_response",
-                        "raw": output[:300],
-                    }
-                )
-            )
-            return FALLBACK_ERROR, False
-
-        return reply, True
-
-    except Exception as e:
-        log.warning(json.dumps({"openclaw": "fail", "detail": str(e)}))
-        return FALLBACK_ERROR, False
 
 
 async def _xadd_updates(
@@ -277,13 +531,25 @@ async def handle_execution(
         await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
         return
 
-    reply_text, ok = await _call_openclaw(session, command_text, mission_id)
+    reply_text, ok, oc_meta = await _call_openclaw(session, command_text, mission_id)
 
     cfg = _load_openclaw_json()
     gateway_model = _default_gateway_model(cfg)
     if not gateway_model:
         gateway_model = os.getenv("JARVIS_OPENCLAW_GATEWAY_MODEL", "").strip() or None
     execution_meta = _build_execution_meta(data, gateway_model=gateway_model)
+
+    receipt_payload: dict[str, Any] = {
+        "action": command_text,
+        "result": reply_text,
+        "success": ok,
+        "execution_meta": execution_meta,
+        "attempt_count": oc_meta["attempt_count"],
+        "error_class": oc_meta["error_class"],
+        "exit_code": oc_meta["exit_code"],
+        "stderr_excerpt": oc_meta["stderr_excerpt"],
+        "final_success": oc_meta["final_success"],
+    }
 
     await _post_control_plane(
         session,
@@ -292,12 +558,7 @@ async def handle_execution(
             "mission_id": mission_id,
             "receipt_type": "openclaw_execution",
             "source": "executor",
-            "payload": {
-                "action": command_text,
-                "result": reply_text,
-                "success": ok,
-                "execution_meta": execution_meta,
-            },
+            "payload": receipt_payload,
             "summary": reply_text,
         },
     )

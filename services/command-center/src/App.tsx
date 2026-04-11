@@ -3,10 +3,13 @@ import { AppShell } from "./components/layout/AppShell";
 import { RouteErrorBoundary } from "./components/layout/RouteErrorBoundary";
 import { Activity } from "./pages/Activity";
 import { Approvals } from "./pages/Approvals";
+import { CostUsage } from "./pages/CostUsage";
 import { MissionDetail } from "./pages/MissionDetail";
 import { Missions } from "./pages/Missions";
 import { Overview } from "./pages/Overview";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { SystemHealth } from "./pages/SystemHealth";
+import { Workers } from "./pages/Workers";
 
 export default function App() {
   return (
@@ -18,11 +21,11 @@ export default function App() {
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />
-        {/* PLACEHOLDER: nav targets — no dedicated API-backed pages yet (see STATUS.md). */}
+        {/* Integrations placeholder — other operator pages are API-backed. */}
         <Route path="integrations" element={<PlaceholderPage title="Integrations" />} />
-        <Route path="workers" element={<PlaceholderPage title="Workers" />} />
-        <Route path="cost" element={<PlaceholderPage title="Cost & Usage" />} />
-        <Route path="system" element={<PlaceholderPage title="System Health" />} />
+        <Route path="workers" element={<Workers />} />
+        <Route path="cost" element={<CostUsage />} />
+        <Route path="system" element={<SystemHealth />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

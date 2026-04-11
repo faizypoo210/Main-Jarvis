@@ -33,6 +33,8 @@ Executor receipts include a safe, structured block (no secrets, no tokens):
 - `resumed_from_approval`: `true` when execution payload carried `resumed` or `approval_id` (approval resume path).
 - `auth_profiles_present` (only when `lane` is `gateway`): `true` if `auth-profiles.json` exists and parses to a non-empty object (presence only).
 
+OpenClaw failures also record **diagnostic fields** on the same receipt payload (truncated/sanitized stderr, no tokens): `attempt_count` (max two tries with backoff on transient cases), `error_class` (stable string such as `timeout`, `empty_output`, `auth_or_config_error`), `exit_code` when the subprocess exited, `stderr_excerpt`, and `final_success` (mirrors `success`).
+
 Mission timeline events (`receipt_recorded`) mirror `execution_meta` for UI and smoke tests.
 
 ## Configured but not verified

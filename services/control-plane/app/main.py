@@ -14,7 +14,9 @@ from app.api.routes import (
     commands,
     health,
     missions,
+    operator,
     receipts,
+    system,
     updates,
 )
 from app.core.config import get_settings
@@ -56,3 +58,5 @@ app.include_router(missions.router, prefix=f"{api_v1_prefix}/missions", tags=["m
 app.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
 app.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])
 app.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])
+app.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
+app.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])

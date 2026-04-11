@@ -12,7 +12,7 @@ This folder holds **tracked markdown** that shapes the **OpenClaw agent’s pers
 | File            | Purpose                                                                                                             |
 | --------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `**SOUL.md`**   | Core identity and voice: who Jarvis is, mission mindset, operator authority, risk posture.                          |
-| `**AGENTS.md**` | Delegation: worker roles, Command Center routing expectations, when to seek approval, channels (voice / web / SMS). |
+| `**AGENTS.md`** | Delegation: worker roles, Command Center routing expectations, when to seek approval, channels (voice / web / SMS). |
 | `**TOOLS.md**`  | Integrations catalog (e.g. Composio-connected apps) and rules for confirm-before-send / confirm-before-write.       |
 
 
@@ -44,7 +44,7 @@ This folder holds **tracked markdown** that shapes the **OpenClaw agent’s pers
 `SOUL.md`, `AGENTS.md`, `IDENTITY.md`, `USERS.md`, `TOOLS.md`  
 from this directory → `%USERPROFILE%\.openclaw\workspace\main\`.
 
-- `**IDENTITY.md` / `USERS.md`**: if they are **not** in `config/workspace/`, the script logs `**[MISSING-SOURCE]`** and continues—that is **normal**; they are optional.
+- `**IDENTITY.md` / `USERS.md`**: if they are not in `config/workspace/`, the script logs `**[MISSING-SOURCE]`** and continues—that is **normal**; they are optional.
 - `**MEMORY.md`** is **optional** and **not** on that list; copy manually to live if you want the gateway to read it.
 
 ## Live vs repo

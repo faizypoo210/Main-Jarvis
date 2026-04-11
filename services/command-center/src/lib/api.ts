@@ -1,10 +1,14 @@
 import type {
+  ActivityFeedCategory,
   Approval,
   CommandResponse,
   Mission,
   MissionBundle,
   MissionEvent,
+  OperatorActivityResponse,
+  OperatorUsageResponse,
   Receipt,
+  SystemHealthResponse,
 } from "./types";
 
 const CP = import.meta.env.VITE_CONTROL_PLANE_URL;
@@ -242,4 +246,29 @@ export async function checkHealth(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function getSystemHealth(): Promise<SystemHealthResponse> {
+  return requestJson<SystemHealthResponse>(`${BASE}/system/health`);
+}
+
+export async function getOperatorUsage(): Promise<OperatorUsageResponse> {
+  return requestJson<OperatorUsageResponse>(`${BASE}/operator/usage`);
+}
+
+export async function getOperatorActivity(params?: {
+  limit?: number;
+  before?: string;
+  mission_id?: string;
+  category?: ActivityFeedCategory;
+}): Promise<OperatorActivityResponse> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.before) q.set("before", params.before);
+  if (params?.mission_id) q.set("mission_id", params.mission_id);
+  if (params?.category) q.set("category", params.category);
+  const qs = q.toString();
+  return requestJson<OperatorActivityResponse>(
+    `${BASE}/operator/activity${qs ? `?${qs}` : ""}`
+  );
 }

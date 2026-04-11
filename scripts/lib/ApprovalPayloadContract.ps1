@@ -2,6 +2,7 @@
 # Shared synthetic POST /api/v1/approvals body for operator scripts (ApprovalCreate).
 # Canonical contract: services/control-plane/app/schemas/approvals.py
 # Coordinator-style reference: coordinator/coordinator.py (requires_approval branch).
+# Enum parity: requested_via values == Python ApprovalSurface; risk_class green|amber|red is script-local validation (API accepts string).
 
 $script:ApprovalCreateSchemaDoc = 'services/control-plane/app/schemas/approvals.py'
 

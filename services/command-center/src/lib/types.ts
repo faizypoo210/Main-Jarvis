@@ -69,3 +69,86 @@ export interface MissionBundle {
   approvals: Approval[];
   receipts: Receipt[];
 }
+
+/** GET /api/v1/system/health */
+export type HealthState = "healthy" | "degraded" | "offline" | "unknown";
+
+export interface ComponentHealth {
+  status: HealthState;
+  detail: string | null;
+}
+
+export interface SystemHealthResponse {
+  checked_at: string;
+  control_plane: ComponentHealth;
+  postgres: ComponentHealth;
+  redis: ComponentHealth;
+  openclaw_gateway: ComponentHealth;
+  ollama: ComponentHealth;
+}
+
+/** GET /api/v1/operator/usage */
+export interface MissionStatusCount {
+  status: string;
+  count: number;
+}
+
+export interface LaneCount {
+  lane: string;
+  count: number;
+}
+
+export interface DailyReceiptCount {
+  day: string;
+  count: number;
+}
+
+export interface OperatorUsageResponse {
+  generated_at: string;
+  missions_total: number;
+  missions_by_status: MissionStatusCount[];
+  receipts_total: number;
+  receipts_by_type: Record<string, number>;
+  openclaw_execution_receipts: number;
+  openclaw_success: number;
+  openclaw_failure: number;
+  openclaw_success_unknown: number;
+  lane_distribution: LaneCount[];
+  receipts_by_day_utc: DailyReceiptCount[];
+  last_mission_event_at: string | null;
+  last_receipt_at: string | null;
+  last_openclaw_execution_at: string | null;
+}
+
+/** GET /api/v1/operator/activity */
+export type ActivityFeedCategory = "mission" | "approval" | "execution" | "attention";
+
+export interface ActivitySummary {
+  window_hours: number;
+  total_in_window: number;
+  approvals_in_window: number;
+  execution_in_window: number;
+  attention_in_window: number;
+}
+
+export interface OperatorActivityItem {
+  id: string;
+  occurred_at: string;
+  kind: string;
+  category: string;
+  title: string;
+  summary: string;
+  status: string;
+  mission_id: string;
+  mission_title: string;
+  actor_label: string | null;
+  risk_class: string | null;
+  meta: Record<string, unknown>;
+}
+
+export interface OperatorActivityResponse {
+  generated_at: string;
+  summary: ActivitySummary;
+  items: OperatorActivityItem[];
+  next_before: string | null;
+}

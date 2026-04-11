@@ -103,3 +103,24 @@ Optional:
 - Commands are normal API traffic; missions and receipts are visible in the control plane like any other run.
 - Approval mode does **not** approve, delete, or mutate identities.
 - To clean up later, use mission APIs or DB maintenance as you would for any test missions.
+
+## Deployment report (Phase 8) — `scripts/08-final-report.ps1`
+
+Generates **`docs/08-deployment-report.txt`** by running read-only probes (subprocesses). **Core pass** (exit 0) requires:
+
+| Layer | Scripts |
+|--------|---------|
+| **Infrastructure core** | `08-test-infrastructure.ps1` — Postgres, Redis, control plane `/health`, OpenClaw gateway port + HTTP |
+| **Gateway** | `08-test-gateway.ps1` |
+| **LAN** | `08-test-lan-access.ps1` |
+| **Operator APIs** | `08-smoke-operator-control-plane.ps1` — `GET /api/v1/system/health`, `/operator/*` (activity, usage, integrations, memory counts, heartbeat, evals), `/updates`, `/approvals/pending`, optional `/approvals/{id}/bundle` if pending rows exist, optional SSE stream if `CONTROL_PLANE_API_KEY` is set |
+| **Workspace governance** | `08-smoke-workspace-governance.ps1` → `11-audit-workspace-governance.ps1` |
+
+**Extended (non-blocking):** Command Center 5173, LobsterBoard, Ollama, DashClaw web (infrastructure extended); legacy Mission Control API; `08-test-full-flow.ps1` (OpenClaw agent turns); **`08-smoke-external-probes.ps1`** (GitHub `/user` if `JARVIS_GITHUB_TOKEN`; Gmail profile if `JARVIS_GMAIL_ACCESS_TOKEN` — **skipped** when tokens are absent, **fail** only when a token is set but the provider rejects it).
+
+**Not run by the final report:** `13-rehearse-golden-path.ps1` (synthetic mission/approval/receipt), `09-smoke-test-e2e.ps1` / `14-rehearse-live-stack.ps1` (live coordinator + executor). Run those separately when validating the full runtime chain.
+
+```powershell
+cd F:\Jarvis
+.\scripts\08-final-report.ps1
+```

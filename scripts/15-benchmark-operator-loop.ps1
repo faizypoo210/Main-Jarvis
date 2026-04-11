@@ -15,6 +15,7 @@
   Live-stack classification: scripts/lib/Parse-LiveStackHarnessOutput.ps1 (shared with scripts/16-verify-harness-semantics.ps1).
 
   FRAGILE_ASSUMPTIONS: control plane up with reachable DB; curl optional for SSE probe; live-stack leg needs Redis + coordinator + executor + gateway as per LIVE_STACK_REHEARSAL.md.
+  Operator API surface is also covered read-only by scripts/08-smoke-operator-control-plane.ps1 (not invoked from this benchmark).
 
 .PARAMETER ControlPlaneUrl
 .PARAMETER IncludeLiveStack

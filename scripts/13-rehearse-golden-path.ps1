@@ -281,6 +281,25 @@ $ApprovalId = $ap.id.ToString()
 if ($ap.status -ne 'pending') { Write-Fail "New approval should be pending" -ContractDrift }
 else { Write-Pass "POST /api/v1/approvals - approval_id=$ApprovalId pending" }
 
+# --- Stage I: Approval Review Packets v1 (read-only bundle) ---
+Write-Stage "I - Approval review bundle (GET /approvals/{id}/bundle)"
+try {
+    $rb = Invoke-RestMethod -Uri "$Api/approvals/$ApprovalId/bundle" -Method Get -TimeoutSec 30
+}
+catch {
+    $info = Get-RestErrorDetails -ErrorRecord $_
+    $detail = if ($info.Body) { $info.Body } else { $info.Message }
+    Write-Fail "GET /api/v1/approvals/{id}/bundle failed: HTTP $($info.StatusCode) $detail"
+    Exit-GoldenPath 1
+}
+if ($rb.packet -and $rb.packet.kind) {
+    Write-Pass "GET /approvals/{id}/bundle - packet.kind=$($rb.packet.kind)"
+}
+else {
+    Write-Fail "Approval bundle missing packet.kind" -ContractDrift
+    Exit-GoldenPath 1
+}
+
 # --- Stage D: pending list contains this mission ---
 Write-Stage "D - Pending approvals list"
 try {
@@ -408,6 +427,13 @@ if ($hasCreated) { Write-Pass "Events include created" } else { Write-Fail "Even
 if ($hasApReq) { Write-Pass "Events include approval_requested" } else { Write-Fail "Events missing approval_requested" -ContractDrift }
 if ($hasApRes) { Write-Pass "Events include approval_resolved" } else { Write-Fail "Events missing approval_resolved" -ContractDrift }
 if ($hasRcpt) { Write-Pass "Events include receipt_recorded" } else { Write-Fail "Events missing receipt_recorded" -ContractDrift }
+
+if ($types -contains 'routing_decided') {
+    Write-Pass "Events include routing_decided (optional)"
+}
+else {
+    Write-Info "Optional: no routing_decided on timeline (normal for synthetic API-only rehearsal)"
+}
 
 $appr = @($bundle.approvals)
 $approvedRows = @($appr | Where-Object { $_.status -eq 'approved' })

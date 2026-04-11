@@ -3,6 +3,11 @@
 .SYNOPSIS
   Verify two-model runtime: Ollama local (qwen3:4b) vs OpenClaw gateway model and auth profile presence.
 
+.DESCRIPTION
+  This script checks **machine readiness** for local inference vs OpenClaw/gateway. It does **not** assert
+  mission routing (`routing_decided`) or executor `lane_truth` — use `11-smoke-model-lanes.ps1` with the
+  full stack for that. Canonical vocabulary: docs/MODEL_LANES.md.
+
 .PARAMETER Startup
   If set, never exit non-zero; print WARN for gaps (for jarvis.ps1 preflight).
 #>
@@ -79,6 +84,7 @@ function Test-AuthProfilesObject {
 }
 
 Write-Host "=== 11-verify-model-lanes ===" -ForegroundColor Cyan
+Write-Host "Readiness: Ollama + OpenClaw CLI + gateway HTTP + openclaw.json model. For mission routing + receipt lane_truth coherence, run: .\scripts\11-smoke-model-lanes.ps1" -ForegroundColor DarkGray
 
 # Ollama HTTP
 try {

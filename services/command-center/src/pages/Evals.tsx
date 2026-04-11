@@ -318,7 +318,11 @@ export function Evals() {
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Routing (routing_decided in window)
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <p className="mb-2 max-w-3xl text-[10px] leading-relaxed text-[var(--text-muted)]">
+                Mission routing: classifier requested vs actual mission path (executor is OpenClaw-only). OpenClaw
+                model target (local/cloud) is on execution receipts — see <code className="font-mono">docs/MODEL_LANES.md</code>.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <MetricCard
                   label="Events"
                   value={data.routing_metrics.routing_decided_events_in_window}
@@ -338,6 +342,16 @@ export function Evals() {
                   label="local_fast→gateway"
                   value={data.routing_metrics.local_fast_to_gateway_fallback}
                   hint="fallback_applied"
+                />
+                <MetricCard
+                  label="Requested local_fast"
+                  value={data.routing_metrics.requested_local_fast}
+                  hint="classifier"
+                />
+                <MetricCard
+                  label="Actual gateway path"
+                  value={data.routing_metrics.routing_actual_gateway}
+                  hint="mission executor"
                 />
               </div>
             </section>

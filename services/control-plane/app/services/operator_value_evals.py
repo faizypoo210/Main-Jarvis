@@ -100,6 +100,8 @@ async def build_operator_value_evals(
         "Median/p90 seconds from per-mission deltas (mission created_at to first child row).",
         "failure_categories mapped from payload error_code via small heuristic rules.",
         "routing match/mismatch from routing_decided payload fields.",
+        "requested_local_fast / routing_actual_gateway: row counts on routing_decided (mission path class vs classifier intent).",
+        "OpenClaw model lane (local vs cloud target) is on executor receipts (execution_meta), not duplicated in routing_decided.",
     ]
 
     bind = {"start": start, "end": end}
@@ -414,7 +416,13 @@ async def build_operator_value_evals(
                 WHERE (payload->>'fallback_applied')::boolean = true
                   AND COALESCE(payload->>'requested_lane','') = 'local_fast'
                   AND COALESCE(payload->>'actual_lane','') = 'gateway'
-              )::int AS fb_n
+              )::int AS fb_n,
+              COUNT(*) FILTER (
+                WHERE COALESCE(payload->>'requested_lane','') = 'local_fast'
+              )::int AS req_lf,
+              COUNT(*) FILTER (
+                WHERE COALESCE(payload->>'actual_lane','') = 'gateway'
+              )::int AS act_gw
             FROM mission_events
             WHERE event_type = 'routing_decided' AND created_at >= :start AND created_at < :end
             """
@@ -427,6 +435,8 @@ async def build_operator_value_evals(
         requested_matches_actual_lane=int(rw[0] or 0),
         requested_differs_actual_lane=int(rw[1] or 0),
         local_fast_to_gateway_fallback=int(rw[2] or 0),
+        requested_local_fast=int(rw[3] or 0),
+        routing_actual_gateway=int(rw[4] or 0),
     )
 
     timeseries: list[EvalDayBucket] = []

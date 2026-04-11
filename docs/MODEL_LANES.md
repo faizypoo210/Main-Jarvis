@@ -1,75 +1,86 @@
-# Model lanes (local vs cloud execution)
+# Model lanes (canonical truth)
 
 > **Truth boundary:** model lane choice does **not** move mission authority off the control plane. For ownership and machine config, see [`../REPO_TRUTH.md`](../REPO_TRUTH.md) and [`../MACHINE_SETUP_STATUS.md`](../MACHINE_SETUP_STATUS.md).
 
-This document describes how **two model lanes** are used in JARVIS without changing control-plane authority.
+This document is the **single operator-facing definition** of lane-related terms. Prefer it over ad hoc UI copy.
 
-## Roles
+## Canonical lane truth model (v1)
 
-| Lane | Intent | Typical path |
-|------|--------|----------------|
-| **Local fast** | Low-latency, on-box inference | **Ollama** with `OLLAMA_MODEL` (default `qwen3:4b`) |
-| **Cloud execution** | Agent/tools via OpenClaw | **OpenClaw CLI** → gateway → model configured in `openclaw.json` (e.g. MiniMax via provider profiles) |
+| Field | Where it lives | Meaning |
+|-------|----------------|--------|
+| **requested_lane** | `routing_decided` payload, `execution_meta.routing`, `execution_meta.lane_truth` | Classifier intent: `local_fast` or `gateway` (heuristic over command text + risk). |
+| **routing_actual_lane** | Same (stored as `actual_lane` in routing payloads) | Mission **execution path class** for `jarvis.execution`: today always **`gateway`** because the only consumer is the OpenClaw executor. **Not** the same as “local Ollama direct.” |
+| **fallback_applied** | Same | `true` when `requested_lane` was `local_fast` but the mission path is still the OpenClaw executor (`actual_lane` `gateway`). |
+| **reason_code** / **reason_summary** | Same | Stable machine-readable code + short human line (e.g. `MISSION_EXECUTOR_GATEWAY_ONLY` when fallback). |
+| **fallback_reason_code** | Same | When `fallback_applied`, equals the stable code explaining the fallback (same family as `reason_code` in v1). `null` when no fallback. |
+| **openclaw_model_lane** | `execution_meta` | **OpenClaw default agent model** target: `local` if model id starts with `ollama/`, else `gateway` (cloud/other). Still goes **through** OpenClaw CLI — not direct Ollama from the executor process. |
+| **mission_execution_path** | `execution_meta` | Always **`openclaw_executor`** for missions in this repo: there is no separate local-fast mission worker. |
+| **lane_truth** | `execution_meta` | Small JSON block (`schema_version` `1`) reconciling **routing snapshot** + **openclaw_model_lane** on the receipt so operators can compare without guessing. |
 
-**Control Plane** remains the source of truth for missions, receipts, and events. Model lanes affect **how work is executed**, not where authority lives.
+### Direct vs derived
 
-## What uses Ollama locally
+- **Direct from stored events:** `routing_decided` rows (mission_events).
+- **Direct from executor receipt:** `execution_meta` on `openclaw_execution` receipts (and mirrored on `receipt_recorded` timeline events).
+- **Derived for display:** Evals aggregates (counts, match/mismatch); Activity titles; Command Center compact lines — all **read** the above, they do not invent lanes.
 
-- **Voice server** (`voice/server.py`): acknowledgment / short replies use `OLLAMA_BASE_URL` + `OLLAMA_MODEL` (default `qwen3:4b`).
-- **Optional**: OpenClaw gateway model may be set to `ollama/qwen3:4b` so the **executor** still goes through OpenClaw but targets local Ollama (same weights, different routing). In that case executor receipts show `execution_meta.lane` = `local`.
+### What “local” means (avoid confusion)
 
-## What uses OpenClaw / cloud
+| Phrase | Meaning |
+|--------|--------|
+| **local_fast** (requested) | “Prefer low-latency local style” from the **router** — does **not** imply a local mission executor exists. |
+| **openclaw_model_lane = local** | Gateway’s default model is an **`ollama/...`** id — execution still flows **OpenClaw → gateway → Ollama**. |
+| **Voice direct Ollama** | Voice server may call Ollama **HTTP** for acks — **no** `routing_decided` and **no** executor receipt. See [Voice vs mission](#voice-vs-mission-execution) below. |
 
-- **Executor** (`executor/executor.py`): every `jarvis.execution` message is handled with `openclaw agent` (gateway). The **configured default agent model** in `%USERPROFILE%\.openclaw\openclaw.json` determines whether traffic goes to **Ollama via OpenClaw** (`ollama/...`) or a **cloud provider** (non-`ollama/` model id).
-- **MiniMax 2.5** (or any cloud model) is selected only via **your** gateway model string and **your** `auth-profiles.json` entries — **no provider slug is hardcoded** in this repo.
+## Roles (capabilities)
+
+| Capability | Typical runtime | Mission authority |
+|------------|-----------------|-------------------|
+| **Voice fast ack** | Ollama HTTP (`OLLAMA_BASE_URL` / `OLLAMA_MODEL`) | Does not create mission execution lane by itself. |
+| **Mission execution** | Executor → `openclaw agent` → gateway | Missions + receipts + `routing_decided` on the control plane. |
 
 ## Receipt metadata (`execution_meta`)
 
-Executor receipts include a safe, structured block (no secrets, no tokens):
+Executor builds:
 
-- `lane`: `local` if gateway model string starts with `ollama/`, else `gateway` (cloud/other).
-- `gateway_model`: default agent model string from `openclaw.json` (or `JARVIS_OPENCLAW_GATEWAY_MODEL` if JSON has no default).
-- `local_model`: tag after `ollama/` when `lane` is `local`; otherwise omitted/null.
-- `resumed_from_approval`: `true` when execution payload carried `resumed` or `approval_id` (approval resume path).
-- `auth_profiles_present` (only when `lane` is `gateway`): `true` if `auth-profiles.json` exists and parses to a non-empty object (presence only).
+- **openclaw_model_lane** — same information as legacy **`lane`** (both set for compatibility).
+- **lane** — legacy alias for `openclaw_model_lane` (still present).
+- **gateway_model** — default agent model string from `openclaw.json` (or `JARVIS_OPENCLAW_GATEWAY_MODEL`).
+- **local_model** — tag after `ollama/` when the OpenClaw model lane is `local`.
+- **routing** — compact copy of coordinator routing (`requested_lane`, `actual_lane`, `fallback_applied`, `reason_code`, `fallback_reason_code`, etc.).
+- **lane_truth** — reconciled block (see table above).
+- **mission_execution_path** — `openclaw_executor`.
+- **resumed_from_approval** — approval resume path.
+- **auth_profiles_present** — when OpenClaw model lane is `gateway`, presence-only hint for cloud auth files.
 
-OpenClaw failures also record **diagnostic fields** on the same receipt payload (truncated/sanitized stderr, no tokens): `attempt_count` (max two tries with backoff on transient cases), `error_class` (stable string such as `timeout`, `empty_output`, `auth_or_config_error`), `exit_code` when the subprocess exited, `stderr_excerpt`, and `final_success` (mirrors `success`).
+OpenClaw diagnostics (`attempt_count`, `error_class`, …) are unchanged.
 
-Mission timeline events (`receipt_recorded`) mirror `execution_meta` for UI and smoke tests.
+## Mission routing (`routing_decided`)
+
+Posted by the coordinator when DashClaw allows execution. Records **requested** vs **actual** mission path and **fallback** when the classifier preferred `local_fast` but the only mission path is still the gateway executor.
+
+## Operator Value Evals (routing section)
+
+- Counts come from **`routing_decided`** mission events in the UTC window.
+- **Requested local_fast** / **Actual gateway path** are explicit row counts (not the same as fallback count alone).
+- OpenClaw model lane is **not** duplicated there — inspect execution receipts or mission timeline for `execution_meta`.
+
+## Verification scripts
+
+| Script | Role |
+|--------|------|
+| `scripts/11-verify-model-lanes.ps1` | Machine readiness: Ollama, OpenClaw CLI, gateway HTTP, `openclaw.json` model, auth file presence. Honest WARN when optional pieces missing. |
+| `scripts/11-smoke-model-lanes.ps1` | End-to-end coherence: Ollama direct generate **and** `POST /commands` → `routing_decided` + executor receipt with `execution_meta.lane_truth` / routing. Classifies missing stack honestly. |
+
+`jarvis.ps1` may run `11-verify-model-lanes.ps1 -Startup` (warnings only).
+
+## Voice vs mission execution
+
+- **Voice** may use **direct Ollama** for short replies; that path does **not** write `routing_decided` or executor `execution_meta`.
+- **Mission execution** always goes **executor → OpenClaw** when work is run from `jarvis.execution`; the **router** may still record `requested_lane: local_fast` with **fallback** to the gateway mission path.
+
+These are **related but not identical**; the UI uses labels like **OpenClaw model lane** vs **mission route** to keep them separable.
 
 ## Configured but not verified
 
 - **Configured**: `openclaw.json` lists a default model string.
-- **Not verified**: cloud credentials may be missing or invalid until you edit `auth-profiles.json` and env per OpenClaw docs. Symptoms: empty agent output, CLI errors, or gateway warnings — check `openclaw status` and gateway logs.
-
-## Manual steps in `%USERPROFILE%\.openclaw\`
-
-1. **`openclaw.json` / `config.json`**  
-   Set the default agent `model` to your provider id (or `ollama/qwen3:4b` for local-via-OpenClaw). Prefer User env `JARVIS_OPENCLAW_GATEWAY_MODEL` when running `scripts/03-configure-openclaw.ps1` so the slug is not guessed in-repo.
-
-2. **`agents\main\agent\auth-profiles.json`**  
-   Add provider credentials **exactly as OpenClaw documents** for MiniMax or other clouds. This repo does not invent schema or env names.
-
-3. **Gateway token**  
-   Remains in `openclaw.json` or `JARVIS_OPENCLAW_GATEWAY_TOKEN` as already documented.
-
-## Verification scripts
-
-- `scripts/11-verify-model-lanes.ps1` — Ollama, `qwen3:4b` (or `OLLAMA_MODEL`), OpenClaw CLI, gateway HTTP, `openclaw.json` model, auth file presence (no secret dump).
-- `scripts/11-smoke-model-lanes.ps1` — Ollama `/api/generate` plus one safe command through control plane → executor → receipt with `execution_meta`.
-
-`jarvis.ps1` runs `11-verify-model-lanes.ps1 -Startup` after the gateway starts (warnings only).
-
-## Mission routing authority (control plane + coordinator)
-
-Mission commands (Command Center → Redis → coordinator → DashClaw → `jarvis.execution`) carry an explicit **routing decision** separate from OpenClaw’s **gateway model** string:
-
-- **`routing_decided`** mission events record the **requested** lane (`local_fast` vs `gateway`) from deterministic v1 heuristics, the **actual** lane used for the mission executor path, and **fallback** when the classifier preferred `local_fast` but execution still goes through the OpenClaw executor (the only mission execution path today).
-- **Executor receipts** (`execution_meta.routing`) include the same compact fields (no secrets).
-
-This is **routing authority + observability**: it does not add a second mission executor runtime. Voice and other surfaces may still use direct Ollama for fast acks; that path is separate from mission execution.
-
-## Voice vs executor
-
-- **Voice** talks to Ollama **directly** for fast acks.
-- **Executor** talks to OpenClaw only. To force all text through one stack, you would change product behavior; today the architecture keeps voice local-fast and mission execution on the gateway path by design.
+- **Not verified**: cloud credentials until you follow OpenClaw docs for `auth-profiles.json`.

@@ -507,6 +507,7 @@ def _meta(
             "actual_lane",
             "fallback_applied",
             "reason_code",
+            "fallback_reason_code",
             "pending_approval",
         ):
             if k in p:

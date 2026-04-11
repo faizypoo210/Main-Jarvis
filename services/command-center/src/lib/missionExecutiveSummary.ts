@@ -27,11 +27,15 @@ export type ExecutiveMissionSummary = {
 };
 
 export type CompactExecutionMeta = {
+  /** @deprecated prefer openclawModelLane — same value; legacy executor field name */
   lane?: string;
+  openclawModelLane?: string;
   model?: string;
   resumedFromApproval?: boolean;
   /** Compact routing authority line (from execution_meta.routing). */
   routingLine?: string;
+  /** Reconciled block (execution_meta.lane_truth) — one-line summary. */
+  laneTruthLine?: string;
 };
 
 function eventTitle(type: string): string {
@@ -207,7 +211,13 @@ export function deriveExecutiveMissionSummary(
 export function compactExecutionMeta(raw: unknown): CompactExecutionMeta | null {
   if (raw == null || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const lane = typeof o.lane === "string" ? o.lane : undefined;
+  const openclawModelLane =
+    typeof o.openclaw_model_lane === "string"
+      ? o.openclaw_model_lane
+      : typeof o.lane === "string"
+        ? o.lane
+        : undefined;
+  const lane = openclawModelLane;
   const model =
     typeof o.model === "string"
       ? o.model
@@ -228,21 +238,46 @@ export function compactExecutionMeta(raw: unknown): CompactExecutionMeta | null 
     const fb = r.fallback_applied === true;
     if (req && act) {
       if (fb && req === "local_fast" && act === "gateway") {
-        routingLine = "route local-fast → gateway (fallback)";
+        routingLine = "mission route: local-fast → gateway (no local mission executor)";
       } else {
-        routingLine = `route ${req} → ${act}`;
+        routingLine = `mission route: ${req} → ${act}`;
       }
     }
   }
-  if (!lane && !model && !resumedFromApproval && !routingLine) return null;
-  return { lane, model, resumedFromApproval, routingLine };
+  let laneTruthLine: string | undefined;
+  const lt = o.lane_truth;
+  if (lt && typeof lt === "object") {
+    const t = lt as Record<string, unknown>;
+    const oml = typeof t.openclaw_model_lane === "string" ? t.openclaw_model_lane : "";
+    const req = typeof t.requested_lane === "string" ? t.requested_lane : "";
+    const ral = typeof t.routing_actual_lane === "string" ? t.routing_actual_lane : "";
+    if (oml && req && ral) {
+      laneTruthLine = `OpenClaw model: ${oml} · mission path: ${req}→${ral}`;
+    } else if (oml) {
+      laneTruthLine = `OpenClaw model lane: ${oml}`;
+    }
+  }
+  if (!openclawModelLane && !model && !resumedFromApproval && !routingLine && !laneTruthLine) return null;
+  return {
+    lane,
+    openclawModelLane,
+    model,
+    resumedFromApproval,
+    routingLine,
+    laneTruthLine,
+  };
 }
 
 export function formatExecutionMetaParts(meta: CompactExecutionMeta): string[] {
   const parts: string[] = [];
-  if (meta.lane) parts.push(`Lane ${meta.lane}`);
+  if (meta.laneTruthLine) parts.push(meta.laneTruthLine);
+  else {
+    if (meta.openclawModelLane || meta.lane) {
+      parts.push(`OpenClaw model lane: ${meta.openclawModelLane ?? meta.lane}`);
+    }
+    if (meta.routingLine) parts.push(meta.routingLine);
+  }
   if (meta.model) parts.push(meta.model);
-  if (meta.routingLine) parts.push(meta.routingLine);
   if (meta.resumedFromApproval) parts.push("Resumed after approval");
   return parts;
 }

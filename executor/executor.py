@@ -25,6 +25,8 @@ from dotenv import load_dotenv
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
+from shared.lane_truth import MISSION_EXECUTION_PATH_OPENCLAW, build_lane_truth_block
+
 load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -127,6 +129,7 @@ _ROUTING_KEYS = frozenset(
         "actual_lane",
         "fallback_applied",
         "reason_code",
+        "fallback_reason_code",
         "reason_summary",
         "requires_tools",
         "requires_long_running_execution",
@@ -140,21 +143,29 @@ def _build_execution_meta(
     *,
     gateway_model: str | None,
 ) -> dict[str, Any]:
-    lane = _lane_from_gateway_model(gateway_model)
+    oml = _lane_from_gateway_model(gateway_model)
     resumed = bool(data.get("resumed")) or bool(data.get("approval_id"))
     meta: dict[str, Any] = {
-        "lane": lane,
+        # OpenClaw default model target (ollama/* → local; else cloud/other). Not mission routing.
+        "lane": oml,
+        "openclaw_model_lane": oml,
         "gateway_model": gateway_model,
-        "local_model": _local_model_from_gateway(gateway_model, lane),
+        "local_model": _local_model_from_gateway(gateway_model, oml),
         "resumed_from_approval": resumed,
+        "mission_execution_path": MISSION_EXECUTION_PATH_OPENCLAW,
     }
-    if lane == "gateway":
+    if oml == "gateway":
         meta["auth_profiles_present"] = _auth_profiles_appear_configured()
     raw_routing = data.get("routing")
+    routing_subset: dict[str, Any] = {}
     if isinstance(raw_routing, dict):
-        routing = {k: raw_routing[k] for k in _ROUTING_KEYS if k in raw_routing}
-        if routing:
-            meta["routing"] = routing
+        routing_subset = {k: raw_routing[k] for k in _ROUTING_KEYS if k in raw_routing}
+        if routing_subset:
+            meta["routing"] = routing_subset
+    meta["lane_truth"] = build_lane_truth_block(
+        routing=raw_routing if isinstance(raw_routing, dict) else None,
+        openclaw_model_lane=oml,
+    )
     return meta
 
 

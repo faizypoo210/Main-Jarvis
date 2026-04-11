@@ -90,6 +90,8 @@ class RoutingEvalMetrics(BaseModel):
     requested_matches_actual_lane: int = 0
     requested_differs_actual_lane: int = 0
     local_fast_to_gateway_fallback: int = 0
+    requested_local_fast: int = 0
+    routing_actual_gateway: int = 0
 
 
 class EvalDayBucket(BaseModel):

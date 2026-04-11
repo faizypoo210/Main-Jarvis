@@ -39,8 +39,8 @@ try {
     exit 1
 }
 
-# --- Lane 2: OpenClaw execution path (executor receipt with execution_meta) ---
-Write-Host "--- Execution lane (control plane -> executor -> OpenClaw) ---" -ForegroundColor Cyan
+# --- Lane 2: Mission path + OpenClaw execution (routing_decided + executor receipt) ---
+Write-Host "--- Mission + execution lane (control plane -> coordinator -> executor -> OpenClaw) ---" -ForegroundColor Cyan
 $apiKey = Get-ApiKey
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
     Write-Host "[FAIL] CONTROL_PLANE_API_KEY not set (required for command POST)." -ForegroundColor Red
@@ -65,6 +65,7 @@ Write-Host "[INFO] mission_id=$missionId" -ForegroundColor DarkGray
 
 $deadline = (Get-Date).AddSeconds(240)
 $okExec = $false
+$sawRouting = $false
 while ((Get-Date) -lt $deadline) {
     try {
         $ms = Invoke-RestMethod -Uri "http://localhost:8001/api/v1/missions/$missionId" -Method Get -TimeoutSec 15
@@ -80,14 +81,31 @@ while ((Get-Date) -lt $deadline) {
         exit 1
     }
     foreach ($e in @($events)) {
+        if ($e.event_type -eq 'routing_decided' -and $e.payload) {
+            $rp = $e.payload
+            $req = [string]$rp.requested_lane
+            $act = [string]$rp.actual_lane
+            if ($req -and $act) {
+                Write-Host "[PASS] routing_decided: requested=$req actual=$act fallback=$($rp.fallback_applied)" -ForegroundColor Green
+                $sawRouting = $true
+            }
+        }
         if ($e.event_type -eq 'receipt_recorded' -and $e.payload) {
             $p = $e.payload
             $em = $null
             if ($p.PSObject.Properties['execution_meta']) { $em = $p.execution_meta }
             if ($null -ne $em) {
-                Write-Host "[PASS] Execution lane: receipt_recorded.execution_meta (lane=$($em.lane) gateway_model=$($em.gateway_model))" -ForegroundColor Green
+                $lt = $null
+                if ($em.PSObject.Properties['lane_truth']) { $lt = $em.lane_truth }
+                $oml = [string]$em.openclaw_model_lane
+                if (-not $oml) { $oml = [string]$em.lane }
+                Write-Host "[PASS] Execution receipt: openclaw_model_lane=$oml gateway_model=$($em.gateway_model)" -ForegroundColor Green
+                if ($null -ne $lt) {
+                    Write-Host "[PASS] execution_meta.lane_truth present (schema=$($lt.schema_version))" -ForegroundColor Green
+                } else {
+                    Write-Host "[WARN] execution_meta.lane_truth missing (older executor?)" -ForegroundColor Yellow
+                }
                 $okExec = $true
-                break
             }
         }
     }
@@ -100,6 +118,10 @@ if (-not $okExec) {
     exit 1
 }
 
+if (-not $sawRouting) {
+    Write-Host "[WARN] No routing_decided on timeline (unexpected if coordinator posted events)." -ForegroundColor Yellow
+}
+
 Write-Host ""
-Write-Host "SMOKE_MODEL_LANES_PASS local=1 execution_path=1" -ForegroundColor Green
+Write-Host "SMOKE_MODEL_LANES_PASS local=1 execution_path=1 routing_observed=$sawRouting" -ForegroundColor Green
 exit 0

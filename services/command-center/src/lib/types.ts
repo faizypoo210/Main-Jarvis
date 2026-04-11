@@ -400,6 +400,8 @@ export interface RoutingEvalMetrics {
   requested_matches_actual_lane: number;
   requested_differs_actual_lane: number;
   local_fast_to_gateway_fallback: number;
+  requested_local_fast: number;
+  routing_actual_gateway: number;
 }
 
 export interface EvalDayBucket {

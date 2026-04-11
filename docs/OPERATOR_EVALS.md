@@ -14,7 +14,7 @@ This document describes how to **measure** the current Jarvis operator stack (co
 | **Governed integration success** | Counts of `receipts.receipt_type` in the window: `github_issue_created` / `github_issue_failed`, `gmail_draft_*`, `gmail_draft_sent` / `gmail_draft_send_failed`. |
 | **Failure categorization** | **Derived** from `receipts.payload->>'error_code'` on failed integration receipts using small rules (`missing_*` → missing_auth, `*_http_*` → provider_http_error, `invalid_contract` / `missing_contract` / `invalid_draft_id` → validation_error, etc.). **`approval_denied`** is counted from **mission events**, not receipts. |
 | **Heartbeat usefulness** | Window: `first_seen_at` (opened), `resolved_at` (resolved). **Open by type** is a **current snapshot** of open findings. |
-| **Routing** | `routing_decided` events in window; lane match vs mismatch; `local_fast` → `gateway` when `fallback_applied` is true in the event payload. |
+| **Routing** | `routing_decided` events in window; lane match vs mismatch; explicit counts for **requested** `local_fast` and **actual** `gateway` path; `local_fast` → `gateway` when `fallback_applied` (see `fallback_reason_code`). OpenClaw model target (`openclaw_model_lane`) is on **execution receipts**, not these counts. |
 
 **API:** `GET /api/v1/operator/evals?window_hours=…&group_by=day` (optional daily rollup). **UI:** Command Center `/evals`. **Script:** [`scripts/18-run-operator-value-evals.ps1`](../scripts/18-run-operator-value-evals.ps1) writes `docs/reports/operator-value-evals-<UTC>.json` plus a short `.txt` summary.
 

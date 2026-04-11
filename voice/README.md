@@ -16,3 +16,7 @@ Ephemeral per-WebSocket state in `approval_voice.py` (not persisted to the contr
 Decisions use `POST /api/v1/approvals/{id}/decision` with `decided_via: "voice"` and `decided_by: "operator"`. Requires `CONTROL_PLANE_API_KEY` for POST.
 
 Other utterances still POST to `POST /api/v1/commands` as before.
+
+## Model lanes (voice vs mission)
+
+Fast Ollama acknowledgments in this service use **direct HTTP** to Ollama when configured. That path does **not** populate mission `routing_decided` or executor `execution_meta`. Mission work that runs through `jarvis.execution` is always the **OpenClaw executor** path; see repo root `docs/MODEL_LANES.md` for the canonical vocabulary (`requested_lane`, `openclaw_model_lane`, `lane_truth`, etc.).

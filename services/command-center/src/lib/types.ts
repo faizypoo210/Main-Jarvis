@@ -492,6 +492,38 @@ export interface CostEventEvalMetrics {
   provider_breakdown: Record<string, number>;
 }
 
+export interface CostGuardrailEvalMetrics {
+  cost_findings_opened_in_window: number;
+  cost_findings_resolved_in_window: number;
+  open_cost_findings_now: number;
+}
+
+/** GET /api/v1/operator/cost-guardrails */
+export interface CostGuardrailConfigRead {
+  window_hours: number;
+  direct_usd_threshold: number;
+  estimated_usd_threshold: number;
+  unknown_count_threshold: number;
+  provider_concentration_pct_threshold: number;
+  min_events_for_concentration: number;
+}
+
+export interface CostGuardrailBreachActive {
+  direct_spend_high: boolean;
+  estimated_spend_high: boolean;
+  unknown_spike: boolean;
+  provider_concentration: boolean;
+}
+
+export interface OperatorCostGuardrailsResponse {
+  generated_at: string;
+  config: CostGuardrailConfigRead;
+  metrics: Record<string, unknown>;
+  breach_active: CostGuardrailBreachActive;
+  open_cost_findings: HeartbeatFindingRead[];
+  recent_resolved_cost_findings: HeartbeatFindingRead[];
+}
+
 export interface OperatorValueEvalsResponse {
   generated_at: string;
   window_hours: number;
@@ -506,5 +538,6 @@ export interface OperatorValueEvalsResponse {
   routing_metrics: RoutingEvalMetrics;
   worker_registry_metrics: WorkerRegistryEvalMetrics;
   cost_event_metrics: CostEventEvalMetrics;
+  cost_guardrail_metrics: CostGuardrailEvalMetrics;
   timeseries: EvalDayBucket[];
 }

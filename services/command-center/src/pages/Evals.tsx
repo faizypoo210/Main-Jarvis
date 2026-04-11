@@ -377,6 +377,33 @@ export function Evals() {
 
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Cost guardrails (heartbeat)
+              </h2>
+              <p className="mb-2 max-w-3xl text-[10px] leading-relaxed text-[var(--text-muted)]">
+                <code className="font-mono">cost_*</code> findings from env thresholds on{" "}
+                <code className="font-mono">cost_events</code>; opened/resolved counts use the same eval window.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MetricCard
+                  label="Cost findings opened"
+                  value={data.cost_guardrail_metrics.cost_findings_opened_in_window}
+                  hint="first_seen in window"
+                />
+                <MetricCard
+                  label="Cost findings resolved"
+                  value={data.cost_guardrail_metrics.cost_findings_resolved_in_window}
+                  hint="resolved_at in window"
+                />
+                <MetricCard
+                  label="Open cost findings now"
+                  value={data.cost_guardrail_metrics.open_cost_findings_now}
+                  hint="snapshot"
+                />
+              </div>
+            </section>
+
+            <section className="mb-6">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Heartbeat
               </h2>
               <div className="mb-2 grid gap-3 sm:grid-cols-3">

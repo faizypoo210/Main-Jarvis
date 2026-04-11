@@ -21,8 +21,10 @@ from app.schemas.operator import (
     OperatorUsageResponse,
 )
 from app.schemas.cost_events import OperatorCostEventsResponse
+from app.schemas.cost_guardrails import OperatorCostGuardrailsResponse
 from app.schemas.workers import OperatorWorkersResponse
 from app.schemas.operator_evals import OperatorValueEvalsResponse
+from app.services.cost_guardrail_service import build_operator_cost_guardrails_response
 from app.services.cost_operator_service import fetch_operator_cost_events
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
 from app.services.operator_integrations import build_integrations_report
@@ -114,6 +116,14 @@ async def operator_activity(
         items=items,
         next_before=next_before,
     )
+
+
+@router.get("/operator/cost-guardrails", response_model=OperatorCostGuardrailsResponse)
+async def operator_cost_guardrails(
+    session: AsyncSession = Depends(get_db),
+) -> OperatorCostGuardrailsResponse:
+    """Env thresholds + rolling cost_events metrics + open `cost_*` heartbeat findings."""
+    return await build_operator_cost_guardrails_response(session)
 
 
 @router.get("/operator/cost-events", response_model=OperatorCostEventsResponse)

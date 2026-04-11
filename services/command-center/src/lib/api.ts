@@ -13,6 +13,7 @@ import type {
   OperatorActivityResponse,
   OperatorIntegrationsResponse,
   OperatorCostEventsResponse,
+  OperatorCostGuardrailsResponse,
   OperatorUsageResponse,
   OperatorWorkersResponse,
   OperatorValueEvalsResponse,
@@ -269,6 +270,10 @@ export async function getSystemHealth(): Promise<SystemHealthResponse> {
 
 export async function getOperatorUsage(): Promise<OperatorUsageResponse> {
   return requestJson<OperatorUsageResponse>(`${BASE}/operator/usage`);
+}
+
+export async function getOperatorCostGuardrails(): Promise<OperatorCostGuardrailsResponse> {
+  return requestJson<OperatorCostGuardrailsResponse>(`${BASE}/operator/cost-guardrails`);
 }
 
 export async function getOperatorCostEvents(params?: {

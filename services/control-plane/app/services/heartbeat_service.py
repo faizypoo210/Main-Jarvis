@@ -1,6 +1,6 @@
 """Heartbeat v1 — explicit supervision checks, deduped findings.
 
-Future: cost anomaly rules can use persisted `cost_events` (see `cost_event_service.py`) without implying precision we do not store.
+Cost guardrails (v1): `cost_guardrail_service` evaluates `cost_events` against env thresholds; finding_types `cost_*`.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import engine
 from app.models.heartbeat_finding import HeartbeatFinding
+from app.services.cost_guardrail_service import collect_cost_guardrail_candidates
 from app.repositories.heartbeat_finding_repo import HeartbeatFindingRepository
 from app.schemas.heartbeat import HeartbeatFindingRead, HeartbeatOperatorResponse, HeartbeatRunResponse
 from redis.asyncio import Redis
@@ -304,6 +305,19 @@ async def _collect_candidates(session: AsyncSession) -> list[_Candidate]:
                 summary=f"Integration «{row['name']}» status={row['status']} (DB row).",
                 integration_id=iid,
                 provenance_note="integrations.status from control plane DB only.",
+            )
+        )
+
+    # --- Cost guardrails (cost_events rolling window vs explicit env thresholds) ---
+    for cc in await collect_cost_guardrail_candidates(session, now):
+        candidates.append(
+            _Candidate(
+                dedupe_key=cc.dedupe_key,
+                finding_type=cc.finding_type,
+                severity=cc.severity,
+                summary=cc.summary,
+                provenance_note=cc.provenance_note,
+                service_component="cost_guardrails",
             )
         )
 

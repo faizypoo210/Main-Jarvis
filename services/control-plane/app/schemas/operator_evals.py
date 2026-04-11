@@ -132,6 +132,14 @@ class CostEventEvalMetrics(BaseModel):
     provider_breakdown: dict[str, int] = Field(default_factory=dict)
 
 
+class CostGuardrailEvalMetrics(BaseModel):
+    """Heartbeat `cost_*` findings — guardrail-driven; not dollar budgets."""
+
+    cost_findings_opened_in_window: int = 0
+    cost_findings_resolved_in_window: int = 0
+    open_cost_findings_now: int = 0
+
+
 class OperatorValueEvalsResponse(BaseModel):
     generated_at: str
     window_hours: int
@@ -146,4 +154,5 @@ class OperatorValueEvalsResponse(BaseModel):
     routing_metrics: RoutingEvalMetrics
     worker_registry_metrics: WorkerRegistryEvalMetrics
     cost_event_metrics: CostEventEvalMetrics
+    cost_guardrail_metrics: CostGuardrailEvalMetrics
     timeseries: list[EvalDayBucket] = Field(default_factory=list)

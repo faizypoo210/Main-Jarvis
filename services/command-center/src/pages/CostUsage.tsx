@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useOperatorCostEvents } from "../hooks/useOperatorCostEvents";
+import { useOperatorCostGuardrails } from "../hooks/useOperatorCostGuardrails";
 import { useOperatorUsage } from "../hooks/useOperatorUsage";
 import { formatRelativeTime } from "../lib/format";
 
@@ -17,6 +18,7 @@ function fmtUsd(v: string | number): string {
 export function CostUsage() {
   const { data, error, loading } = useOperatorUsage();
   const cost = useOperatorCostEvents();
+  const guard = useOperatorCostGuardrails();
 
   const maxDay = useMemo(
     () => maxInSeries((data?.receipts_by_day_utc ?? []).map((d) => d.count)),
@@ -30,12 +32,12 @@ export function CostUsage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {error || cost.error ? (
+      {error || cost.error || guard.error ? (
         <div
           className="shrink-0 border-b border-[var(--status-amber)]/30 bg-[var(--status-amber)]/10 px-4 py-2 text-center text-xs text-[var(--status-amber)] md:px-6"
           role="status"
         >
-          {error ?? cost.error}
+          {error ?? cost.error ?? guard.error}
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6">
@@ -176,6 +178,135 @@ export function CostUsage() {
                 path).
               </p>
             )}
+          </section>
+        ) : null}
+
+        {guard.loading && !guard.data ? (
+          <p className="mb-4 text-sm text-[var(--text-muted)]">Loading cost guardrails…</p>
+        ) : null}
+
+        {guard.data ? (
+          <section className="mb-6" aria-labelledby="cost-guardrails">
+            <h2
+              id="cost-guardrails"
+              className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]"
+            >
+              Guardrails & heartbeat cost findings
+            </h2>
+            <p className="mb-3 max-w-3xl text-[10px] leading-relaxed text-[var(--text-muted)]">
+              Rolling window <span className="font-mono">{guard.data.config.window_hours}h</span> — same basis as{" "}
+              <code className="font-mono">POST /api/v1/heartbeat/run</code>. Thresholds are env-only (see{" "}
+              <code className="font-mono">HEARTBEAT_COST_*</code>); zero disables a check. Findings dedupe in{" "}
+              <code className="font-mono">heartbeat_findings</code>.
+            </p>
+            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-surface)]/50 px-3 py-2">
+                <p className="text-[9px] uppercase text-[var(--text-muted)]">Direct USD threshold</p>
+                <p className="font-mono text-sm text-[var(--text-primary)]">
+                  {guard.data.config.direct_usd_threshold}
+                </p>
+                <p className="mt-1 text-[9px] text-[var(--text-muted)]">
+                  Breach:{" "}
+                  <span
+                    className={
+                      guard.data.breach_active.direct_spend_high
+                        ? "text-[var(--status-amber)]"
+                        : "text-[var(--text-secondary)]"
+                    }
+                  >
+                    {guard.data.breach_active.direct_spend_high ? "yes" : "no"}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-surface)]/50 px-3 py-2">
+                <p className="text-[9px] uppercase text-[var(--text-muted)]">Estimated USD threshold</p>
+                <p className="font-mono text-sm text-[var(--text-primary)]">
+                  {guard.data.config.estimated_usd_threshold}
+                </p>
+                <p className="mt-1 text-[9px] text-[var(--text-muted)]">
+                  Breach:{" "}
+                  <span
+                    className={
+                      guard.data.breach_active.estimated_spend_high
+                        ? "text-[var(--status-amber)]"
+                        : "text-[var(--text-secondary)]"
+                    }
+                  >
+                    {guard.data.breach_active.estimated_spend_high ? "yes" : "no"}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-surface)]/50 px-3 py-2">
+                <p className="text-[9px] uppercase text-[var(--text-muted)]">Unknown-count threshold</p>
+                <p className="font-mono text-sm text-[var(--text-primary)]">
+                  {guard.data.config.unknown_count_threshold}
+                </p>
+                <p className="mt-1 text-[9px] text-[var(--text-muted)]">
+                  Breach:{" "}
+                  <span
+                    className={
+                      guard.data.breach_active.unknown_spike
+                        ? "text-[var(--status-amber)]"
+                        : "text-[var(--text-secondary)]"
+                    }
+                  >
+                    {guard.data.breach_active.unknown_spike ? "yes" : "no"}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-surface)]/50 px-3 py-2">
+                <p className="text-[9px] uppercase text-[var(--text-muted)]">Concentration % / min events</p>
+                <p className="font-mono text-sm text-[var(--text-primary)]">
+                  {guard.data.config.provider_concentration_pct_threshold}% /{" "}
+                  {guard.data.config.min_events_for_concentration} ev
+                </p>
+                <p className="mt-1 text-[9px] text-[var(--text-muted)]">
+                  Breach:{" "}
+                  <span
+                    className={
+                      guard.data.breach_active.provider_concentration
+                        ? "text-[var(--status-amber)]"
+                        : "text-[var(--text-secondary)]"
+                    }
+                  >
+                    {guard.data.breach_active.provider_concentration ? "yes" : "no"}
+                  </span>
+                </p>
+              </div>
+            </div>
+            {guard.data.open_cost_findings.length > 0 ? (
+              <div className="mb-3 rounded-xl border border-[var(--status-amber)]/25 bg-[var(--status-amber)]/5 p-3">
+                <p className="mb-2 text-[10px] font-semibold uppercase text-[var(--text-muted)]">
+                  Open cost findings ({guard.data.open_cost_findings.length})
+                </p>
+                <ul className="space-y-2 text-xs">
+                  {guard.data.open_cost_findings.map((f) => (
+                    <li key={f.id}>
+                      <span className="font-mono text-[var(--text-secondary)]">{f.finding_type}</span>{" "}
+                      <span className="text-[var(--text-muted)]">({f.severity})</span>
+                      <p className="mt-0.5 text-[var(--text-secondary)]">{f.summary}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mb-3 text-xs text-[var(--text-muted)]">No open cost guardrail findings.</p>
+            )}
+            {guard.data.recent_resolved_cost_findings.length > 0 ? (
+              <div className="rounded-xl border border-[var(--bg-border)] bg-[var(--bg-surface)]/40 p-3">
+                <p className="mb-2 text-[10px] font-semibold uppercase text-[var(--text-muted)]">
+                  Recently resolved (cost)
+                </p>
+                <ul className="space-y-1 text-[10px] text-[var(--text-muted)]">
+                  {guard.data.recent_resolved_cost_findings.map((f) => (
+                    <li key={f.id}>
+                      <span className="font-mono text-[var(--text-secondary)]">{f.finding_type}</span> — resolved{" "}
+                      {f.resolved_at ? formatRelativeTime(f.resolved_at) : "—"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
         ) : null}
 

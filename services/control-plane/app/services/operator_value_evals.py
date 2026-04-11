@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.operator_evals import (
     ApprovalEvalMetrics,
     CostEventEvalMetrics,
+    CostGuardrailEvalMetrics,
     EvalDataQuality,
     EvalDayBucket,
     FailureCategoryCounts,
@@ -112,6 +113,7 @@ async def build_operator_value_evals(
         "Mission/receipt/event/approval/heartbeat row counts filtered by created_at (or decided_at) in the UTC window.",
         "Open heartbeat counts are current snapshots (not window-limited).",
         "cost_events aggregates filtered by created_at in the UTC window (USD totals only where cost_status and currency are stored).",
+        "heartbeat_findings with finding_type matching ^cost_ (regex) — opened (first_seen) or resolved in the UTC window; open count is a current snapshot.",
     ]
     derived: list[str] = [
         "Median/p90 seconds from per-mission deltas (mission created_at to first child row).",
@@ -575,6 +577,42 @@ async def build_operator_value_evals(
     except Exception:
         cost_event_metrics = CostEventEvalMetrics()
 
+    try:
+        r_cg1 = await session.execute(
+            text(
+                """
+                SELECT COUNT(*)::int FROM heartbeat_findings
+                WHERE finding_type ~ '^cost_' AND first_seen_at >= :start AND first_seen_at < :end
+                """
+            ),
+            bind,
+        )
+        r_cg2 = await session.execute(
+            text(
+                """
+                SELECT COUNT(*)::int FROM heartbeat_findings
+                WHERE finding_type ~ '^cost_' AND resolved_at IS NOT NULL
+                  AND resolved_at >= :start AND resolved_at < :end
+                """
+            ),
+            bind,
+        )
+        r_cg3 = await session.execute(
+            text(
+                """
+                SELECT COUNT(*)::int FROM heartbeat_findings
+                WHERE finding_type ~ '^cost_' AND status = 'open'
+                """
+            )
+        )
+        cost_guardrail_metrics = CostGuardrailEvalMetrics(
+            cost_findings_opened_in_window=int(r_cg1.scalar_one() or 0),
+            cost_findings_resolved_in_window=int(r_cg2.scalar_one() or 0),
+            open_cost_findings_now=int(r_cg3.scalar_one() or 0),
+        )
+    except Exception:
+        cost_guardrail_metrics = CostGuardrailEvalMetrics()
+
     return OperatorValueEvalsResponse(
         generated_at=end.isoformat().replace("+00:00", "Z"),
         window_hours=wh,
@@ -598,5 +636,6 @@ async def build_operator_value_evals(
         routing_metrics=routing_metrics,
         worker_registry_metrics=wr_metrics,
         cost_event_metrics=cost_event_metrics,
+        cost_guardrail_metrics=cost_guardrail_metrics,
         timeseries=timeseries,
     )

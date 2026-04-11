@@ -16,6 +16,7 @@ This document describes how to **measure** the current Jarvis operator stack (co
 | **Heartbeat usefulness** | Window: `first_seen_at` (opened), `resolved_at` (resolved). **Open by type** is a **current snapshot** of open findings. |
 | **Routing** | `routing_decided` events in window; lane match vs mismatch; explicit counts for **requested** `local_fast` and **actual** `gateway` path; `local_fast` → `gateway` when `fallback_applied` (see `fallback_reason_code`). OpenClaw model target (`openclaw_model_lane`) is on **execution receipts**, not these counts. |
 | **Cost events** | **Direct** from `cost_events` with `created_at` in the window: counts by `cost_status`, sums of USD where `currency='USD'` and status is `direct` or `estimated`, provider breakdown. Does **not** infer spend from receipt volume. |
+| **Cost guardrails (heartbeat)** | **`cost_guardrail_metrics`:** counts of `heartbeat_findings` where `finding_type` matches `^cost_` — opened in window (`first_seen_at`), resolved in window (`resolved_at`), and **open now** (`status = open`). Reflects guardrail-driven **`cost_*`** supervision rows, not dollar budgets. |
 
 **API:** `GET /api/v1/operator/evals?window_hours=…&group_by=day` (optional daily rollup). **UI:** Command Center `/evals`. **Script:** [`scripts/18-run-operator-value-evals.ps1`](../scripts/18-run-operator-value-evals.ps1) writes `docs/reports/operator-value-evals-<UTC>.json` plus a short `.txt` summary.
 

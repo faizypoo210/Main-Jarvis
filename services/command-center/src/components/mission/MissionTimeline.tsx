@@ -2,8 +2,9 @@ import type { MissionEvent } from "../../lib/types";
 import { formatRelativeTime } from "../../lib/format";
 import { ExecutionMetaLine } from "./ExecutionMetaLine";
 import { operatorCopy } from "../../lib/operatorCopy";
+import type { GovernedTimelinePresentation } from "../../lib/governedCatalogPresentation";
 
-function timelineEventTitle(ev: MissionEvent): string {
+function timelineEventTitle(ev: MissionEvent, pres: GovernedTimelinePresentation | null): string {
   const p = ev.payload as Record<string, unknown> | null;
   if (ev.event_type === "memory_saved" && p) {
     const t = typeof p.title === "string" ? p.title.trim() : "";
@@ -126,6 +127,22 @@ function timelineEventTitle(ev: MissionEvent): string {
     if (act === "gateway") return "Routing decided: gateway";
     if (act === "local_fast") return "Routing decided: local-fast";
   }
+  if (
+    pres &&
+    ev.event_type === "approval_requested" &&
+    p &&
+    typeof p.action_type === "string" &&
+    p.action_type.trim()
+  ) {
+    return `Approval requested · ${pres.labelForApprovalAction(p.action_type)}`;
+  }
+  if (pres && ev.event_type === "approval_resolved" && p && typeof p.action_type === "string" && p.action_type.trim()) {
+    const lab = pres.labelForApprovalAction(p.action_type);
+    const dec = typeof p.decision === "string" ? p.decision.toLowerCase() : "";
+    if (dec === "approved") return `Approval approved · ${lab}`;
+    if (dec === "denied") return `Approval denied · ${lab}`;
+    return `Approval resolved · ${lab}`;
+  }
   switch (ev.event_type) {
     case "created":
       return "Mission created";
@@ -160,14 +177,18 @@ export function MissionTimeline({
   events,
   missionStatus,
   phaseLabel,
+  governedPresentation,
 }: {
   events: MissionEvent[];
   /** Optional: tailor empty copy when the mission is waiting on governance. */
   missionStatus?: string;
   /** Derived operator phase (same as mission detail header) — empty timeline only. */
   phaseLabel?: string | null;
+  /** Catalog-backed labels for approval mission events (optional). */
+  governedPresentation?: GovernedTimelinePresentation | null;
 }) {
   const sorted = sortEventsChronological(events);
+  const pres = governedPresentation ?? null;
 
   if (sorted.length === 0) {
     const empty =
@@ -216,7 +237,7 @@ export function MissionTimeline({
             <div className={`min-w-0 flex-1 pb-6 ${isLast ? "pb-0" : ""}`}>
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-                  {timelineEventTitle(ev)}
+                  {timelineEventTitle(ev, pres)}
                 </span>
                 <span className="font-mono text-[10px] text-[var(--text-muted)]">
                   {formatRelativeTime(ev.created_at)}
@@ -229,14 +250,32 @@ export function MissionTimeline({
               ) : null}
               {ev.event_type === "approval_requested" && p ? (
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  {typeof p.action_type === "string" ? p.action_type : null}
+                  {typeof p.action_type === "string" && pres
+                    ? `${pres.labelForApprovalAction(p.action_type)}${
+                        typeof p.requested_via === "string"
+                          ? ` · via ${pres.humanizeVia(p.requested_via)}`
+                          : ""
+                      }`
+                    : typeof p.action_type === "string"
+                      ? p.action_type
+                      : null}
                   {typeof p.reason === "string" && String(p.reason).trim() ? ` — ${p.reason}` : null}
                 </p>
               ) : null}
               {ev.event_type === "approval_resolved" && p ? (
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  {typeof p.decision === "string" ? p.decision : ""}
+                  {typeof p.action_type === "string" && pres
+                    ? pres.labelForApprovalAction(p.action_type)
+                    : typeof p.action_type === "string"
+                      ? p.action_type
+                      : null}
+                  {typeof p.decision === "string" ? ` · ${p.decision}` : ""}
                   {typeof p.decided_by === "string" ? ` · ${p.decided_by}` : ""}
+                  {typeof p.decided_via === "string" && pres
+                    ? ` · via ${pres.humanizeVia(p.decided_via)}`
+                    : typeof p.decided_via === "string"
+                      ? ` · via ${p.decided_via}`
+                      : ""}
                 </p>
               ) : null}
               {ev.event_type === "memory_saved" && p ? (

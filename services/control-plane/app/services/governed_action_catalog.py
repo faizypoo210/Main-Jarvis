@@ -312,6 +312,11 @@ def _entries() -> list[GovernedActionCatalogEntryRead]:
     ]
 
 
+def governed_entries_by_approval_action_type() -> dict[str, GovernedActionCatalogEntryRead]:
+    """Lookup catalog row by stored approval `action_type` (approval_action_type)."""
+    return {e.approval_action_type: e for e in _entries() if e.enabled}
+
+
 def build_governed_action_catalog_response() -> GovernedActionCatalogResponse:
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     return GovernedActionCatalogResponse(

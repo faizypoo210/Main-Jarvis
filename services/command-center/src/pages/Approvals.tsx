@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import * as api from "../lib/api";
 import { ApprovalReviewPanel } from "../components/approvals/ApprovalReviewPanel";
 import { RiskBadge, type Risk } from "../components/common/RiskBadge";
 import {
@@ -7,6 +8,8 @@ import {
   usePendingApprovals,
   useResolveApprovalAction,
 } from "../hooks/useControlPlane";
+import type { GovernedActionCatalogResponse } from "../lib/types";
+import { humanizeRequestedVia, labelForApprovalActionType } from "../lib/governedCatalogPresentation";
 
 function toRisk(r: string): Risk {
   return r === "green" || r === "amber" || r === "red" ? r : "amber";
@@ -16,7 +19,15 @@ export function Approvals() {
   const { approvals, loading, error, refetch } = usePendingApprovals();
   const [searchParams, setSearchParams] = useSearchParams();
   const pickApprovalId = searchParams.get("approval");
+  const [actionCatalog, setActionCatalog] = useState<GovernedActionCatalogResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api
+      .getOperatorActionCatalog()
+      .then(setActionCatalog)
+      .catch(() => setActionCatalog(null));
+  }, []);
   const { bundle, loading: bundleLoading, error: bundleError, refetch: refetchBundle } =
     useApprovalBundle(selectedId);
   const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
@@ -97,7 +108,7 @@ export function Approvals() {
                 <div className="flex items-center gap-2">
                   <RiskBadge risk={toRisk(a.risk_class)} />
                   <span className="min-w-0 flex-1 truncate font-display text-xs font-semibold text-[var(--text-primary)]">
-                    {a.action_type}
+                    {labelForApprovalActionType(a.action_type, actionCatalog)}
                   </span>
                 </div>
                 {a.reason?.trim() ? (
@@ -106,7 +117,7 @@ export function Approvals() {
                   </p>
                 ) : null}
                 <p className="mt-1 font-mono text-[9px] text-[var(--text-muted)]">
-                  {new Date(a.created_at).toLocaleString()}
+                  {new Date(a.created_at).toLocaleString()} · {humanizeRequestedVia(a.requested_via)}
                 </p>
               </button>
             ))

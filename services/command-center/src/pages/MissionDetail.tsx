@@ -23,6 +23,14 @@ import { operatorCopy } from "../lib/operatorCopy";
 import { deriveMissionTiming } from "../lib/missionTiming";
 import { MissionOperationalHealthRow, MissionTimingStrip } from "../components/mission/MissionObservability";
 import { GovernedActionLauncher } from "../components/governed/GovernedActionLauncher";
+import { RecentGovernedRequests } from "../components/governed/RecentGovernedRequests";
+import type { GovernedActionCatalogResponse } from "../lib/types";
+import {
+  buildGovernedTimelinePresentation,
+  HANDOFF_STORAGE_KEY,
+  humanizeRequestedVia,
+  labelForApprovalActionType,
+} from "../lib/governedCatalogPresentation";
 
 export function MissionDetail() {
   const { missionId = "" } = useParams<{ missionId: string }>();
@@ -47,6 +55,49 @@ export function MissionDetail() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [initialDone, setInitialDone] = useState(false);
+  const [actionCatalog, setActionCatalog] = useState<GovernedActionCatalogResponse | null>(null);
+  const [actionCatalogErr, setActionCatalogErr] = useState<string | null>(null);
+  const [actionCatalogLoading, setActionCatalogLoading] = useState(true);
+  const [handoffNotice, setHandoffNotice] = useState<{ approvalId: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setActionCatalogLoading(true);
+    void (async () => {
+      try {
+        const ac = await api.getOperatorActionCatalog();
+        if (!cancelled) {
+          setActionCatalog(ac);
+          setActionCatalogErr(null);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setActionCatalog(null);
+          setActionCatalogErr(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (!cancelled) setActionCatalogLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!missionId.trim()) return;
+    try {
+      const raw = sessionStorage.getItem(HANDOFF_STORAGE_KEY);
+      if (!raw) return;
+      const j = JSON.parse(raw) as { missionId?: string; approvalId?: string };
+      if (j.missionId === missionId && j.approvalId) {
+        setHandoffNotice({ approvalId: j.approvalId });
+        sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
+    }
+  }, [missionId]);
   useEffect(() => {
     if (!missionId.trim()) return;
     setThreadMissionId(missionId);
@@ -104,6 +155,11 @@ export function MissionDetail() {
     if (!mission) return null;
     return deriveMissionTiming(events, mission);
   }, [mission, events]);
+
+  const governedPresentation = useMemo(
+    () => buildGovernedTimelinePresentation(actionCatalog),
+    [actionCatalog]
+  );
 
   const pendingCount = useMemo(
     () => approvals.filter((a) => a.status === "pending").length,
@@ -260,6 +316,26 @@ export function MissionDetail() {
             </div>
           ) : null}
 
+          {handoffNotice ? (
+            <div className="rounded-lg border border-[var(--accent-blue)]/35 bg-[var(--accent-blue)]/10 px-3 py-2.5 text-xs leading-snug text-[var(--text-secondary)]">
+              <span className="font-medium text-[var(--text-primary)]">Approval request created.</span>{" "}
+              <Link
+                className="font-medium text-[var(--accent-blue)] hover:underline"
+                to={`/approvals?approval=${encodeURIComponent(handoffNotice.approvalId)}`}
+              >
+                Open in Approvals
+              </Link>
+              <span className="text-[var(--text-muted)]"> — same queue as voice requests.</span>{" "}
+              <button
+                type="button"
+                className="text-[var(--text-muted)] underline decoration-[var(--bg-border)] underline-offset-2 hover:text-[var(--text-secondary)]"
+                onClick={() => setHandoffNotice(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
           <section>
             <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
               Timeline
@@ -271,11 +347,22 @@ export function MissionDetail() {
                 events={events}
                 missionStatus={mission?.status}
                 phaseLabel={executiveSummary?.phaseLabel ?? null}
+                governedPresentation={governedPresentation}
               />
             )}
           </section>
 
-          {mission ? <GovernedActionLauncher missionId={mission.id} /> : null}
+          {mission ? (
+            <GovernedActionLauncher
+              key={mission.id}
+              missionId={mission.id}
+              catalog={actionCatalog}
+              catalogError={actionCatalogErr}
+              catalogLoading={actionCatalogLoading}
+            />
+          ) : null}
+
+          {mission ? <RecentGovernedRequests approvals={approvals} catalog={actionCatalog} /> : null}
 
           <section>
             <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
@@ -301,6 +388,8 @@ export function MissionDetail() {
                     recentlyResolvedDecision={
                       a.status === "pending" ? recentlyResolvedDecisionFor(a.id) : null
                     }
+                    actionDisplayLabel={labelForApprovalActionType(a.action_type, actionCatalog)}
+                    viaDisplayLabel={humanizeRequestedVia(a.requested_via)}
                     onApprove={
                       a.status === "pending" ? () => void resolveOne(a.id, "approved") : undefined
                     }

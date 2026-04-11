@@ -3,6 +3,7 @@ import { RiskBadge, type Risk } from "../common/RiskBadge";
 import { approvalPostDecisionLine } from "../../lib/approvalPresentation";
 import { operatorCopy } from "../../lib/operatorCopy";
 import type { Approval, ApprovalBundleResponse } from "../../lib/types";
+import { humanizeRequestedVia } from "../../lib/governedCatalogPresentation";
 
 function toRisk(r: string): Risk {
   return r === "green" || r === "amber" || r === "red" ? r : "amber";
@@ -94,7 +95,7 @@ export function ApprovalReviewPanel({
                     <div className="grid gap-1.5 text-[var(--text-secondary)]">
                       <p>
                         <span className="text-[var(--text-muted)]">Requested by</span>{" "}
-                        {bundle.context.requested_by} · {bundle.context.requested_via}
+                        {bundle.context.requested_by} · {humanizeRequestedVia(bundle.context.requested_via)}
                       </p>
                       <p>
                         <span className="text-[var(--text-muted)]">Created</span>{" "}

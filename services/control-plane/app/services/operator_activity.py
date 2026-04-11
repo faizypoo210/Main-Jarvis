@@ -13,6 +13,10 @@ from app.models.heartbeat_finding import HeartbeatFinding
 from app.models.mission import Mission
 from app.repositories.heartbeat_finding_repo import HeartbeatFindingRepository
 from app.schemas.operator import ActivitySummary, OperatorActivityItem
+from app.services.governed_action_labels import (
+    compact_label_for_approval_action_type,
+    humanize_requested_via,
+)
 from app.services.heartbeat_service import finding_to_activity_meta
 
 _ATTENTION_SQL = """(
@@ -139,24 +143,38 @@ def _title_summary_status(
             to_s or mission_status,
         )
     if event_type == "approval_requested":
-        action = str(p.get("action_type") or "Action")
+        raw_action = str(p.get("action_type") or "")
+        compact = compact_label_for_approval_action_type(raw_action or None)
         risk = str(p.get("risk_class") or "")
-        title = "Approval requested"
-        summary = f"{action}" + (f" · risk {risk}" if risk else "")
+        via = str(p.get("requested_via") or "")
+        title = f"Approval requested · {compact}"
+        parts: list[str] = [compact]
+        if risk:
+            parts.append(f"risk {risk}")
+        if via:
+            parts.append(f"via {humanize_requested_via(via)}")
         rb = str(p.get("requested_by") or "")
         if rb:
-            summary = f"{summary} — requested by {rb}".strip()
+            parts.append(f"requested by {rb}")
+        summary = " · ".join(parts)
         return title, _truncate(summary) or title, "pending"
     if event_type == "approval_resolved":
         dec = str(p.get("decision") or "").lower()
+        raw_at = str(p.get("action_type") or "").strip()
+        compact = compact_label_for_approval_action_type(raw_at) if raw_at else ""
         if dec == "approved":
-            title = "Approval approved"
+            title = f"Approval approved · {compact}" if compact else "Approval approved"
         elif dec == "denied":
-            title = "Approval denied"
+            title = f"Approval denied · {compact}" if compact else "Approval denied"
         else:
-            title = "Approval resolved"
+            title = f"Approval resolved · {compact}" if compact else "Approval resolved"
         by = str(p.get("decided_by") or "")
-        summary = f"Decision: {dec}" + (f" · by {by}" if by else "")
+        dv = str(p.get("decided_via") or "")
+        summary = f"Decision: {dec}"
+        if by:
+            summary += f" · by {by}"
+        if dv:
+            summary += f" · via {humanize_requested_via(dv)}"
         return title, summary, dec if dec in ("approved", "denied") else "resolved"
     if event_type == "approval_reminder_sent":
         ch = str(p.get("channel") or "")

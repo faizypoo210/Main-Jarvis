@@ -42,6 +42,7 @@ Other utterances still POST to `POST /api/v1/commands` as before.
 Narrow **start phrases** (e.g. “create a GitHub issue”, “open a GitHub draft PR”, “merge GitHub PR”, “draft an email”, “send Gmail draft …”) begin an **ephemeral per-WebSocket draft** — fields are collected stepwise; **say confirm** to `POST` the same `/api/v1/missions/{id}/integrations/github/*` and `/gmail/*` routes the Command Center uses (`requested_via: "voice"`). **Cancel that** / **never mind** abandons the draft.
 
 - **Catalog alignment:** **`GET /api/v1/operator/action-catalog`** (cached per process) supplies field order, spoken prompts, intros, and confirm summaries for the six actions when the control plane returns it; start phrases and validation stay narrow (same integration POST bodies as before).
+- **Handoff:** After submit, spoken copy points to **pending approval** and the shared **Approvals** queue (same naming family as Command Center catalog labels).
 - **No direct execution:** only creates a **pending approval**; GitHub/Gmail run only after normal approval.
 - **Mission:** required — say **last** for the mission from the **previous successful voice `POST /commands`** (tracked per connection), or a full/partial mission UUID.
 - **Safety:** vague “send it” / “merge it” are **not** accepted as submit; use **confirm** at the confirmation step. Starting a new action while a draft exists requires **cancel that** first.

@@ -16,6 +16,10 @@ from app.models.operator_inbox_state import OperatorInboxState
 from app.repositories.approval_repo import ApprovalRepository
 from app.repositories.heartbeat_finding_repo import HeartbeatFindingRepository
 from app.repositories.operator_inbox_state_repo import OperatorInboxStateRepository
+from app.services.governed_action_labels import (
+    compact_label_for_approval_action_type,
+    humanize_requested_via,
+)
 from app.schemas.operator_inbox import (
     OperatorInboxCounts,
     OperatorInboxItemRead,
@@ -129,9 +133,9 @@ async def _build_raw_items(session: AsyncSession) -> list[_RawItem]:
     for a in pending:
         ek = a.id in esc
         sev = _approval_severity(risk_class=a.risk_class, escalation_sent=ek)
-        action = (a.action_type or "action")[:80]
-        headline = f"Pending approval: {action}"
-        parts = [f"Risk {a.risk_class}", f"via {a.requested_via}"]
+        action_label = compact_label_for_approval_action_type(a.action_type)[:80]
+        headline = f"Pending approval: {action_label}"
+        parts = [f"Risk {a.risk_class}", f"via {humanize_requested_via(a.requested_via)}"]
         if ek:
             parts.append("escalation SMS already sent")
         summary = " · ".join(parts)

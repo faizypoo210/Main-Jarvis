@@ -15,6 +15,8 @@ export function ApprovalCard({
   resolving,
   resolveError,
   recentlyResolvedDecision,
+  actionDisplayLabel,
+  viaDisplayLabel,
 }: {
   approval: Approval;
   onApprove?: () => void | Promise<void>;
@@ -24,6 +26,10 @@ export function ApprovalCard({
   resolveError?: string | null;
   /** Ephemeral: API succeeded but props still show pending (race). Suppresses repeat actions. */
   recentlyResolvedDecision?: "approved" | "denied" | null;
+  /** Catalog-aligned governed action name (optional). */
+  actionDisplayLabel?: string;
+  /** Humanized requested_via (optional). */
+  viaDisplayLabel?: string;
 }) {
   const pending = approval.status === "pending";
   const showRaceSuccess = Boolean(pending && recentlyResolvedDecision != null && !resolving);
@@ -45,13 +51,13 @@ export function ApprovalCard({
             <RiskBadge risk={toRisk(approval.risk_class)} />
           </div>
           <h4 className="mt-1 font-display text-sm font-semibold text-[var(--text-primary)]">
-            {approval.action_type}
+            {actionDisplayLabel ?? approval.action_type}
           </h4>
           {approval.reason?.trim() ? (
             <p className="mt-2 text-xs leading-relaxed text-[var(--text-secondary)]">{approval.reason}</p>
           ) : null}
           <p className="mt-2 font-mono text-[10px] text-[var(--text-muted)]">
-            {new Date(approval.created_at).toLocaleString()} · {approval.requested_via}
+            {new Date(approval.created_at).toLocaleString()} · {viaDisplayLabel ?? approval.requested_via}
           </p>
         </div>
       </div>

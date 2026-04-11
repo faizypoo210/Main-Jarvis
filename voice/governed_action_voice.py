@@ -543,9 +543,9 @@ async def _submit_draft(
         short = _short_id(str(aid)) if aid else "unknown"
         summary = _confirm_summary(draft)
         msg = (
-            f"I created the approval request. {summary} "
-            f"It is waiting for approval. Approval id {short}. "
-            f"You can say what needs my approval to review it."
+            f"Your governed action request is pending approval. {summary} "
+            f"Short id {short}. Review it in Command Center under Approvals, "
+            f"or say what needs my approval to hear the queue."
         )
         return True, msg
     except Exception as e:

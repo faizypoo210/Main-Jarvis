@@ -108,6 +108,8 @@ class ApprovalService:
                 "risk_class": risk_class,
                 "reason": reason,
                 "status": approval.status,
+                "requested_by": requested_by,
+                "requested_via": requested_via,
             },
         )
         await self._mission_repo.update_status(mission_id, "awaiting_approval")
@@ -166,6 +168,8 @@ class ApprovalService:
                 "decision": decision,
                 "decided_by": decided_by,
                 "decided_via": decided_via,
+                "action_type": updated.action_type,
+                "risk_class": updated.risk_class,
                 **({"decided_at": decided_at_iso} if decided_at_iso else {}),
             },
         )

@@ -11,9 +11,11 @@ import type {
   GmailCreateReplyDraftRequestBody,
   GmailSendDraftRequestBody,
   GovernedActionCatalogEntryDTO,
+  GovernedActionCatalogResponse,
   GovernedActionFieldDTO,
   GovernedActionKind,
 } from "../../lib/types";
+import { HANDOFF_STORAGE_KEY } from "../../lib/governedCatalogPresentation";
 
 const STORAGE_KEY = "jarvis.operator_requested_by";
 
@@ -21,7 +23,13 @@ const inputClass =
   "w-full rounded-lg border border-[var(--bg-border)] bg-[var(--bg-void)] px-2 py-1.5 font-mono text-xs text-[var(--text-primary)]";
 const labelClass = "flex flex-col gap-1 text-[10px] text-[var(--text-muted)]";
 
-type Props = { missionId: string };
+type Props = {
+  missionId: string;
+  /** Fetched once on Mission Detail — shared with timeline and recent requests. */
+  catalog: GovernedActionCatalogResponse | null;
+  catalogError: string | null;
+  catalogLoading: boolean;
+};
 
 function defaultValuesForEntry(entry: GovernedActionCatalogEntryDTO): Record<string, string> {
   const out: Record<string, string> = {};
@@ -41,10 +49,8 @@ function fieldByName(entry: GovernedActionCatalogEntryDTO, name: string): Govern
   return entry.fields.find((x) => x.name === name);
 }
 
-export function GovernedActionLauncher({ missionId }: Props) {
+export function GovernedActionLauncher({ missionId, catalog, catalogError, catalogLoading }: Props) {
   const navigate = useNavigate();
-  const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof api.getOperatorActionCatalog>> | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [kind, setKind] = useState<GovernedActionKind>("github_create_issue");
   const [values, setValues] = useState<Record<string, string>>({});
   const [requestedBy, setRequestedBy] = useState(() => sessionStorage.getItem(STORAGE_KEY) ?? "");
@@ -52,27 +58,14 @@ export function GovernedActionLauncher({ missionId }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const c = await api.getOperatorActionCatalog();
-        if (cancelled) return;
-        setCatalog(c);
-        setCatalogError(null);
-        const first = c.actions.find((a) => a.surfaces.command_center !== false && a.enabled);
-        if (first) {
-          setKind(first.action_kind);
-          setValues(defaultValuesForEntry(first));
-        }
-      } catch (e: unknown) {
-        if (cancelled) return;
-        setCatalogError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!catalog) return;
+    const cc = catalog.actions.filter((a) => a.surfaces.command_center !== false && a.enabled);
+    const first = cc[0];
+    if (first) {
+      setKind(first.action_kind);
+      setValues(defaultValuesForEntry(first));
+    }
+  }, [catalog]);
 
   const ccActions = useMemo(() => {
     if (!catalog) return [];
@@ -153,6 +146,14 @@ export function GovernedActionLauncher({ missionId }: Props) {
           setError("Unknown action.");
       }
       if (approval) {
+        try {
+          sessionStorage.setItem(
+            HANDOFF_STORAGE_KEY,
+            JSON.stringify({ missionId, approvalId: approval.id, ts: Date.now() })
+          );
+        } catch {
+          /* ignore quota */
+        }
         navigate(`/approvals?approval=${encodeURIComponent(approval.id)}`);
       }
     } catch (err: unknown) {
@@ -262,7 +263,7 @@ export function GovernedActionLauncher({ missionId }: Props) {
     );
   }
 
-  if (!catalog) {
+  if (catalogLoading || !catalog) {
     return (
       <section className="rounded-xl border border-[var(--bg-border)] bg-[var(--bg-surface)]/40 p-4">
         <h2 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">

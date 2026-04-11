@@ -55,6 +55,8 @@ class ApprovalEvalMetrics(BaseModel):
 class IntegrationWorkflowCounts(BaseModel):
     github_issue_created: int = 0
     github_issue_failed: int = 0
+    github_pull_request_created: int = 0
+    github_pull_request_failed: int = 0
     gmail_draft_created: int = 0
     gmail_draft_failed: int = 0
     gmail_draft_sent: int = 0

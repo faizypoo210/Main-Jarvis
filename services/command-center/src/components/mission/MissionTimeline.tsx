@@ -33,8 +33,16 @@ function timelineEventTitle(ev: MissionEvent): string {
       }
       return tp || subj ? `Gmail draft requested · ${tp}${subj ? ` · ${subj}` : ""}` : "Gmail draft requested";
     }
+    const act = typeof p.action === "string" ? p.action : "";
     const repo = typeof p.repo === "string" ? p.repo : "";
     const title = typeof p.title === "string" ? p.title.trim() : "";
+    if (act === "create_pull_request") {
+      const base = typeof p.base === "string" ? p.base : "";
+      const head = typeof p.head === "string" ? p.head : "";
+      return repo
+        ? `GitHub draft PR requested · ${repo} · ${head}→${base}${title ? ` · ${title}` : ""}`
+        : "GitHub PR requested";
+    }
     return repo
       ? `GitHub issue requested · ${repo}${title ? ` · ${title}` : ""}`
       : "GitHub integration requested";
@@ -51,9 +59,21 @@ function timelineEventTitle(ev: MissionEvent): string {
       }
       return `Gmail draft saved${subj ? ` · ${subj}` : ""}${did ? ` · ${did}` : ""}${gurl ? ` · ${gurl}` : ""}`;
     }
+    const act = typeof p.action === "string" ? p.action : "";
     const repo = typeof p.repo === "string" ? p.repo : "";
-    const n = p.issue_number;
     const url = typeof p.html_url === "string" ? p.html_url : "";
+    if (act === "create_pull_request") {
+      const base = typeof p.base === "string" ? p.base : "";
+      const head = typeof p.head === "string" ? p.head : "";
+      const n = p.pr_number;
+      const pr = typeof n === "number" ? `PR #${n}` : "";
+      const draft = p.draft === true;
+      const label = draft ? "GitHub draft PR created" : "GitHub PR created";
+      return repo
+        ? `${label} · ${repo} · ${head}→${base}${pr ? ` · ${pr}` : ""}${url ? ` · ${url}` : ""}`
+        : label;
+    }
+    const n = p.issue_number;
     const num = typeof n === "number" ? `#${n}` : "";
     return repo ? `GitHub issue created · ${repo} ${num}`.trim() + (url ? ` · ${url}` : "") : "GitHub issue created";
   }
@@ -63,7 +83,15 @@ function timelineEventTitle(ev: MissionEvent): string {
     const code = typeof p.error_code === "string" ? p.error_code : "";
     const msg = typeof p.error_message === "string" ? p.error_message.slice(0, 160) : "";
     const prefix =
-      prov === "gmail" ? (act === "send_draft" ? "Gmail send failed" : "Gmail draft failed") : "GitHub action failed";
+      prov === "gmail"
+        ? act === "send_draft"
+          ? "Gmail send failed"
+          : "Gmail draft failed"
+        : prov === "github" && act === "create_pull_request"
+          ? "GitHub PR failed"
+          : prov === "github"
+            ? "GitHub issue failed"
+            : "GitHub action failed";
     return code ? `${prefix} · ${code}${msg ? ` — ${msg}` : ""}` : prefix;
   }
   if (ev.event_type === "routing_decided" && p) {
@@ -228,6 +256,37 @@ export function MissionTimeline({
                       {gh && typeof gh.issue_number === "number" ? (
                         <p>
                           <span className="text-[var(--text-muted)]">Issue:</span> #{gh.issue_number}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.html_url === "string" && gh.html_url ? (
+                        <a
+                          href={gh.html_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--accent-blue)] underline-offset-2 hover:underline"
+                        >
+                          {gh.html_url}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {rt === "github_pull_request_created" || rt === "github_pull_request_failed" ? (
+                    <div className="space-y-1 text-xs text-[var(--text-secondary)]">
+                      <p className="font-mono text-[10px] text-[var(--text-muted)]">{rt}</p>
+                      {gh && typeof gh.repo === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Repo:</span> {gh.repo}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.head === "string" && typeof gh.base === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Branches:</span> {gh.head} → {gh.base}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.pr_number === "number" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">PR:</span> #{gh.pr_number}
+                          {gh.draft === true ? " (draft)" : gh.draft === false ? " (open)" : ""}
                         </p>
                       ) : null}
                       {gh && typeof gh.html_url === "string" && gh.html_url ? (

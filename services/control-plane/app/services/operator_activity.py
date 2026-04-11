@@ -178,6 +178,20 @@ def _title_summary_status(
             else:
                 summary = f"Gmail create_draft · {tp}" + (f" · {subj}" if subj else "")
             return title, _truncate(summary) or title, "pending"
+        if prov == "github":
+            act = str(p.get("action") or "")
+            repo = str(p.get("repo") or "")
+            title = "Integration action requested"
+            if act == "create_pull_request":
+                base = str(p.get("base") or "")
+                head = str(p.get("head") or "")
+                t = str(p.get("title") or "").strip()
+                summary = (
+                    f"GitHub create_pull_request · {repo} · {head}→{base}" + (f" · {t}" if t else "")
+                )
+                return title, _truncate(summary) or title, "pending"
+            summary = f"GitHub create_issue · {repo}" if repo else "GitHub integration requested"
+            return title, summary, "pending"
         repo = str(p.get("repo") or "")
         title = "Integration action requested"
         summary = f"GitHub create_issue · {repo}" if repo else "GitHub integration requested"
@@ -200,6 +214,18 @@ def _title_summary_status(
             if gurl:
                 summary = f"{summary} · {gurl}"
             return "Gmail draft created", _truncate(summary) or "Draft saved", "complete"
+        if str(p.get("provider") or "") == "github" and str(p.get("action") or "") == "create_pull_request":
+            repo = str(p.get("repo") or "")
+            num = p.get("pr_number")
+            base = str(p.get("base") or "")
+            head = str(p.get("head") or "")
+            url = str(p.get("html_url") or "")
+            draft = p.get("draft")
+            label = "GitHub draft PR created" if draft is not False else "GitHub PR created"
+            summary = f"{repo} · {head}→{base}" + (f" · PR #{num}" if num is not None else "")
+            if url:
+                summary = f"{summary} · {url}"
+            return label, _truncate(summary) or "PR created", "complete"
         repo = str(p.get("repo") or "")
         num = p.get("issue_number")
         url = str(p.get("html_url") or "")
@@ -214,6 +240,10 @@ def _title_summary_status(
         summary = str(p.get("error_message") or "Integration action failed")
         if prov == "gmail":
             prefix = "Gmail send failed" if act == "send_draft" else "Gmail draft failed"
+        elif prov == "github" and act == "create_pull_request":
+            prefix = "GitHub PR failed"
+        elif prov == "github":
+            prefix = "GitHub issue failed"
         else:
             prefix = "Integration action failed"
         return prefix, _truncate(f"{code}: {summary}") if code else _truncate(summary) or "Failed", "failed"
@@ -225,6 +255,10 @@ def _title_summary_status(
             title = "GitHub issue created"
         elif rt == "github_issue_failed":
             title = "GitHub issue failed"
+        elif rt == "github_pull_request_created":
+            title = "GitHub PR created"
+        elif rt == "github_pull_request_failed":
+            title = "GitHub PR failed"
         elif rt == "gmail_draft_created":
             title = "Gmail draft created"
         elif rt == "gmail_draft_failed":
@@ -255,6 +289,19 @@ def _title_summary_status(
             elif rp.get("html_url"):
                 line = f"{line} · {rp.get('html_url')}"
             return title, _truncate(line) or title, "succeeded" if rt == "github_issue_created" else "failed"
+        if rt in ("github_pull_request_created", "github_pull_request_failed"):
+            gh = rp.get("github") if isinstance(rp.get("github"), dict) else {}
+            line = f"{rt}"
+            if isinstance(gh, dict):
+                if gh.get("repo"):
+                    line = f"{line} · {gh.get('repo')}"
+                if gh.get("head") and gh.get("base"):
+                    line = f"{line} · {gh.get('head')}→{gh.get('base')}"
+                if gh.get("pr_number") is not None:
+                    line = f"{line} · PR #{gh.get('pr_number')}"
+                if gh.get("html_url"):
+                    line = f"{line} · {gh.get('html_url')}"
+            return title, _truncate(line) or title, "succeeded" if rt == "github_pull_request_created" else "failed"
         if rt in (
             "gmail_draft_created",
             "gmail_draft_failed",
@@ -393,7 +440,10 @@ def _meta(
             "repo",
             "title",
             "issue_number",
+            "pr_number",
             "html_url",
+            "base",
+            "head",
             "error_code",
             "to_preview",
             "draft_id",
@@ -481,6 +531,16 @@ _ATTENTION_COUNT = """(
       SELECT 1 FROM receipts rx
       WHERE rx.mission_id = mission_events.mission_id
         AND rx.receipt_type = 'github_issue_failed'
+        AND rx.created_at >= mission_events.created_at - interval '3 seconds'
+        AND rx.created_at <= mission_events.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = mission_events.mission_id
+        AND rx.receipt_type = 'github_pull_request_failed'
         AND rx.created_at >= mission_events.created_at - interval '3 seconds'
         AND rx.created_at <= mission_events.created_at + interval '3 seconds'
     )

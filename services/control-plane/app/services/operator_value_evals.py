@@ -273,6 +273,7 @@ async def build_operator_value_evals(
             WHERE created_at >= :start AND created_at < :end
               AND receipt_type IN (
                 'github_issue_created', 'github_issue_failed',
+                'github_pull_request_created', 'github_pull_request_failed',
                 'gmail_draft_created', 'gmail_draft_failed',
                 'gmail_draft_sent', 'gmail_draft_send_failed'
               )
@@ -300,7 +301,8 @@ async def build_operator_value_evals(
             FROM receipts
             WHERE created_at >= :start AND created_at < :end
               AND receipt_type IN (
-                'github_issue_failed', 'gmail_draft_failed', 'gmail_draft_send_failed'
+                'github_issue_failed', 'github_pull_request_failed',
+                'gmail_draft_failed', 'gmail_draft_send_failed'
               )
             """
         ),

@@ -297,6 +297,8 @@ export interface ApprovalEvalMetrics {
 export interface IntegrationWorkflowCounts {
   github_issue_created: number;
   github_issue_failed: number;
+  github_pull_request_created: number;
+  github_pull_request_failed: number;
   gmail_draft_created: number;
   gmail_draft_failed: number;
   gmail_draft_sent: number;

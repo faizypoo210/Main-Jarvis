@@ -68,6 +68,25 @@ class ReceiptService:
             for k in ("issue_number", "html_url", "repo", "title"):
                 if k in payload and k not in ev_payload:
                     ev_payload[k] = payload[k]
+        if receipt_type in ("github_pull_request_created", "github_pull_request_failed"):
+            gh = payload.get("github")
+            if isinstance(gh, dict):
+                ev_payload["github"] = {
+                    k: gh[k]
+                    for k in (
+                        "repo",
+                        "pr_number",
+                        "html_url",
+                        "title",
+                        "base",
+                        "head",
+                        "draft",
+                    )
+                    if k in gh
+                }
+            for k in ("pr_number", "html_url", "repo", "title", "base", "head"):
+                if k in payload and k not in ev_payload:
+                    ev_payload[k] = payload[k]
         if receipt_type in (
             "gmail_draft_created",
             "gmail_draft_failed",

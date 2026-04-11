@@ -50,6 +50,8 @@ export function Evals() {
     return (
       integ.github_issue_created +
       integ.github_issue_failed +
+      integ.github_pull_request_created +
+      integ.github_pull_request_failed +
       integ.gmail_draft_created +
       integ.gmail_draft_failed +
       integ.gmail_draft_sent +
@@ -215,6 +217,11 @@ export function Evals() {
                         <td className="px-3 py-2">GitHub create issue</td>
                         <td className="px-3 py-2 font-mono">{integ?.github_issue_created}</td>
                         <td className="px-3 py-2 font-mono">{integ?.github_issue_failed}</td>
+                      </tr>
+                      <tr>
+                        <td className="px-3 py-2">GitHub draft PR</td>
+                        <td className="px-3 py-2 font-mono">{integ?.github_pull_request_created}</td>
+                        <td className="px-3 py-2 font-mono">{integ?.github_pull_request_failed}</td>
                       </tr>
                       <tr>
                         <td className="px-3 py-2">Gmail create draft</td>

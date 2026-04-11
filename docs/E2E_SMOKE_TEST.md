@@ -124,3 +124,24 @@ Generates **`docs/08-deployment-report.txt`** by running read-only probes (subpr
 cd F:\Jarvis
 .\scripts\08-final-report.ps1
 ```
+
+## End-of-day handoff snapshot — `scripts/19-day-wrap-snapshot.ps1`
+
+Writes a **dated markdown file** under **`docs/reports/`** (`day-wrap-YYYY-MM-DD-HHmmss.md`) with:
+
+| Block | Role |
+|--------|------|
+| `19-smoke-governed-action-catalog.ps1` | `GET /api/v1/operator/action-catalog` + six expected `approval_action_type` values |
+| `19-smoke-operator-surfaces.ps1` | `GET` operator inbox, workers, cost guardrails, cost events |
+| `08-final-report.ps1` | Same Phase 8 aggregate as above (optional `-SkipPhase8`) |
+| `npm run build` in `services/command-center` | Typecheck + Vite build when `node_modules` exists (optional `-SkipCommandCenterBuild`) |
+| `08-smoke-workspace-governance.ps1` | Workspace manifest audit |
+
+If **`GET /health`** on the control plane (default `http://127.0.0.1:8001`) is unreachable, catalog and operator-surface HTTP checks are **SKIP** (not fake green). **FAIL** rows mean the check ran and failed.
+
+```powershell
+cd F:\Jarvis
+.\scripts\19-day-wrap-snapshot.ps1
+# Optional when Phase 8 or CC build is out of scope:
+# .\scripts\19-day-wrap-snapshot.ps1 -SkipPhase8 -SkipCommandCenterBuild
+```

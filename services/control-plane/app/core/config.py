@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     JARVIS_GMAIL_REFRESH_TOKEN: str = ""
     JARVIS_GMAIL_CLIENT_ID: str = ""
     JARVIS_GMAIL_CLIENT_SECRET: str = ""
+    # SMS approval v1 (Twilio): outbound notify + inbound APPROVE/DENY/READ <code>
+    JARVIS_SMS_APPROVALS_ENABLED: bool = False
+    JARVIS_TWILIO_ACCOUNT_SID: str = ""
+    JARVIS_TWILIO_AUTH_TOKEN: str = ""
+    JARVIS_TWILIO_FROM_NUMBER: str = ""
+    JARVIS_APPROVAL_SMS_TO_E164: str = ""
+    JARVIS_TWILIO_WEBHOOK_BASE_URL: str = ""
+    JARVIS_TWILIO_INBOUND_SKIP_SIGNATURE_VALIDATION: bool = False
+    JARVIS_TWILIO_INBOUND_DECIDED_BY: str = "sms_operator"
 
     model_config = SettingsConfigDict(
         env_file=".env",

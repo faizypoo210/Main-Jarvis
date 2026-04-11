@@ -20,6 +20,7 @@ from app.api.routes import (
     operator,
     operator_memory,
     receipts,
+    sms_integration,
     system,
     updates,
     workers,
@@ -78,3 +79,4 @@ app.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
 app.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])
 app.include_router(operator_memory.router, prefix=api_v1_prefix, tags=["operator-memory"])
 app.include_router(heartbeat.router, prefix=api_v1_prefix, tags=["heartbeat"])
+app.include_router(sms_integration.router, prefix=api_v1_prefix, tags=["integrations-sms"])

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -33,7 +34,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
             if session.in_transaction():
                 await session.commit()
+            pending_sms = session.info.pop("approval_sms_queue", [])
             pending = session.info.pop("realtime_emit", [])
+            if pending_sms:
+                from app.services.sms_approval_service import process_approval_sms_queue
+
+                await process_approval_sms_queue([UUID(x) for x in pending_sms])
             if pending:
                 hub = get_hub()
                 await hub.broadcast_all(pending)

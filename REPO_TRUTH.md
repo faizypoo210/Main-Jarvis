@@ -95,6 +95,7 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 | Full execution chain | `docs/LIVE_STACK_REHEARSAL.md` + `scripts/14-rehearse-live-stack.ps1` |
 | Command Center build | `cd services/command-center && npm run build` |
 | Approval review packet (bundle) | `GET /api/v1/approvals/{approval_id}/bundle` (read-only; no secrets in normalized fields); Command Center `/approvals` |
+| SMS approval notify + reply (optional Twilio) | `approval_sms_tokens` table; outbound when `JARVIS_SMS_APPROVALS_ENABLED` + Twilio env set; inbound `POST /api/v1/integrations/sms/inbound` — explicit `APPROVE` / `DENY` / `READ` + code only; see `docs/SMS_APPROVALS.md` |
 | Phase 8 deployment report | `scripts/08-final-report.ps1` writes `docs/08-deployment-report.txt` (core: operator smoke + workspace audit; external OAuth probes skip or fail honestly). **Not** a substitute for live E2E (`09-smoke-test-e2e.ps1`). |
 | Heartbeat open findings | `GET /api/v1/operator/heartbeat` (same session as other operator routes) |
 | Heartbeat run (API key) | `POST /api/v1/heartbeat/run` with `x-api-key`; or run `python heartbeat/heartbeat.py` with `CONTROL_PLANE_URL`, `CONTROL_PLANE_API_KEY`, `HEARTBEAT_INTERVAL_SEC` |

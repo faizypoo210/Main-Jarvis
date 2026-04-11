@@ -111,6 +111,9 @@ class ApprovalService:
             },
         )
         await self._mission_repo.update_status(mission_id, "awaiting_approval")
+        from app.services.sms_approval_service import maybe_queue_sms_notification
+
+        maybe_queue_sms_notification(self._session, approval.id)
         return approval
 
     async def resolve_approval(

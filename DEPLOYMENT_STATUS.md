@@ -1,5 +1,7 @@
 # JARVIS Deployment Status
 
+**Operational bring-up (start order, verification, env):** [`docs/BRINGUP_RUNBOOK.md`](docs/BRINGUP_RUNBOOK.md), [`docs/ENV_MATRIX.md`](docs/ENV_MATRIX.md), [`docs/TOMORROW_RESUME.md`](docs/TOMORROW_RESUME.md).
+
 ## Phase 1: Docker + Databases ✅
 
 - [x] Docker Desktop running  

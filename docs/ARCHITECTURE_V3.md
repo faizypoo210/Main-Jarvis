@@ -229,6 +229,9 @@ flowchart LR
 
 | Topic | Doc |
 |-------|-----|
+| Bring-up, smoke order, minimum stack | [`BRINGUP_RUNBOOK.md`](BRINGUP_RUNBOOK.md) |
+| Env vars by service | [`ENV_MATRIX.md`](ENV_MATRIX.md) |
+| Tomorrow resume | [`TOMORROW_RESUME.md`](TOMORROW_RESUME.md) |
 | Lanes, routing receipts | [`MODEL_LANES.md`](MODEL_LANES.md) |
 | SMS + reminders | [`SMS_APPROVALS.md`](SMS_APPROVALS.md) |
 | Operator eval metrics | [`OPERATOR_EVALS.md`](OPERATOR_EVALS.md) |

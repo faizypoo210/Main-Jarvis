@@ -1,6 +1,6 @@
 # End-to-end smoke test (canonical Jarvis stack)
 
-**Architecture (services and flows):** [`ARCHITECTURE_V3.md`](ARCHITECTURE_V3.md).
+**Architecture (services and flows):** [`ARCHITECTURE_V3.md`](ARCHITECTURE_V3.md). **Bring-up order and smoke sequencing:** [`BRINGUP_RUNBOOK.md`](BRINGUP_RUNBOOK.md).
 
 This document describes **`scripts/09-smoke-test-e2e.ps1`**, which proves the live pipeline:
 

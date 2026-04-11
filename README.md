@@ -10,6 +10,9 @@ Jarvis is **multi-part**, not a single deployable monolith. Before changing beha
 | Doc | Use |
 |-----|-----|
 | [`docs/ARCHITECTURE_V3.md`](docs/ARCHITECTURE_V3.md) | **Canonical architecture snapshot:** services, boundaries, state, flows, diagrams |
+| [`docs/BRINGUP_RUNBOOK.md`](docs/BRINGUP_RUNBOOK.md) | **Start order, health checks, smoke scripts, minimum vs full stack** |
+| [`docs/ENV_MATRIX.md`](docs/ENV_MATRIX.md) | **Environment variables by service** (no secret values) |
+| [`docs/TOMORROW_RESUME.md`](docs/TOMORROW_RESUME.md) | **Quick resume** after a break |
 | [`REPO_TRUTH.md`](REPO_TRUTH.md) | Ownership, out-of-repo dependencies, authority boundaries, reality labels, verification |
 | [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Short component map; complements Architecture V3 |
 | [`STATUS.md`](STATUS.md) | Implemented vs partial vs placeholder surfaces |

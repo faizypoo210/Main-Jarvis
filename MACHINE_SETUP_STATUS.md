@@ -2,6 +2,8 @@
 
 Use this as a **checklist** for what must exist on the **host** for Jarvis to run as documented. This repo does not contain secrets or your OpenClaw home directory.
 
+**Grouped env reference (no values):** [`docs/ENV_MATRIX.md`](docs/ENV_MATRIX.md). **Bring-up order:** [`docs/BRINGUP_RUNBOOK.md`](docs/BRINGUP_RUNBOOK.md).
+
 ## Environment variables (representative)
 
 Check **`services/control-plane/.env.example`**, **`executor/.env.example`**, **`coordinator/.env.example`**, **`voice/`** (`.env` beside `server.py` if used), and **root README** for names. Common ones:

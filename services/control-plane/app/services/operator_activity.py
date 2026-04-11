@@ -51,6 +51,16 @@ _ATTENTION_SQL = """(
         AND rx.created_at <= me.created_at + interval '3 seconds'
     )
   )
+  OR (
+    me.event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = me.mission_id
+        AND rx.receipt_type = 'gmail_draft_send_failed'
+        AND rx.created_at >= me.created_at - interval '3 seconds'
+        AND rx.created_at <= me.created_at + interval '3 seconds'
+    )
+  )
 )"""
 
 
@@ -156,10 +166,17 @@ def _title_summary_status(
     if event_type == "integration_action_requested":
         prov = str(p.get("provider") or "")
         if prov == "gmail":
+            act = str(p.get("action") or "")
             subj = str(p.get("subject") or "")
             tp = str(p.get("to_preview") or "")
+            did = str(p.get("draft_id") or "")
             title = "Integration action requested"
-            summary = f"Gmail create_draft · {tp}" + (f" · {subj}" if subj else "")
+            if act == "send_draft":
+                summary = f"Gmail send_draft · {did}" + (f" · {tp}" if tp else "") + (
+                    f" · {subj}" if subj else ""
+                )
+            else:
+                summary = f"Gmail create_draft · {tp}" + (f" · {subj}" if subj else "")
             return title, _truncate(summary) or title, "pending"
         repo = str(p.get("repo") or "")
         title = "Integration action requested"
@@ -167,6 +184,15 @@ def _title_summary_status(
         return title, summary, "pending"
     if event_type == "integration_action_executed":
         if str(p.get("provider") or "") == "gmail":
+            act = str(p.get("action") or "")
+            if act == "send_draft":
+                did = str(p.get("draft_id") or "")
+                mid = str(p.get("message_id") or "")
+                gurl = str(p.get("gmail_url") or "")
+                summary = f"draft {did}" + (f" · message {mid}" if mid else "")
+                if gurl:
+                    summary = f"{summary} · {gurl}"
+                return "Gmail draft sent", _truncate(summary) or "Sent", "complete"
             subj = str(p.get("subject") or "")
             did = str(p.get("draft_id") or "")
             gurl = str(p.get("gmail_url") or "")
@@ -183,9 +209,13 @@ def _title_summary_status(
         return "GitHub issue created", _truncate(summary) or "Issue created", "complete"
     if event_type == "integration_action_failed":
         prov = str(p.get("provider") or "")
+        act = str(p.get("action") or "")
         code = str(p.get("error_code") or "")
         summary = str(p.get("error_message") or "Integration action failed")
-        prefix = "Gmail draft failed" if prov == "gmail" else "Integration action failed"
+        if prov == "gmail":
+            prefix = "Gmail send failed" if act == "send_draft" else "Gmail draft failed"
+        else:
+            prefix = "Integration action failed"
         return prefix, _truncate(f"{code}: {summary}") if code else _truncate(summary) or "Failed", "failed"
     if event_type == "receipt_recorded":
         rt = str(p.get("receipt_type") or "receipt")
@@ -199,6 +229,10 @@ def _title_summary_status(
             title = "Gmail draft created"
         elif rt == "gmail_draft_failed":
             title = "Gmail draft failed"
+        elif rt == "gmail_draft_sent":
+            title = "Gmail draft sent"
+        elif rt == "gmail_draft_send_failed":
+            title = "Gmail draft send failed"
         elif rt == "openclaw_execution":
             title = "Execution receipt recorded"
         else:
@@ -221,19 +255,29 @@ def _title_summary_status(
             elif rp.get("html_url"):
                 line = f"{line} · {rp.get('html_url')}"
             return title, _truncate(line) or title, "succeeded" if rt == "github_issue_created" else "failed"
-        if rt in ("gmail_draft_created", "gmail_draft_failed"):
+        if rt in (
+            "gmail_draft_created",
+            "gmail_draft_failed",
+            "gmail_draft_sent",
+            "gmail_draft_send_failed",
+        ):
             gm = rp.get("gmail") if isinstance(rp.get("gmail"), dict) else {}
             line = f"{rt}"
             if isinstance(gm, dict):
+                if gm.get("operation"):
+                    line = f"{line} · {gm.get('operation')}"
                 if gm.get("to_preview"):
                     line = f"{line} · {gm.get('to_preview')}"
                 if gm.get("subject"):
                     line = f"{line} · {gm.get('subject')}"
                 if gm.get("draft_id"):
                     line = f"{line} · draft {gm.get('draft_id')}"
+                if gm.get("message_id"):
+                    line = f"{line} · msg {gm.get('message_id')}"
                 if gm.get("gmail_url"):
                     line = f"{line} · {gm.get('gmail_url')}"
-            return title, _truncate(line) or title, "succeeded" if rt == "gmail_draft_created" else "failed"
+            ok = rt in ("gmail_draft_created", "gmail_draft_sent")
+            return title, _truncate(line) or title, "succeeded" if ok else "failed"
         if "success" in rp:
             ok = rp.get("success")
             st = "succeeded" if ok is True else "failed" if ok is False else "unknown"
@@ -286,7 +330,7 @@ def _actor_label(
     if event_type == "approval_resolved":
         return str(p.get("decided_by") or "") or None
     if event_type == "integration_action_requested":
-        return "github_issue_workflow"
+        return str(actor_id or "") or None
     if event_type in ("integration_action_executed", "integration_action_failed"):
         return str(p.get("actor_id") or "github_integration") or None
     if actor_id:
@@ -354,6 +398,8 @@ def _meta(
             "to_preview",
             "draft_id",
             "gmail_url",
+            "message_id",
+            "thread_id",
         ):
             if k in p:
                 meta[k] = p.get(k)
@@ -445,6 +491,16 @@ _ATTENTION_COUNT = """(
       SELECT 1 FROM receipts rx
       WHERE rx.mission_id = mission_events.mission_id
         AND rx.receipt_type = 'gmail_draft_failed'
+        AND rx.created_at >= mission_events.created_at - interval '3 seconds'
+        AND rx.created_at <= mission_events.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = mission_events.mission_id
+        AND rx.receipt_type = 'gmail_draft_send_failed'
         AND rx.created_at >= mission_events.created_at - interval '3 seconds'
         AND rx.created_at <= mission_events.created_at + interval '3 seconds'
     )

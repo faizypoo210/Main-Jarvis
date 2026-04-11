@@ -183,6 +183,10 @@ class ApprovalService:
                 from app.services.gmail_draft_workflow import execute_gmail_draft_after_approval
 
                 await execute_gmail_draft_after_approval(self._session, updated)
+            elif updated.action_type == "gmail_send_draft":
+                from app.services.gmail_draft_workflow import execute_gmail_send_draft_after_approval
+
+                await execute_gmail_send_draft_after_approval(self._session, updated)
             else:
                 await _publish_execution_resume(str(mid), cmd_text, str(aid))
 

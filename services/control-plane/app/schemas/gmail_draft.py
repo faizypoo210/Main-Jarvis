@@ -62,3 +62,40 @@ class GmailDraftResult(BaseModel):
     gmail_url: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+
+
+class GmailSendDraftContract(BaseModel):
+    """Structured payload for gmail_send_draft — send an existing draft only."""
+
+    provider: Literal["gmail"] = "gmail"
+    action: Literal["send_draft"] = "send_draft"
+    draft_id: str = Field(..., min_length=1, max_length=256)
+    message_id: str | None = Field(None, max_length=256, description="Optional Gmail message id hint (audit)")
+    thread_id: str | None = Field(None, max_length=128)
+    subject: str | None = Field(None, max_length=998, description="Display only; not verified against Gmail")
+    to_preview: str | None = Field(None, max_length=512, description="Display only for approval copy")
+    source_mission_id: UUID | None = None
+
+
+class GmailSendDraftRequest(GmailSendDraftContract):
+    """POST body: send-draft plus who requested approval."""
+
+    requested_by: str = Field(..., min_length=1, max_length=256)
+    requested_via: ApprovalSurface
+
+
+class GmailSendDraftResult(BaseModel):
+    """Safe fields after drafts.send (no tokens)."""
+
+    success: bool
+    provider: Literal["gmail"] = "gmail"
+    action: Literal["send_draft"] = "send_draft"
+    draft_id: str = ""
+    message_id: str | None = None
+    thread_id: str | None = None
+    subject: str = ""
+    to_preview: str = ""
+    snippet: str | None = None
+    gmail_url: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None

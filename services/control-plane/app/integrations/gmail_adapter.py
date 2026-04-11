@@ -1,4 +1,4 @@
-"""Gmail API: create draft only (users.drafts.create)."""
+"""Gmail API: create draft (drafts.create) and send draft (drafts.send)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ from typing import Any
 
 import httpx
 
-from app.schemas.gmail_draft import GmailCreateDraftContract, GmailDraftResult
+from app.schemas.gmail_draft import (
+    GmailCreateDraftContract,
+    GmailDraftResult,
+    GmailSendDraftResult,
+)
 
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1"
 OAUTH_TOKEN = "https://oauth2.googleapis.com/token"
@@ -150,3 +154,85 @@ def _to_preview(contract: GmailCreateDraftContract) -> str:
     if not contract.to:
         return ""
     return ", ".join(str(x) for x in contract.to[:5])
+
+
+async def send_draft(
+    *,
+    access_token: str,
+    draft_id: str,
+    display_subject: str = "",
+    display_to_preview: str = "",
+) -> GmailSendDraftResult:
+    """POST users/me/drafts/send with draft id only."""
+    did = draft_id.strip()
+    if not did:
+        return GmailSendDraftResult(
+            success=False,
+            draft_id="",
+            subject=display_subject,
+            to_preview=display_to_preview,
+            error_code="invalid_draft_id",
+            error_message="draft_id is required.",
+        )
+
+    url = f"{GMAIL_API}/users/me/drafts/send"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    body_json = {"id": did}
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(url, json=body_json, headers=headers)
+    except httpx.HTTPError as e:
+        return GmailSendDraftResult(
+            success=False,
+            draft_id=did,
+            subject=display_subject,
+            to_preview=display_to_preview,
+            error_code="http_error",
+            error_message=_truncate(str(e)),
+        )
+
+    try:
+        data = r.json() if r.content else {}
+    except json.JSONDecodeError:
+        data = {}
+
+    if r.status_code // 100 == 2 and isinstance(data, dict):
+        mid = data.get("id")
+        tid = data.get("threadId")
+        snip = data.get("snippet")
+        if isinstance(snip, str):
+            snip = snip[:300] if len(snip) > 300 else snip
+        thread = str(tid) if tid else None
+        gurl = (
+            f"https://mail.google.com/mail/u/0/#inbox/{thread}"
+            if thread
+            else "https://mail.google.com/mail/u/0/#sent"
+        )
+        return GmailSendDraftResult(
+            success=True,
+            draft_id=did,
+            message_id=str(mid) if mid else None,
+            thread_id=thread,
+            subject=display_subject,
+            to_preview=display_to_preview,
+            snippet=str(snip) if snip else None,
+            gmail_url=gurl,
+        )
+
+    err_msg = ""
+    if isinstance(data, dict):
+        err_msg = str(data.get("error", {}).get("message") or data.get("message") or "")
+    if not err_msg:
+        err_msg = r.text[:400] if r.text else f"HTTP {r.status_code}"
+    return GmailSendDraftResult(
+        success=False,
+        draft_id=did,
+        subject=display_subject,
+        to_preview=display_to_preview,
+        error_code=f"gmail_http_{r.status_code}",
+        error_message=_truncate(err_msg),
+    )

@@ -22,8 +22,15 @@ function timelineEventTitle(ev: MissionEvent): string {
   if (ev.event_type === "integration_action_requested" && p) {
     const prov = typeof p.provider === "string" ? p.provider : "";
     if (prov === "gmail") {
+      const act = typeof p.action === "string" ? p.action : "";
+      const did = typeof p.draft_id === "string" ? p.draft_id : "";
       const subj = typeof p.subject === "string" ? p.subject.trim() : "";
       const tp = typeof p.to_preview === "string" ? p.to_preview : "";
+      if (act === "send_draft") {
+        return did || tp || subj
+          ? `Gmail send draft requested · ${did}${tp ? ` · ${tp}` : ""}${subj ? ` · ${subj}` : ""}`
+          : "Gmail send draft requested";
+      }
       return tp || subj ? `Gmail draft requested · ${tp}${subj ? ` · ${subj}` : ""}` : "Gmail draft requested";
     }
     const repo = typeof p.repo === "string" ? p.repo : "";
@@ -34,9 +41,14 @@ function timelineEventTitle(ev: MissionEvent): string {
   }
   if (ev.event_type === "integration_action_executed" && p) {
     if (typeof p.provider === "string" && p.provider === "gmail") {
+      const act = typeof p.action === "string" ? p.action : "";
       const subj = typeof p.subject === "string" ? p.subject : "";
       const did = typeof p.draft_id === "string" ? p.draft_id : "";
+      const mid = typeof p.message_id === "string" ? p.message_id : "";
       const gurl = typeof p.gmail_url === "string" ? p.gmail_url : "";
+      if (act === "send_draft") {
+        return `Gmail draft sent${did ? ` · ${did}` : ""}${mid ? ` · ${mid}` : ""}${gurl ? ` · ${gurl}` : ""}`;
+      }
       return `Gmail draft saved${subj ? ` · ${subj}` : ""}${did ? ` · ${did}` : ""}${gurl ? ` · ${gurl}` : ""}`;
     }
     const repo = typeof p.repo === "string" ? p.repo : "";
@@ -47,9 +59,11 @@ function timelineEventTitle(ev: MissionEvent): string {
   }
   if (ev.event_type === "integration_action_failed" && p) {
     const prov = typeof p.provider === "string" ? p.provider : "";
+    const act = typeof p.action === "string" ? p.action : "";
     const code = typeof p.error_code === "string" ? p.error_code : "";
     const msg = typeof p.error_message === "string" ? p.error_message.slice(0, 160) : "";
-    const prefix = prov === "gmail" ? "Gmail draft failed" : "GitHub action failed";
+    const prefix =
+      prov === "gmail" ? (act === "send_draft" ? "Gmail send failed" : "Gmail draft failed") : "GitHub action failed";
     return code ? `${prefix} · ${code}${msg ? ` — ${msg}` : ""}` : prefix;
   }
   if (ev.event_type === "routing_decided" && p) {
@@ -228,12 +242,18 @@ export function MissionTimeline({
                       ) : null}
                     </div>
                   ) : null}
-                  {rt === "gmail_draft_created" || rt === "gmail_draft_failed" ? (
+                  {rt === "gmail_draft_created" ||
+                  rt === "gmail_draft_failed" ||
+                  rt === "gmail_draft_sent" ||
+                  rt === "gmail_draft_send_failed" ? (
                     <div className="space-y-1 text-xs text-[var(--text-secondary)]">
-                      <p className="font-mono text-[10px] text-[var(--text-muted)]">
-                        {rt === "gmail_draft_created" ? "gmail_draft_created" : "gmail_draft_failed"}
-                      </p>
-                      {gm && typeof gm.to_preview === "string" ? (
+                      <p className="font-mono text-[10px] text-[var(--text-muted)]">{rt}</p>
+                      {gm && typeof gm.operation === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Operation:</span> {gm.operation}
+                        </p>
+                      ) : null}
+                      {gm && typeof gm.to_preview === "string" && gm.to_preview ? (
                         <p>
                           <span className="text-[var(--text-muted)]">To:</span> {gm.to_preview}
                         </p>
@@ -248,6 +268,11 @@ export function MissionTimeline({
                           <span className="text-[var(--text-muted)]">Draft id:</span> {gm.draft_id}
                         </p>
                       ) : null}
+                      {gm && typeof gm.message_id === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Message id:</span> {gm.message_id}
+                        </p>
+                      ) : null}
                       {gm && typeof gm.gmail_url === "string" && gm.gmail_url ? (
                         <a
                           href={gm.gmail_url}
@@ -255,7 +280,9 @@ export function MissionTimeline({
                           rel="noreferrer"
                           className="text-[var(--accent-blue)] underline-offset-2 hover:underline"
                         >
-                          Open Gmail drafts
+                          {rt === "gmail_draft_sent" || rt === "gmail_draft_send_failed"
+                            ? "Open Gmail"
+                            : "Open Gmail drafts"}
                         </a>
                       ) : null}
                     </div>

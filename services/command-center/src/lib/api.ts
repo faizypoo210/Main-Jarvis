@@ -2,6 +2,7 @@ import type {
   ActivityFeedCategory,
   Approval,
   CommandResponse,
+  HeartbeatOperatorResponse,
   MemoryCountsResponse,
   MemoryItemRead,
   MemoryListResponse,
@@ -266,6 +267,10 @@ export async function getOperatorIntegrations(): Promise<OperatorIntegrationsRes
 
 export async function getMemoryCounts(): Promise<MemoryCountsResponse> {
   return requestJson<MemoryCountsResponse>(`${BASE}/operator/memory/counts`);
+}
+
+export async function getOperatorHeartbeat(): Promise<HeartbeatOperatorResponse> {
+  return requestJson<HeartbeatOperatorResponse>(`${BASE}/operator/heartbeat`);
 }
 
 export async function getMemoryList(params?: {

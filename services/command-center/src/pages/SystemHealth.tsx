@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { OperatorHealthCard } from "../components/operator/OperatorHealthCard";
 import { useControlPlaneLive } from "../hooks/useControlPlane";
+import { useOperatorHeartbeat } from "../hooks/useOperatorHeartbeat";
 import { useSystemHealth } from "../hooks/useSystemHealth";
 import { formatRelativeTime } from "../lib/format";
 import type { HealthState } from "../lib/types";
@@ -16,6 +17,7 @@ function sseStatus(phase: string, err: string | null): { status: HealthState; de
 export function SystemHealth() {
   const live = useControlPlaneLive();
   const { data, error, loading } = useSystemHealth();
+  const hb = useOperatorHeartbeat(90000);
 
   const sse = useMemo(
     () => sseStatus(live.streamPhase, live.streamError),
@@ -106,6 +108,34 @@ export function SystemHealth() {
               <p className="text-[10px] text-[var(--text-muted)]">
                 Browser connection to <code className="font-mono text-[9px]">/api/v1/updates/stream</code>.
                 Phase: <span className="text-[var(--text-secondary)]">{live.streamPhase}</span>
+              </p>
+            }
+          />
+          <OperatorHealthCard
+            title="Heartbeat supervision"
+            status={
+              hb.loading && !hb.data
+                ? "degraded"
+                : hb.error
+                  ? "offline"
+                  : (hb.data?.open_count ?? 0) > 0
+                    ? "degraded"
+                    : "healthy"
+            }
+            detail={
+              hb.error
+                ? hb.error
+                : hb.data
+                  ? hb.data.open_count > 0
+                    ? `${hb.data.open_count} open finding(s). Rule-based checks from the control plane — not process-level certainty unless noted.`
+                    : "No open supervision findings. The heartbeat loop only surfaces explicit, actionable conditions."
+                  : hb.loading
+                    ? "Loading heartbeat snapshot…"
+                    : null
+            }
+            footer={
+              <p className="text-[10px] text-[var(--text-muted)]">
+                API: <code className="font-mono text-[9px]">GET /api/v1/operator/heartbeat</code>
               </p>
             }
           />

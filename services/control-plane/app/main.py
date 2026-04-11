@@ -13,6 +13,7 @@ from app.api.routes import (
     approvals,
     commands,
     health,
+    heartbeat,
     missions,
     operator,
     operator_memory,
@@ -62,3 +63,4 @@ app.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["upd
 app.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
 app.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])
 app.include_router(operator_memory.router, prefix=api_v1_prefix, tags=["operator-memory"])
+app.include_router(heartbeat.router, prefix=api_v1_prefix, tags=["heartbeat"])

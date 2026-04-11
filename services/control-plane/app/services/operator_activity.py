@@ -6,10 +6,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.heartbeat_finding import HeartbeatFinding
+from app.models.mission import Mission
+from app.repositories.heartbeat_finding_repo import HeartbeatFindingRepository
 from app.schemas.operator import ActivitySummary, OperatorActivityItem
+from app.services.heartbeat_service import finding_to_activity_meta
 
 _ATTENTION_SQL = """(
   (me.event_type = 'approval_resolved' AND me.payload->>'decision' = 'denied')
@@ -401,6 +405,10 @@ async def fetch_activity_summary(session: AsyncSession, *, window_days: int = 7)
             """
         )
     )
+    hb = await session.execute(
+        text("SELECT COUNT(*)::int FROM heartbeat_findings WHERE status = 'open'")
+    )
+
     return ActivitySummary(
         window_hours=window_days * 24,
         total_in_window=int(total.scalar_one() or 0),
@@ -408,10 +416,71 @@ async def fetch_activity_summary(session: AsyncSession, *, window_days: int = 7)
         execution_in_window=int(exe.scalar_one() or 0),
         attention_in_window=int(att.scalar_one() or 0),
         memory_in_window=int(mem.scalar_one() or 0),
+        heartbeat_open_total=int(hb.scalar_one() or 0),
     )
 
 
-async def fetch_activity_items(
+async def _mission_titles_map(
+    session: AsyncSession, ids: set[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    if not ids:
+        return {}
+    result = await session.execute(select(Mission).where(Mission.id.in_(ids)))
+    rows = result.scalars().all()
+    return {m.id: m.title for m in rows}
+
+
+async def _heartbeat_rows_to_items(
+    session: AsyncSession,
+    rows: list[HeartbeatFinding],
+) -> list[OperatorActivityItem]:
+    mids = {r.mission_id for r in rows if r.mission_id is not None}
+    titles = await _mission_titles_map(session, mids)
+    out: list[OperatorActivityItem] = []
+    for hf in rows:
+        mt = titles.get(hf.mission_id, "Mission") if hf.mission_id else "System"
+        title = f"[{hf.severity}] {hf.finding_type.replace('_', ' ')}"
+        summ = hf.summary.strip() if hf.summary else title
+        out.append(
+            OperatorActivityItem(
+                id=str(hf.id),
+                occurred_at=_iso(hf.last_seen_at),
+                kind="heartbeat",
+                category="heartbeat",
+                title=title,
+                summary=summ[:2000] if len(summ) > 2000 else summ,
+                status="open",
+                mission_id=str(hf.mission_id) if hf.mission_id else "",
+                mission_title=mt,
+                actor_label=None,
+                risk_class=None,
+                meta=finding_to_activity_meta(hf),
+            )
+        )
+    return out
+
+
+async def _fetch_heartbeat_activity_page(
+    session: AsyncSession,
+    *,
+    limit: int,
+    before: datetime | None,
+    mission_id: uuid.UUID | None,
+) -> tuple[list[OperatorActivityItem], str | None]:
+    rows = await HeartbeatFindingRepository.list_open_recent(
+        session, limit=limit * 3, before=before
+    )
+    if mission_id is not None:
+        rows = [r for r in rows if r.mission_id == mission_id]
+    rows = rows[:limit]
+    items = await _heartbeat_rows_to_items(session, rows)
+    next_before: str | None = None
+    if items and len(items) >= limit:
+        next_before = items[-1].occurred_at
+    return items, next_before
+
+
+async def _fetch_mission_event_activity_page(
     session: AsyncSession,
     *,
     limit: int,
@@ -465,3 +534,39 @@ async def fetch_activity_items(
     if items and len(items) >= limit:
         next_before = items[-1].occurred_at
     return items, next_before
+
+
+async def fetch_activity_items(
+    session: AsyncSession,
+    *,
+    limit: int,
+    before: datetime | None,
+    mission_id: uuid.UUID | None,
+    category: str | None,
+) -> tuple[list[OperatorActivityItem], str | None]:
+    if category == "heartbeat":
+        return await _fetch_heartbeat_activity_page(
+            session, limit=limit, before=before, mission_id=mission_id
+        )
+
+    me_items, me_next = await _fetch_mission_event_activity_page(
+        session, limit=limit, before=before, mission_id=mission_id, category=category
+    )
+
+    if category not in (None, "all"):
+        return me_items, me_next
+
+    hf_items, _hf_next = await _fetch_heartbeat_activity_page(
+        session, limit=limit, before=before, mission_id=mission_id
+    )
+
+    merged = sorted(
+        me_items + hf_items,
+        key=lambda it: it.occurred_at,
+        reverse=True,
+    )[:limit]
+
+    next_before: str | None = None
+    if merged and len(merged) >= limit:
+        next_before = merged[-1].occurred_at
+    return merged, next_before

@@ -15,6 +15,7 @@ const filterTabs: ActivityFilterTab[] = [
   "approval",
   "execution",
   "memory",
+  "heartbeat",
   "failures",
 ];
 
@@ -24,8 +25,10 @@ export function Activity() {
 
   const streamNote = useMemo(
     () =>
-      "This feed is built from stored mission_events in the control plane (plus receipt join for execution outcomes). It is not a raw log export.",
-    []
+      tab === "heartbeat"
+        ? "Heartbeat tab shows open supervision findings from heartbeat_findings (deduped). Other tabs merge mission timeline events with heartbeat rows."
+        : "This feed is built from stored mission_events in the control plane (plus receipt join for execution outcomes). It is not a raw log export.",
+    [tab]
   );
 
   return (
@@ -90,6 +93,15 @@ export function Activity() {
                 {summary.memory_in_window ?? 0}
               </p>
               <p className="mt-1 text-[9px] text-[var(--text-muted)]">Saved / promoted / archived</p>
+            </div>
+            <div className="rounded-xl border border-[var(--bg-border)] bg-[var(--bg-surface)]/60 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                Heartbeat open
+              </p>
+              <p className="mt-1 font-mono text-xl font-semibold text-[var(--text-primary)]">
+                {summary.heartbeat_open_total ?? 0}
+              </p>
+              <p className="mt-1 text-[9px] text-[var(--text-muted)]">Supervision findings (deduped)</p>
             </div>
           </div>
         ) : loading ? (
@@ -162,12 +174,16 @@ export function Activity() {
               <h3 className="mt-2 text-sm font-medium text-[var(--text-primary)]">{it.title}</h3>
               <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">{it.summary}</p>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[var(--text-muted)]">
-                <Link
-                  to={`/missions/${encodeURIComponent(it.mission_id)}`}
-                  className="font-medium text-[var(--accent-blue)] underline-offset-2 hover:underline"
-                >
-                  {it.mission_title}
-                </Link>
+                {it.mission_id ? (
+                  <Link
+                    to={`/missions/${encodeURIComponent(it.mission_id)}`}
+                    className="font-medium text-[var(--accent-blue)] underline-offset-2 hover:underline"
+                  >
+                    {it.mission_title}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-[var(--text-secondary)]">{it.mission_title}</span>
+                )}
                 {it.actor_label ? (
                   <span>
                     Actor: <span className="font-mono text-[var(--text-secondary)]">{it.actor_label}</span>
@@ -177,7 +193,17 @@ export function Activity() {
                   Status: <span className="font-mono text-[var(--text-secondary)]">{it.status}</span>
                 </span>
               </div>
-              {typeof it.meta?.event_type === "string" ? (
+              {it.meta?.provenance === "heartbeat_finding" ? (
+                <p className="mt-2 font-mono text-[9px] leading-relaxed text-[var(--text-muted)]">
+                  Heartbeat finding · dedupe{" "}
+                  <span className="text-[var(--text-secondary)]">
+                    {typeof it.meta.dedupe_key === "string" ? it.meta.dedupe_key : "—"}
+                  </span>
+                  {typeof it.meta.provenance_note === "string" && it.meta.provenance_note.trim() ? (
+                    <> · {it.meta.provenance_note}</>
+                  ) : null}
+                </p>
+              ) : typeof it.meta?.event_type === "string" ? (
                 <p className="mt-2 font-mono text-[9px] text-[var(--text-muted)]">
                   Stored event: {it.meta.event_type}
                   {typeof it.meta.provenance === "string" ? ` · ${it.meta.provenance}` : ""}

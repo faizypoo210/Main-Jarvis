@@ -121,7 +121,13 @@ export interface OperatorUsageResponse {
 }
 
 /** GET /api/v1/operator/activity */
-export type ActivityFeedCategory = "mission" | "approval" | "execution" | "attention" | "memory";
+export type ActivityFeedCategory =
+  | "mission"
+  | "approval"
+  | "execution"
+  | "attention"
+  | "memory"
+  | "heartbeat";
 
 export interface ActivitySummary {
   window_hours: number;
@@ -131,6 +137,35 @@ export interface ActivitySummary {
   attention_in_window: number;
   /** Present on control planes that expose memory timeline counts. */
   memory_in_window?: number;
+  /** Open heartbeat supervision findings (deduped). */
+  heartbeat_open_total?: number;
+}
+
+/** GET /api/v1/operator/heartbeat */
+export interface HeartbeatFindingRead {
+  id: UUID;
+  finding_type: string;
+  severity: string;
+  summary: string;
+  dedupe_key: string;
+  mission_id: UUID | null;
+  approval_id: UUID | null;
+  worker_id: UUID | null;
+  integration_id: UUID | null;
+  service_component: string | null;
+  provenance_note: string | null;
+  status: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  resolved_at: string | null;
+}
+
+export interface HeartbeatOperatorResponse {
+  generated_at: string;
+  open_count: number;
+  by_severity: Record<string, number>;
+  by_type: Record<string, number>;
+  open_findings: HeartbeatFindingRead[];
 }
 
 export interface OperatorActivityItem {

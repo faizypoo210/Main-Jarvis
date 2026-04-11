@@ -25,6 +25,7 @@ from app.models.base import Base  # noqa: E402
 from app.models import (  # noqa: E402, F401
     approval,
     cost_event,
+    heartbeat_finding,
     integration,
     memory_item,
     mission,

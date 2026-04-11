@@ -30,6 +30,7 @@ These are the **non-negotiable mechanisms** to understand Jarvis end-to-end. The
 |-----------|----------------|-------------------------|------------------------|
 | **Mission authority** | Single source of truth for missions, timeline events, approvals, receipts, SSE | `services/control-plane/`, Alembic, `docs/GOLDEN_PATH.md` | Your PostgreSQL data |
 | **Durable operator memory** | Long-lived `memory_items` rows + mission timeline hooks (`memory_saved` / `memory_promoted` / `memory_archived`) when tied to a mission | `app/models/memory_item.py`, `app/services/memory_service.py`, `app/services/memory_promotion.py`, `GET/POST /api/v1/operator/memory*` | **Not** automatic extraction from every command; **not** full receipt/chat ingest (see promotion rules in code) |
+| **Heartbeat supervision (v1)** | Periodic explicit rule checks; **deduped** open/resolved rows in `heartbeat_findings`; no chat or LLM “nudges” | `app/services/heartbeat_service.py`, `heartbeat/heartbeat.py` worker, `GET /api/v1/operator/heartbeat`, Activity category `heartbeat` | **Not** live OS process monitoring; worker staleness uses `workers.last_heartbeat_at` only; thresholds via `HEARTBEAT_*` env (see `services/control-plane/.env.example`) |
 | **Operator UI** | Browse missions, act on approvals, mission detail, live updates | `services/command-center/` | N/A |
 | **Command intake** | Create missions from text + surface metadata | `POST /api/v1/commands`, `app/schemas/commands.py` | — |
 | **Redis coordination** | Stream-based handoff between services; mission execution payloads carry compact **routing** metadata (`requested_lane` / `actual_lane` / fallback) | Stream names in `coordinator/coordinator.py`, `executor/executor.py`, `voice/server.py`; routing heuristics in `shared/routing.py` | Redis persistence / Docker volume; **no** separate local-fast mission executor beyond OpenClaw |
@@ -90,6 +91,8 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 | API governance loop | `docs/GOLDEN_PATH.md` + `scripts/13-rehearse-golden-path.ps1` |
 | Full execution chain | `docs/LIVE_STACK_REHEARSAL.md` + `scripts/14-rehearse-live-stack.ps1` |
 | Command Center build | `cd services/command-center && npm run build` |
+| Heartbeat open findings | `GET /api/v1/operator/heartbeat` (same session as other operator routes) |
+| Heartbeat run (API key) | `POST /api/v1/heartbeat/run` with `x-api-key`; or run `python heartbeat/heartbeat.py` with `CONTROL_PLANE_URL`, `CONTROL_PLANE_API_KEY`, `HEARTBEAT_INTERVAL_SEC` |
 | Broader deployment phases | `DEPLOYMENT_STATUS.md`, `docs/E2E_SMOKE_TEST.md` |
 
 ## Known limitations

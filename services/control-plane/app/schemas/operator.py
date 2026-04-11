@@ -53,6 +53,10 @@ class ActivitySummary(BaseModel):
         0,
         description="memory_saved / memory_promoted / memory_archived events in window.",
     )
+    heartbeat_open_total: int = Field(
+        0,
+        description="Open heartbeat_findings rows (supervision signals).",
+    )
 
 
 class OperatorActivityItem(BaseModel):

@@ -24,7 +24,9 @@ from app.services.operator_integrations import build_integrations_report
 
 router = APIRouter()
 
-_ACTIVITY_CATEGORIES = frozenset({"mission", "approval", "execution", "attention", "memory"})
+_ACTIVITY_CATEGORIES = frozenset(
+    {"mission", "approval", "execution", "attention", "memory", "heartbeat"}
+)
 
 def _parse_before_iso(raw: str | None) -> datetime | None:
     if raw is None or not str(raw).strip():
@@ -67,7 +69,9 @@ async def operator_activity(
     if category is not None and category not in _ACTIVITY_CATEGORIES:
         raise HTTPException(
             status_code=400,
-            detail="category must be one of: mission, approval, execution, attention, memory",
+            detail=(
+                "category must be one of: mission, approval, execution, attention, memory, heartbeat"
+            ),
         )
     before_dt = _parse_before_iso(before)
     summary: ActivitySummary = await fetch_activity_summary(session)

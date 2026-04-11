@@ -3,6 +3,7 @@
 from app.models.approval import Approval
 from app.models.base import Base
 from app.models.cost_event import CostEvent
+from app.models.heartbeat_finding import HeartbeatFinding
 from app.models.integration import Integration
 from app.models.memory_item import MemoryItem
 from app.models.mission import Mission
@@ -22,4 +23,5 @@ __all__ = [
     "CostEvent",
     "SurfaceSession",
     "MemoryItem",
+    "HeartbeatFinding",
 ]

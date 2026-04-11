@@ -4,6 +4,7 @@ import { ConversationThread } from "../components/conversation/ConversationThrea
 import { StatusBadge } from "../components/common/StatusBadge";
 import { useShellOutlet } from "../components/layout/AppShell";
 import { useControlPlaneLive, useMissions, useResolveApprovalAction } from "../hooks/useControlPlane";
+import { useOperatorHeartbeat } from "../hooks/useOperatorHeartbeat";
 import { formatRelativeTime, normalizeMissionStatus } from "../lib/format";
 import { approvalPostDecisionLine } from "../lib/approvalPresentation";
 import { operatorCopy } from "../lib/operatorCopy";
@@ -387,6 +388,7 @@ function TriageSection({
 export function Overview() {
   const ctx = useShellOutlet();
   const live = useControlPlaneLive();
+  const heartbeat = useOperatorHeartbeat(90000);
   const { missions, loading } = useMissions();
   const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
     useResolveApprovalAction();
@@ -438,6 +440,26 @@ export function Overview() {
         <ConversationThread onVoiceClick={ctx.openVoiceMode} />
       </div>
       <div className="shrink-0 border-t border-[var(--bg-border)] px-3 py-3 md:px-6">
+        {heartbeat.data && heartbeat.data.open_count > 0 ? (
+          <div
+            className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--status-amber)]/35 bg-[var(--status-amber)]/10 px-3 py-2 text-[11px] text-[var(--text-secondary)]"
+            role="status"
+          >
+            <span>
+              Heartbeat supervision:{" "}
+              <span className="font-mono font-semibold text-[var(--text-primary)]">
+                {heartbeat.data.open_count}
+              </span>{" "}
+              open {heartbeat.data.open_count === 1 ? "finding" : "findings"} (deduped).
+            </span>
+            <Link
+              to="/activity"
+              className="shrink-0 font-medium text-[var(--accent-blue)] underline-offset-2 hover:underline"
+            >
+              View in Activity
+            </Link>
+          </div>
+        ) : null}
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           Mission triage
         </p>

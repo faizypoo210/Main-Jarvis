@@ -22,6 +22,7 @@ import { LiveLinkIndicator } from "../components/layout/LiveLinkIndicator";
 import { operatorCopy } from "../lib/operatorCopy";
 import { deriveMissionTiming } from "../lib/missionTiming";
 import { MissionOperationalHealthRow, MissionTimingStrip } from "../components/mission/MissionObservability";
+import { GovernedActionLauncher } from "../components/governed/GovernedActionLauncher";
 
 export function MissionDetail() {
   const { missionId = "" } = useParams<{ missionId: string }>();
@@ -273,6 +274,8 @@ export function MissionDetail() {
               />
             )}
           </section>
+
+          {mission ? <GovernedActionLauncher missionId={mission.id} /> : null}
 
           <section>
             <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">

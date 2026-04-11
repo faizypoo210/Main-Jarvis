@@ -3,6 +3,12 @@ import type {
   Approval,
   ApprovalBundleResponse,
   CommandResponse,
+  GitHubCreateIssueRequestBody,
+  GitHubCreatePullRequestRequestBody,
+  GitHubMergePullRequestRequestBody,
+  GmailCreateDraftRequestBody,
+  GmailCreateReplyDraftRequestBody,
+  GmailSendDraftRequestBody,
   HeartbeatOperatorResponse,
   MemoryCountsResponse,
   MemoryItemRead,
@@ -412,5 +418,66 @@ export async function getOperatorActivity(params?: {
   const qs = q.toString();
   return requestJson<OperatorActivityResponse>(
     `${BASE}/operator/activity${qs ? `?${qs}` : ""}`
+  );
+}
+
+/** Governed integration workflows — each POST creates a pending approval (no immediate external side effects until approved). */
+export async function postGithubCreateIssue(
+  missionId: string,
+  body: GitHubCreateIssueRequestBody
+): Promise<Approval> {
+  return requestJson<Approval>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/integrations/github/create-issue`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function postGithubCreatePullRequest(
+  missionId: string,
+  body: GitHubCreatePullRequestRequestBody
+): Promise<Approval> {
+  return requestJson<Approval>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/integrations/github/create-pull-request`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function postGithubMergePullRequest(
+  missionId: string,
+  body: GitHubMergePullRequestRequestBody
+): Promise<Approval> {
+  return requestJson<Approval>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/integrations/github/merge-pull-request`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function postGmailCreateDraft(
+  missionId: string,
+  body: GmailCreateDraftRequestBody
+): Promise<Approval> {
+  return requestJson<Approval>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/integrations/gmail/create-draft`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function postGmailCreateReplyDraft(
+  missionId: string,
+  body: GmailCreateReplyDraftRequestBody
+): Promise<Approval> {
+  return requestJson<Approval>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/integrations/gmail/create-reply-draft`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function postGmailSendDraft(
+  missionId: string,
+  body: GmailSendDraftRequestBody
+): Promise<Approval> {
+  return requestJson<Approval>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/integrations/gmail/send-draft`,
+    { method: "POST", body: JSON.stringify(body) }
   );
 }

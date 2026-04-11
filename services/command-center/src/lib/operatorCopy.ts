@@ -38,4 +38,7 @@ export const operatorCopy = {
   receiptInspectPayload: "Inspect payload",
   /** Accessible name for latest-result links that jump to receipts on mission detail. */
   latestResultNavigateLabel: "Open latest execution receipt",
+  /** Mission detail — governed action launcher intro (approval-gated; not immediate vendor mutation). */
+  governedLauncherIntro:
+    "Submitting creates a pending approval request for this mission. GitHub and Gmail change only after you approve the request elsewhere.",
 } as const;

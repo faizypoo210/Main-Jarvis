@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useOperatorIntegrations } from "../hooks/useOperatorIntegrations";
 import {
   connectionSourceLabel,
@@ -42,6 +43,15 @@ export function Integrations() {
           Readiness and wiring for external tools. The control plane does{" "}
           <span className="text-[var(--text-secondary)]">not</span> store vendor OAuth tokens; many signals
           are machine-local or inferred from this deployment.
+        </p>
+        <p className="mb-4 max-w-2xl text-xs leading-relaxed text-[var(--text-muted)]">
+          Governed GitHub and Gmail workflows (issue, draft PR, merge, drafts, send) are launched from{" "}
+          <Link to="/missions" className="font-medium text-[var(--accent-blue)] hover:underline">
+            Missions
+          </Link>
+          : open a mission and use <span className="text-[var(--text-secondary)]">Request a governed action</span>.
+          That step creates a <span className="text-[var(--text-secondary)]">pending approval</span> tied to the
+          mission — not an immediate change in GitHub or Gmail.
         </p>
 
         {summary ? (

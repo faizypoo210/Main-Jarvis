@@ -132,6 +132,81 @@ export interface CommandResponse {
   message: string;
 }
 
+/** Governed GitHub/Gmail POST bodies — mirror control-plane schemas; UI sets `requested_via: "command_center"`. */
+export type GovernedApprovalSurface = "command_center";
+
+export type GovernedActionKind =
+  | "github_create_issue"
+  | "github_create_pull_request"
+  | "github_merge_pull_request"
+  | "gmail_create_draft"
+  | "gmail_create_reply_draft"
+  | "gmail_send_draft";
+
+export interface GitHubCreateIssueRequestBody {
+  repo: string;
+  title: string;
+  body: string;
+  labels?: string[];
+  requested_by: string;
+  requested_via: GovernedApprovalSurface;
+  source_mission_id?: string;
+}
+
+export interface GitHubCreatePullRequestRequestBody {
+  repo: string;
+  base: string;
+  head: string;
+  title: string;
+  body: string;
+  draft: boolean;
+  requested_by: string;
+  requested_via: GovernedApprovalSurface;
+  source_mission_id?: string;
+}
+
+export type GitHubMergeMethod = "merge" | "squash" | "rebase";
+
+export interface GitHubMergePullRequestRequestBody {
+  repo: string;
+  pull_number: number;
+  merge_method: GitHubMergeMethod;
+  expected_head_sha?: string | null;
+  requested_by: string;
+  requested_via: GovernedApprovalSurface;
+  source_mission_id?: string;
+}
+
+export interface GmailCreateDraftRequestBody {
+  to: string[];
+  subject: string;
+  body: string;
+  cc?: string[];
+  bcc?: string[];
+  requested_by: string;
+  requested_via: GovernedApprovalSurface;
+  source_mission_id?: string;
+}
+
+export interface GmailCreateReplyDraftRequestBody {
+  reply_to_message_id: string;
+  thread_id?: string | null;
+  body: string;
+  cc?: string[];
+  bcc?: string[];
+  subject?: string | null;
+  requested_by: string;
+  requested_via: GovernedApprovalSurface;
+  source_mission_id?: string;
+}
+
+export interface GmailSendDraftRequestBody {
+  draft_id: string;
+  requested_by: string;
+  requested_via: GovernedApprovalSurface;
+  source_mission_id?: string;
+}
+
 /** GET /missions/:id/bundle */
 export interface MissionBundle {
   mission: Mission;

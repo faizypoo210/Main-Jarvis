@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ApprovalReviewPanel } from "../components/approvals/ApprovalReviewPanel";
 import { RiskBadge, type Risk } from "../components/common/RiskBadge";
 import {
@@ -12,7 +13,9 @@ function toRisk(r: string): Risk {
 }
 
 export function Approvals() {
-  const { approvals, loading, error } = usePendingApprovals();
+  const { approvals, loading, error, refetch } = usePendingApprovals();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pickApprovalId = searchParams.get("approval");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { bundle, loading: bundleLoading, error: bundleError, refetch: refetchBundle } =
     useApprovalBundle(selectedId);
@@ -20,6 +23,27 @@ export function Approvals() {
     useResolveApprovalAction();
 
   useEffect(() => {
+    if (pickApprovalId) {
+      void refetch();
+    }
+  }, [pickApprovalId, refetch]);
+
+  useEffect(() => {
+    if (pickApprovalId) {
+      if (approvals.some((a) => a.id === pickApprovalId)) {
+        setSelectedId(pickApprovalId);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("approval");
+            return next;
+          },
+          { replace: true }
+        );
+      }
+      /* Wait for refetch/SSE — do not select a different pending approval meanwhile. */
+      return;
+    }
     if (!approvals.length) {
       setSelectedId(null);
       return;
@@ -28,7 +52,7 @@ export function Approvals() {
       if (prev && approvals.some((a) => a.id === prev)) return prev;
       return approvals[0]?.id ?? null;
     });
-  }, [approvals]);
+  }, [approvals, pickApprovalId, setSearchParams]);
 
   const selected = approvals.find((a) => a.id === selectedId) ?? null;
 

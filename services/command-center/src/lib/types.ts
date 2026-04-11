@@ -61,3 +61,11 @@ export interface CommandResponse {
   mission_status: string;
   message: string;
 }
+
+/** GET /missions/:id/bundle */
+export interface MissionBundle {
+  mission: Mission;
+  events: MissionEvent[];
+  approvals: Approval[];
+  receipts: Receipt[];
+}

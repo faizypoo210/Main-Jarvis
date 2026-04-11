@@ -9,6 +9,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mission_event import MissionEvent
+from app.realtime.emit import queue_mission_event
 
 
 class MissionEventRepository:
@@ -33,6 +34,7 @@ class MissionEventRepository:
         db.add(event)
         await db.flush()
         await db.refresh(event)
+        queue_mission_event(db, event)
         return event
 
     @staticmethod

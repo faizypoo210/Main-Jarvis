@@ -44,7 +44,7 @@ Set secrets in Windows User environment variables; do not commit them.
 ## Setup
 
 ```powershell
-cd F:\Jarvis\coordinator
+cd coordinator
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
 ```
@@ -52,7 +52,7 @@ python -m venv .venv
 Start from the repo (after configuring env vars):
 
 ```powershell
-F:\Jarvis\scripts\09-start-coordinator.ps1
+.\scripts\09-start-coordinator.ps1
 ```
 
 ## Logs

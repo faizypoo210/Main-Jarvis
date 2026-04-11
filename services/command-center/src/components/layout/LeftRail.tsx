@@ -10,6 +10,8 @@ import {
   Target,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import type { StreamPhase } from "../../contexts/ControlPlaneLiveContext";
+import { LiveLinkIndicator } from "./LiveLinkIndicator";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
@@ -25,9 +27,11 @@ const nav = [
 export function LeftRail({
   missionActiveCount,
   pendingApprovalCount,
+  streamPhase,
 }: {
   missionActiveCount: number;
   pendingApprovalCount: number;
+  streamPhase: StreamPhase;
 }) {
   const badge = (key: "missions" | "approvals") => {
     if (key === "missions") return missionActiveCount > 0 ? missionActiveCount : null;
@@ -48,7 +52,7 @@ export function LeftRail({
       style={{ backgroundColor: "var(--bg-surface)" }}
     >
       <div className="flex flex-col gap-6 p-3 lg:p-4">
-        <div className="flex items-center gap-2 lg:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:gap-3">
           <div className="relative flex h-8 w-8 shrink-0 items-center justify-center">
             <div
               className="absolute inset-0 rounded-full opacity-60 blur-md"
@@ -65,6 +69,9 @@ export function LeftRail({
           <span className="font-display hidden text-lg font-bold tracking-tight text-[var(--text-primary)] lg:block">
             JARVIS
           </span>
+          <div className="ml-auto min-w-0">
+            <LiveLinkIndicator phase={streamPhase} />
+          </div>
         </div>
 
         <nav className="flex flex-col gap-1">

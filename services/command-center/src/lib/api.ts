@@ -2,6 +2,7 @@ import type {
   Approval,
   CommandResponse,
   Mission,
+  MissionBundle,
   MissionEvent,
   Receipt,
 } from "./types";
@@ -10,6 +11,81 @@ const CP = import.meta.env.VITE_CONTROL_PLANE_URL;
 if (!CP) throw new Error("VITE_CONTROL_PLANE_URL is not set. Check your .env file.");
 const BASE = `${CP}/api/v1`;
 const ORIGIN = CP;
+
+/** Public for SSE client and health checks. */
+export const CONTROL_PLANE_ORIGIN = ORIGIN;
+export const CONTROL_PLANE_API_V1 = BASE;
+
+export type LiveStreamMessage =
+  | { type: "mission_event"; event: MissionEvent }
+  | { type: "mission"; mission: Mission };
+
+export type StreamConnectOptions = {
+  /** HTTP 200 and body available — stream is open before first SSE line. */
+  onOpen?: () => void;
+  /** Reader finished (server closed or EOF). */
+  onStreamEnd?: () => void;
+};
+
+/**
+ * Fetch-based SSE reader (supports `x-api-key`; EventSource cannot set headers in browsers).
+ */
+export function connectControlPlaneStream(
+  onMessage: (msg: LiveStreamMessage) => void,
+  onError: (err: Error) => void,
+  signal: AbortSignal,
+  options?: StreamConnectOptions
+): void {
+  const url = `${BASE}/updates/stream`;
+  void (async () => {
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "text/event-stream",
+          "x-api-key": import.meta.env.VITE_CONTROL_PLANE_API_KEY ?? "",
+        },
+        signal,
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        onError(new Error(t || `stream HTTP ${res.status}`));
+        return;
+      }
+      options?.onOpen?.();
+      const reader = res.body?.getReader();
+      if (!reader) {
+        onError(new Error("stream has no body"));
+        return;
+      }
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const block of parts) {
+          const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          const raw = dataLine.replace(/^data:\s*/, "").trim();
+          if (!raw) continue;
+          try {
+            const j = JSON.parse(raw) as LiveStreamMessage;
+            onMessage(j);
+          } catch {
+            /* ignore malformed chunk */
+          }
+        }
+      }
+      options?.onStreamEnd?.();
+    } catch (e: unknown) {
+      if (signal.aborted) return;
+      onError(e instanceof Error ? e : new Error(String(e)));
+    }
+  })();
+}
 
 function isNetworkError(e: unknown): boolean {
   return e instanceof TypeError && typeof e.message === "string";
@@ -83,6 +159,24 @@ export async function getMission(id: string): Promise<Mission> {
 export async function getMissionEvents(missionId: string): Promise<MissionEvent[]> {
   return requestJson<MissionEvent[]>(
     `${BASE}/missions/${encodeURIComponent(missionId)}/events`
+  );
+}
+
+export async function getMissionApprovals(missionId: string): Promise<Approval[]> {
+  return requestJson<Approval[]>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/approvals`
+  );
+}
+
+export async function getMissionReceipts(missionId: string): Promise<Receipt[]> {
+  return requestJson<Receipt[]>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/receipts`
+  );
+}
+
+export async function getMissionBundle(missionId: string): Promise<MissionBundle> {
+  return requestJson<MissionBundle>(
+    `${BASE}/missions/${encodeURIComponent(missionId)}/bundle`
   );
 }
 

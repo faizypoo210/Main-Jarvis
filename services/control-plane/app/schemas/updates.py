@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 class UpdatesStatus(BaseModel):
     status: str = "ok"
-    note: str = "Control plane is authoritative; stream integration pending."
+    note: str = "Use GET /api/v1/updates/stream (SSE) for live mission_event and mission snapshots."
 
 
 class MissionEventRead(BaseModel):

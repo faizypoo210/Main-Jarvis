@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
+from app.realtime.hub import get_hub
 
 settings = get_settings()
 
@@ -32,6 +33,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
             if session.in_transaction():
                 await session.commit()
+            pending = session.info.pop("realtime_emit", [])
+            if pending:
+                hub = get_hub()
+                await hub.broadcast_all(pending)
         except Exception:
             await session.rollback()
             raise

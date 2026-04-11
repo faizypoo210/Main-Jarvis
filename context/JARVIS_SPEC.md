@@ -2,6 +2,8 @@
 
 **Perfect approach:** Use Cursor's **Composer** + **Terminal** + **Agent mode** to execute the entire deployment with minimal manual work.
 
+> **Security:** Embedded prompts below use placeholders such as `<OPENCLAW_GATEWAY_TOKEN_SET_VIA_ENV>` and `<YOUR_LAN_IP>`. Never paste real tokens or keys into this file. If any value ever appeared in git history, **rotate** it (see `docs/SECRET_ROTATION.md`).
+
 ---
 
 ## Setup: Prepare Cursor Workspace
@@ -174,10 +176,10 @@ REQUIREMENTS:
      DATABASE_URL=postgresql://jarvis:jarvis_secure_password_2026@host.docker.internal:5432/jarvis_missions
      REDIS_URL=redis://host.docker.internal:6379
      OPENCLAW_GATEWAY_URL=http://host.docker.internal:18789
-     OPENCLAW_GATEWAY_TOKEN=1aa716114e74097698e1ffe4be8d550f181f291afa1b86db
+     OPENCLAW_GATEWAY_TOKEN=<OPENCLAW_GATEWAY_TOKEN_SET_VIA_ENV>
      AUTH_TOKEN=(set in Mission Control .env — never commit real tokens)
      DASHCLAW_BASE_URL=https://jarvis-dashclaw.vercel.app
-     DASHCLAW_API_KEY=62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=
+     DASHCLAW_API_KEY=<DASHCLAW_API_KEY_SET_VIA_ENV>
      ENABLE_DASHCLAW=true
      ENABLE_COST_TRACKING=true
      NODE_ENV=production
@@ -242,7 +244,7 @@ REQUIREMENTS:
      "gateway": {
        "port": 18789,
        "host": "0.0.0.0",
-       "token": "1aa716114e74097698e1ffe4be8d550f181f291afa1b86db"
+       "token": "<OPENCLAW_GATEWAY_TOKEN_SET_VIA_ENV>"
      },
      "agents": {
        "main": {
@@ -336,11 +338,11 @@ REQUIREMENTS:
      * host: 0.0.0.0
      * theme: dark
      * OpenClaw gateway URL: http://localhost:18789
-     * Gateway token: 1aa716114e74097698e1ffe4be8d550f181f291afa1b86db
+     * Gateway token: <OPENCLAW_GATEWAY_TOKEN_SET_VIA_ENV>
      * Mission Control base URL: http://localhost:3000
      * Mission Control auth token: (set in `.env` — not in repo)
      * DashClaw base URL: https://jarvis-dashclaw.vercel.app
-     * DashClaw API key: 62w17xh3m634JkxVGXJhoesn0ghyfoBe814RNFKywik=
+     * DashClaw API key: <DASHCLAW_API_KEY_SET_VIA_ENV>
    
    - Starts server: node server.cjs
    - Opens http://localhost:8080 in browser
@@ -525,13 +527,13 @@ REQUIREMENTS:
    - Creates firewall rule for OpenClaw Gateway (port 18789)
    - Creates firewall rule for Ollama (port 11434)
    - Verifies rules are active
-   - Shows Windows IP address (10.0.0.249)
+   - Shows Windows IP address (<YOUR_LAN_IP>)
 
 2. Create `scripts/07-test-phone-access.ps1` that:
    - Displays URLs for phone access:
-     * Mission Control: http://10.0.0.249:3000
-     * LobsterBoard: http://10.0.0.249:8080
-     * Gateway API: http://10.0.0.249:18789
+     * Mission Control: http://<YOUR_LAN_IP>:3000
+     * LobsterBoard: http://<YOUR_LAN_IP>:8080
+     * Gateway API: http://<YOUR_LAN_IP>:18789
    - Tests each endpoint is accessible
    - Provides QR codes for easy phone scanning (if possible)
 
@@ -583,8 +585,8 @@ Generate all files now.
 **On your phone:**
 - Connect to same WiFi
 - Open browser
-- Visit `http://10.0.0.249:3000` (Mission Control)
-- Visit `http://10.0.0.249:8080` (LobsterBoard)
+- Visit `http://<YOUR_LAN_IP>:3000` (Mission Control)
+- Visit `http://<YOUR_LAN_IP>:8080` (LobsterBoard)
 
 **Mark complete in `DEPLOYMENT_STATUS.md`** ✅
 
@@ -755,7 +757,7 @@ Generate all files now.
 **Access points:**
 - Mission Control: `http://localhost:3000`
 - LobsterBoard: `http://localhost:8080`
-- Phone (same WiFi): `http://10.0.0.249:3000`
+- Phone (same WiFi): `http://<YOUR_LAN_IP>:3000`
 
 ---
 

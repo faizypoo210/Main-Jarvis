@@ -51,6 +51,16 @@ class ApprovalRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def list_by_mission(db: AsyncSession, mission_id: UUID) -> list[Approval]:
+        stmt: Select[tuple[Approval]] = (
+            select(Approval)
+            .where(Approval.mission_id == mission_id)
+            .order_by(Approval.created_at.asc())
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def get_pending(db: AsyncSession, limit: int = 50) -> list[Approval]:
         stmt: Select[tuple[Approval]] = (
             select(Approval)

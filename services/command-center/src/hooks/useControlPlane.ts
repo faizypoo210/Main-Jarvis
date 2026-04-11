@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import * as api from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { useControlPlaneLive } from "../contexts/ControlPlaneLiveContext";
 import type { Approval, Mission, MissionEvent } from "../lib/types";
+
+export { useControlPlaneLive } from "../contexts/ControlPlaneLiveContext";
+export type { StreamPhase } from "../contexts/ControlPlaneLiveContext";
 
 export function useMissions(params?: {
   status?: string;
@@ -11,48 +14,30 @@ export function useMissions(params?: {
   error: string | null;
   refetch: () => Promise<void>;
 } {
-  const [missions, setMissions] = useState<Mission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(
-    async (isPoll: boolean) => {
-      if (!isPoll) {
-        setLoading(true);
-      }
-      try {
-        const data = await api.getMissions({
-          status: params?.status,
-          limit: params?.limit ?? 500,
-        });
-        setMissions(data);
-        setError(null);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setError(msg);
-        if (!isPoll) {
-          setMissions([]);
-        }
-      } finally {
-        if (!isPoll) {
-          setLoading(false);
-        }
-      }
-    },
-    [params?.status, params?.limit]
-  );
+  const ctx = useControlPlaneLive();
+  const missions = useMemo(() => {
+    let m = ctx.missions;
+    if (params?.status) {
+      m = m.filter((x) => x.status === params.status);
+    }
+    if (params?.limit != null) {
+      m = m.slice(0, params.limit);
+    }
+    return m;
+  }, [ctx.missions, params?.status, params?.limit]);
 
   useEffect(() => {
-    void load(false);
-    const id = window.setInterval(() => void load(true), 5000);
+    if (ctx.streamConnected) return;
+    const id = window.setInterval(() => void ctx.refetchMissions(), 15000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [ctx.streamConnected, ctx.refetchMissions]);
 
-  const refetch = useCallback(async () => {
-    await load(false);
-  }, [load]);
-
-  return { missions, loading, error, refetch };
+  return {
+    missions,
+    loading: ctx.missionsLoading,
+    error: ctx.missionsError,
+    refetch: ctx.refetchMissions,
+  };
 }
 
 export function usePendingApprovals(params?: { pollIntervalMs?: number }): {
@@ -61,102 +46,67 @@ export function usePendingApprovals(params?: { pollIntervalMs?: number }): {
   error: string | null;
   refetch: () => Promise<void>;
 } {
-  const pollIntervalMs = params?.pollIntervalMs ?? 3000;
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (isPoll: boolean) => {
-    if (!isPoll) {
-      setLoading(true);
-    }
-    try {
-      const data = await api.getPendingApprovals();
-      setApprovals(data);
-      setError(null);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      if (!isPoll) {
-        setApprovals([]);
-      }
-    } finally {
-      if (!isPoll) {
-        setLoading(false);
-      }
-    }
-  }, []);
+  const ctx = useControlPlaneLive();
+  const pollIntervalMs = params?.pollIntervalMs ?? 8000;
 
   useEffect(() => {
-    void load(false);
-    const id = window.setInterval(() => void load(true), pollIntervalMs);
+    if (ctx.streamConnected) return;
+    const id = window.setInterval(() => void ctx.refetchPendingApprovals(), pollIntervalMs);
     return () => clearInterval(id);
-  }, [load, pollIntervalMs]);
+  }, [ctx.streamConnected, pollIntervalMs, ctx.refetchPendingApprovals]);
 
-  const refetch = useCallback(async () => {
-    await load(false);
-  }, [load]);
-
-  return { approvals, loading, error, refetch };
+  return {
+    approvals: ctx.pendingApprovals,
+    loading: ctx.pendingLoading,
+    error: ctx.pendingError,
+    refetch: ctx.refetchPendingApprovals,
+  };
 }
 
-/** Poll mission + events on an interval (e.g. right panel detail). */
-export function usePolledMissionDetail(missionId: string | null, pollIntervalMs = 5000): {
+/** Mission detail + timeline: hydrated once, then live via SSE; polls when stream is down. */
+export function usePolledMissionDetail(missionId: string | null, pollIntervalMs = 8000): {
   mission: Mission | null;
   events: MissionEvent[];
   loading: boolean;
   error: string | null;
 } {
-  const [mission, setMission] = useState<Mission | null>(null);
-  const [events, setEvents] = useState<MissionEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const ctx = useControlPlaneLive();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!missionId?.trim()) {
-      setMission(null);
-      setEvents([]);
       setError(null);
-      setLoading(false);
       return;
     }
-
     let cancelled = false;
-
-    const load = async (isPoll: boolean) => {
-      if (!isPoll) {
-        setLoading(true);
-      }
-      setError(null);
+    setError(null);
+    void (async () => {
       try {
-        const [m, ev] = await Promise.all([
-          api.getMission(missionId),
-          api.getMissionEvents(missionId),
-        ]);
-        if (!cancelled) {
-          setMission(m);
-          setEvents(ev);
-        }
+        await ctx.bootstrapMission(missionId);
       } catch (e: unknown) {
         if (!cancelled) {
-          setMission(null);
-          setEvents([]);
           setError(e instanceof Error ? e.message : String(e));
         }
-      } finally {
-        if (!cancelled && !isPoll) {
-          setLoading(false);
-        }
       }
-    };
-
-    void load(false);
-    const id = window.setInterval(() => void load(true), pollIntervalMs);
+    })();
     return () => {
       cancelled = true;
-      clearInterval(id);
     };
-  }, [missionId, pollIntervalMs]);
+  }, [missionId, ctx.bootstrapMission]);
+
+  useEffect(() => {
+    if (!missionId?.trim() || ctx.streamConnected) return;
+    const id = window.setInterval(() => void ctx.bootstrapMission(missionId), pollIntervalMs);
+    return () => clearInterval(id);
+  }, [missionId, ctx.streamConnected, pollIntervalMs, ctx.bootstrapMission]);
+
+  const mission = missionId
+    ? ctx.missionById[missionId] ?? ctx.missions.find((m) => m.id === missionId) ?? null
+    : null;
+  const events = missionId ? ctx.eventsByMissionId[missionId] ?? [] : [];
+
+  const loading =
+    Boolean(missionId?.trim()) && !mission && events.length === 0 && ctx.missionsLoading;
 
   return { mission, events, loading, error };
 }
@@ -167,48 +117,40 @@ export function useMission(id: string): {
   loading: boolean;
   error: string | null;
 } {
-  const [mission, setMission] = useState<Mission | null>(null);
-  const [events, setEvents] = useState<MissionEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const ctx = useControlPlaneLive();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id.trim()) {
-      setMission(null);
-      setEvents([]);
-      setLoading(false);
       setError(null);
       return;
     }
-
     let cancelled = false;
-    setLoading(true);
     setError(null);
-
-    Promise.all([api.getMission(id), api.getMissionEvents(id)])
-      .then(([m, ev]) => {
+    void (async () => {
+      try {
+        await ctx.bootstrapMission(id);
+      } catch (e: unknown) {
         if (!cancelled) {
-          setMission(m);
-          setEvents(ev);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setMission(null);
-          setEvents([]);
           setError(e instanceof Error ? e.message : String(e));
         }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, ctx.bootstrapMission]);
+
+  useEffect(() => {
+    if (!id.trim() || ctx.streamConnected) return;
+    const handle = window.setInterval(() => void ctx.bootstrapMission(id), 10000);
+    return () => clearInterval(handle);
+  }, [id, ctx.streamConnected, ctx.bootstrapMission]);
+
+  const mission = id ? ctx.missionById[id] ?? ctx.missions.find((m) => m.id === id) ?? null : null;
+  const events = id ? ctx.eventsByMissionId[id] ?? [] : [];
+
+  const loading = Boolean(id.trim()) && !mission && events.length === 0;
 
   return { mission, events, loading, error };
 }

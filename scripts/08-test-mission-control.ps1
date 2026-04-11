@@ -3,6 +3,10 @@
 # Set User env JARVIS_MISSION_CONTROL_TOKEN to your Mission Control API token, or this suite is skipped.
 $ErrorActionPreference = 'Continue'
 
+$LanIp = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = $env:JARVIS_LAN_IP }
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = '127.0.0.1' }
+
 $BaseUrl = 'http://localhost:3001'
 $Bearer = [Environment]::GetEnvironmentVariable('JARVIS_MISSION_CONTROL_TOKEN', 'User')
 if ([string]::IsNullOrEmpty($Bearer)) {
@@ -79,8 +83,8 @@ Test-Step 'DELETE test mission (cleanup)' {
     }
 }
 
-Test-Step 'LAN Mission Control UI 10.0.0.249:3000' {
-    $r = Invoke-WebRequest -Uri 'http://10.0.0.249:3000' -UseBasicParsing -TimeoutSec 20
+Test-Step "LAN Mission Control UI ${LanIp}:3000" {
+    $r = Invoke-WebRequest -Uri "http://${LanIp}:3000" -UseBasicParsing -TimeoutSec 20
     return ($r.StatusCode -eq 200)
 }
 

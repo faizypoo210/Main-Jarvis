@@ -17,4 +17,7 @@ if ($resp.StatusCode -ne 200) {
 }
 
 Write-Host "LobsterBoard is reachable at http://localhost:8080 (HTTP $($resp.StatusCode))."
-Write-Host "On the same WiFi, open http://10.0.0.249:8080 from your phone to reach this dashboard."
+$LanIp = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = $env:JARVIS_LAN_IP }
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = '127.0.0.1' }
+Write-Host "On the same WiFi, open http://${LanIp}:8080 from your phone (set User env JARVIS_LAN_IP if wrong)."

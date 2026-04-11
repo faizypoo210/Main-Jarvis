@@ -13,7 +13,7 @@
       {
         "id": "main",
         "default": true,
-        "workspace": "C:\\Users\\faizt\\.openclaw\\workspace\\main",
+        "workspace": "C:\\Users\\<USERNAME>\\.openclaw\\workspace\\main",
         "model": "anthropic/claude-sonnet-4-20250514"
       }
     ]

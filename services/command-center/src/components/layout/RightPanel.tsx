@@ -1,35 +1,58 @@
 import { useCallback, useMemo, useState } from "react";
 import { MoreHorizontal, Search } from "lucide-react";
 import * as api from "../../lib/api";
-import { usePendingApprovals, usePolledMissionDetail } from "../../hooks/useControlPlane";
+import { useControlPlaneLive, usePendingApprovals, usePolledMissionDetail } from "../../hooks/useControlPlane";
 import { ApprovalCard } from "../approvals/ApprovalCard";
 import { StatusBadge } from "../common/StatusBadge";
 import type { Approval, Mission } from "../../lib/types";
 import { formatRelativeTime, normalizeMissionStatus, selectFocusMission } from "../../lib/format";
+import { deriveExecutiveMissionSummary } from "../../lib/missionExecutiveSummary";
+import { MissionExecutiveSummaryBlock } from "../mission/MissionExecutiveSummaryBlock";
+import { LiveLinkIndicator } from "./LiveLinkIndicator";
+import { operatorCopy } from "../../lib/operatorCopy";
 
 export function RightPanel({
   missions,
   missionsLoading,
+  threadMissionId,
   onClose,
 }: {
   missions: Mission[];
   missionsLoading: boolean;
+  /** When set, panel follows this mission (same anchor as the conversation thread). */
+  threadMissionId: string | null;
   onClose?: () => void;
 }) {
+  const { streamPhase } = useControlPlaneLive();
+  const { approvals, loading: approvalsLoading, refetch: refetchApprovals } = usePendingApprovals();
   const focusFromList = useMemo(() => selectFocusMission(missions), [missions]);
-  const { approvals, loading: approvalsLoading, refetch } = usePendingApprovals({
-    pollIntervalMs: 5000,
-  });
-  const { mission, events, loading: detailLoading } = usePolledMissionDetail(
-    focusFromList?.id ?? null,
-    5000
-  );
+  const focusMissionId = useMemo(() => {
+    const tid = threadMissionId?.trim();
+    if (tid) return tid;
+    return focusFromList?.id ?? null;
+  }, [threadMissionId, focusFromList?.id]);
 
-  const displayMission = mission ?? focusFromList;
+  const { mission, events, loading: detailLoading } = usePolledMissionDetail(focusMissionId, 5000);
+
+  const displayMission = useMemo(() => {
+    if (mission) return mission;
+    const tid = threadMissionId?.trim();
+    if (tid) {
+      const fromList = missions.find((m) => m.id === tid);
+      if (fromList) return fromList;
+    }
+    return focusFromList;
+  }, [mission, threadMissionId, missions, focusFromList]);
+
   const pendingForMission = useMemo(() => {
     if (!displayMission) return [] as Approval[];
     return approvals.filter((a) => a.mission_id === displayMission.id && a.status === "pending");
   }, [approvals, displayMission]);
+
+  const executiveSummary = useMemo(() => {
+    if (!displayMission) return null;
+    return deriveExecutiveMissionSummary(displayMission, events, approvals, null);
+  }, [displayMission, events, approvals]);
 
   const activityEvents = useMemo(() => {
     const last = events.slice(-5);
@@ -49,14 +72,14 @@ export function RightPanel({
           decided_by: "operator",
           decided_via: "command_center",
         });
-        await refetch();
+        await refetchApprovals();
       } catch {
         setResolveErrorId(id);
       } finally {
         setResolvingId(null);
       }
     },
-    [refetch]
+    [refetchApprovals]
   );
 
   const panelLoading = missionsLoading || (displayMission != null && detailLoading && events.length === 0);
@@ -66,11 +89,13 @@ export function RightPanel({
       className="flex h-full w-full flex-col border-l border-[var(--bg-border)] lg:w-[320px] lg:shrink-0"
       style={{ backgroundColor: "var(--bg-surface)" }}
     >
-      <div className="flex items-center justify-between border-b border-[var(--bg-border)] px-4 py-3">
+      <div className="flex flex-col gap-1 border-b border-[var(--bg-border)] px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
         <h2 className="min-w-0 flex-1 truncate font-display text-sm font-semibold text-[var(--text-primary)]">
           {displayMission ? displayMission.title : "Mission"}
         </h2>
         <div className="flex shrink-0 items-center gap-1">
+          <LiveLinkIndicator phase={streamPhase} />
           <button
             type="button"
             className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
@@ -96,6 +121,12 @@ export function RightPanel({
             </button>
           ) : null}
         </div>
+        </div>
+        {streamPhase !== "live" ? (
+          <p className="text-[10px] leading-snug text-[var(--text-muted)]" role="status">
+            {streamPhase === "reconnecting" ? operatorCopy.liveReconnecting : operatorCopy.liveOfflinePolling}
+          </p>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -106,29 +137,45 @@ export function RightPanel({
         ) : (
           <>
             {panelLoading ? (
-              <p className="mb-4 text-xs text-[var(--text-muted)]">Loading mission…</p>
+              <p className="mb-4 text-xs text-[var(--text-muted)]">Syncing mission…</p>
             ) : null}
 
-            <section className="mb-6">
+            <section className="mb-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <h3 className="min-w-0 flex-1 font-display text-base font-semibold leading-snug text-[var(--text-primary)]">
                   {displayMission.title}
                 </h3>
                 <StatusBadge status={normalizeMissionStatus(displayMission.status)} />
               </div>
-              <p className="mt-2 font-mono text-[10px] text-[var(--text-muted)]">
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-muted)]">
+                {displayMission.current_stage?.trim() ? (
+                  <span className="truncate">
+                    Stage <span className="text-[var(--text-secondary)]">{displayMission.current_stage}</span>
+                  </span>
+                ) : (
+                  <span className="text-[var(--text-muted)]/80">Stage —</span>
+                )}
+                <span aria-hidden className="text-[var(--bg-border)]">
+                  ·
+                </span>
+                <span>Updated {formatRelativeTime(displayMission.updated_at)}</span>
+                {pendingForMission.length > 0 ? (
+                  <>
+                    <span aria-hidden className="text-[var(--bg-border)]">
+                      ·
+                    </span>
+                    <span className="font-semibold text-[var(--status-amber)]">Approval open</span>
+                  </>
+                ) : null}
+              </div>
+              <p className="mt-1 font-mono text-[10px] text-[var(--text-muted)]">
                 Created {formatRelativeTime(displayMission.created_at)}
               </p>
             </section>
 
-            {displayMission.current_stage?.trim() ? (
+            {executiveSummary ? (
               <section className="mb-6">
-                <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                  Stage
-                </h3>
-                <p className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-void)] px-3 py-2 text-sm text-[var(--text-secondary)]">
-                  {displayMission.current_stage}
-                </p>
+                <MissionExecutiveSummaryBlock summary={executiveSummary} variant="panel" />
               </section>
             ) : null}
 
@@ -142,7 +189,11 @@ export function RightPanel({
                 </span>
               </div>
               {pendingForMission.length === 0 ? (
-                <p className="text-xs text-[var(--text-muted)]">No pending approvals</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {displayMission.status === "awaiting_approval"
+                    ? "Approval pending — check inbox or timeline."
+                    : "No pending approvals"}
+                </p>
               ) : (
                 <div className="flex flex-col gap-3">
                   {pendingForMission.map((a) => (
@@ -164,7 +215,7 @@ export function RightPanel({
                 Recent activity
               </h3>
               {activityEvents.length === 0 ? (
-                <p className="text-xs text-[var(--text-muted)]">No activity yet</p>
+                <p className="text-xs text-[var(--text-secondary)]">Awaiting first execution update</p>
               ) : (
                 <ul className="space-y-3 text-xs text-[var(--text-secondary)]">
                   {activityEvents.map((ev) => (

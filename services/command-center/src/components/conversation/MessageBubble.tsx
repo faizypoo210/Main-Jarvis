@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Avatar } from "../common/Avatar";
 
 export function MessageBubble({
@@ -9,6 +10,7 @@ export function MessageBubble({
   body: string;
   time: string;
   routing?: string;
+  /** Full mission id when known — links to mission detail. */
   missionIdTag?: string;
 }) {
   return (
@@ -28,7 +30,14 @@ export function MessageBubble({
         >
           {body}
           {missionIdTag ? (
-            <p className="mt-2 font-mono text-[10px] text-[var(--text-muted)]">{missionIdTag}</p>
+            <p className="mt-2 font-mono text-[10px] text-[var(--text-muted)]">
+              <Link
+                to={`/missions/${encodeURIComponent(missionIdTag)}`}
+                className="text-[var(--accent-blue)]/90 underline-offset-2 hover:underline"
+              >
+                Mission {missionIdTag.slice(0, 8)}…
+              </Link>
+            </p>
           ) : null}
         </div>
       </div>

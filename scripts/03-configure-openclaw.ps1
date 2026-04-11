@@ -17,12 +17,14 @@ $base = Join-Path $env:USERPROFILE ".openclaw"
 $wsMain = Join-Path $base "workspace\main"
 $wsMainJson = $wsMain.Replace("\", "\\")
 
-# Prefer User env for token so the value is not forced from this repo. Fallback keeps existing deployments working.
+# Gateway token MUST come from environment — never from the repo (no embedded fallbacks).
 $gatewayToken = [Environment]::GetEnvironmentVariable("JARVIS_OPENCLAW_GATEWAY_TOKEN", "User")
 if ([string]::IsNullOrWhiteSpace($gatewayToken)) { $gatewayToken = $env:JARVIS_OPENCLAW_GATEWAY_TOKEN }
 if ([string]::IsNullOrWhiteSpace($gatewayToken)) {
-    $gatewayToken = "1aa716114e74097698e1ffe4be8d550f181f291afa1b86db"
-    Write-Host "[INFO] JARVIS_OPENCLAW_GATEWAY_TOKEN not set; using embedded fallback token. Set User env JARVIS_OPENCLAW_GATEWAY_TOKEN and re-run to rotate." -ForegroundColor Yellow
+    Write-Fail "JARVIS_OPENCLAW_GATEWAY_TOKEN is not set."
+    Write-Host "       Set a User environment variable JARVIS_OPENCLAW_GATEWAY_TOKEN (high-entropy secret), then re-run." -ForegroundColor DarkGray
+    Write-Host "       OpenClaw will use it in %USERPROFILE%\.openclaw\openclaw.json. See docs/SECRET_ROTATION.md." -ForegroundColor DarkGray
+    exit 1
 }
 
 # Gateway agent model: never guess MiniMax slug — use env or local Ollama default.

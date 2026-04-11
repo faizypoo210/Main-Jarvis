@@ -8,6 +8,8 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mission import Mission
+from app.realtime.emit import queue_mission_snapshot
+from app.repositories.mission_event_repo import MissionEventRepository
 
 
 class MissionRepository:
@@ -20,6 +22,7 @@ class MissionRepository:
         self._session.add(mission)
         await self._session.flush()
         await self._session.refresh(mission)
+        queue_mission_snapshot(self._session, mission)
         return mission
 
     async def get_by_id(self, mission_id: UUID) -> Mission | None:
@@ -49,10 +52,22 @@ class MissionRepository:
         mission = await self.get_by_id(mission_id)
         if mission is None:
             return None
+        old_status = mission.status
+        if old_status == status:
+            return mission
+
         mission.status = status
         from datetime import UTC, datetime
 
         mission.updated_at = datetime.now(UTC)
         await self._session.flush()
         await self._session.refresh(mission)
+
+        await MissionEventRepository.create(
+            self._session,
+            mission_id=mission_id,
+            event_type="mission_status_changed",
+            payload={"from": old_status, "to": status},
+        )
+        queue_mission_snapshot(self._session, mission)
         return mission

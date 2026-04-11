@@ -6,7 +6,10 @@ $ErrorActionPreference = 'Stop'
 Start-Sleep -Seconds 5
 
 $JarvisRoot = $PSScriptRoot
-$LanIp = '10.0.0.249'
+# Set User env JARVIS_LAN_IP to your Wi‑Fi IPv4 for phone access; never commit machine-specific IPs in the repo.
+$LanIp = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = $env:JARVIS_LAN_IP }
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = '127.0.0.1' }
 # Deprecated external UI (openclaw-mission-control). Not started unless explicitly enabled.
 $LegacyMissionControlRoot = 'C:\projects\openclaw-mission-control'
 $IncludeLegacyMissionControl = ($env:JARVIS_INCLUDE_MISSION_CONTROL -eq '1')
@@ -61,6 +64,17 @@ if (Test-TcpListen 18789) {
     $gw = Join-Path $JarvisRoot 'scripts\03-start-gateway.ps1'
     & $gw
     if ($LASTEXITCODE -ne 0) { throw "03-start-gateway.ps1 failed (exit $LASTEXITCODE)." }
+}
+
+# Model lanes: local Ollama vs OpenClaw gateway (non-blocking; see docs/MODEL_LANES.md)
+$laneVerify = Join-Path $JarvisRoot 'scripts\11-verify-model-lanes.ps1'
+if (Test-Path -LiteralPath $laneVerify) {
+    Invoke-Step "Model lane preflight (warnings only; does not block startup)"
+    try {
+        & $laneVerify -Startup
+    } catch {
+        Write-Host "[WARN] 11-verify-model-lanes.ps1 failed: $_" -ForegroundColor Yellow
+    }
 }
 
 # --- 4) Control Plane (authoritative API) ---

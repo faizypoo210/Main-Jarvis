@@ -2,7 +2,9 @@
 # Phase 8: LAN IP HTTP probes for canonical stack (read-only); exits 0 only if all 5 pass.
 $ErrorActionPreference = 'Continue'
 
-$Lan = '10.0.0.249'
+$Lan = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')
+if ([string]::IsNullOrWhiteSpace($Lan)) { $Lan = $env:JARVIS_LAN_IP }
+if ([string]::IsNullOrWhiteSpace($Lan)) { $Lan = '127.0.0.1' }
 $pass = 0
 $fail = 0
 
@@ -24,6 +26,7 @@ function Test-Step {
 }
 
 Write-Host "=== 08-test-lan-access (read-only) ===" -ForegroundColor Cyan
+Write-Host "Using LAN IP $Lan (set JARVIS_LAN_IP for Wi‑Fi/phone probes)" -ForegroundColor DarkGray
 
 Test-Step "GET http://${Lan}:5173 (Command Center)" {
     $r = Invoke-WebRequest -Uri "http://${Lan}:5173" -UseBasicParsing -TimeoutSec 20

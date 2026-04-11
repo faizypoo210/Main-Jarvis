@@ -7,6 +7,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.approvals import ApprovalRead
+from app.schemas.receipts import ReceiptRead
+from app.schemas.updates import MissionEventRead
+
 
 class MissionCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=512)
@@ -39,3 +43,12 @@ class MissionRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class MissionBundleRead(BaseModel):
+    """Single response for mission detail first paint (mission + timeline + approvals + receipts)."""
+
+    mission: MissionRead
+    events: list[MissionEventRead]
+    approvals: list[ApprovalRead]
+    receipts: list[ReceiptRead]

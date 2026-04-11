@@ -5,8 +5,10 @@ alwaysApply: true
 # JARVIS Stack Reference
 
 ## Credentials
+- Rotation checklist: `docs/SECRET_ROTATION.md`. Trust model: `docs/SECURITY_REVIEW.md`.
 - PostgreSQL user/password/database: see `services/control-plane/.env.example` and Phase 1 setup (never commit real passwords).
 - Gateway token: set User env `JARVIS_OPENCLAW_GATEWAY_TOKEN` or maintain `%USERPROFILE%\.openclaw\openclaw.json` manually — **do not commit tokens** to git.
+- Control plane clients: User env `CONTROL_PLANE_API_KEY` (match `services/control-plane/.env`).
 - Deprecated openclaw-mission-control (optional): `JARVIS_MISSION_CONTROL_TOKEN` only if you still run 3000/3001.
 - Composio, DashClaw, MiniMax, and other vendors: follow each provider’s docs; store keys in User env or OpenClaw `auth-profiles.json` only on the machine.
 
@@ -29,4 +31,5 @@ must use host.docker.internal, NOT localhost.
 - openclaw-mission-control (deprecated UI, optional): https://github.com/abhi1693/openclaw-mission-control
 - LobsterBoard: https://github.com/Curbob/LobsterBoard
 
-## Local IP for phone access: 10.0.0.249
+## LAN access
+Set `JARVIS_LAN_IP` (User env) to your machine’s IPv4 for phone/same-WiFi URLs; do not commit host-specific IPs.

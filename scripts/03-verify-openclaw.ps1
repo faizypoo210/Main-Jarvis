@@ -49,6 +49,10 @@ if (-not (Test-Path -LiteralPath $cfgPath)) {
 }
 $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
 $gwTok = $cfg.gateway.auth.token
+if ([string]::IsNullOrWhiteSpace($gwTok) -or ($gwTok -match '^(<|PLACEHOLDER|REPLACE)')) {
+    Write-Fail "Gateway token missing or still a placeholder in $cfgPath. Set JARVIS_OPENCLAW_GATEWAY_TOKEN and run scripts/03-configure-openclaw.ps1 (see docs/SECRET_ROTATION.md)."
+    exit 1
+}
 
 Write-Step "--- openclaw gateway health (RPC) ---"
 openclaw gateway health --url "ws://127.0.0.1:18789" --token $gwTok

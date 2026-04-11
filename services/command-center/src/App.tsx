@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { Activity } from "./pages/Activity";
 import { Approvals } from "./pages/Approvals";
+import { MissionDetail } from "./pages/MissionDetail";
 import { Missions } from "./pages/Missions";
 import { Overview } from "./pages/Overview";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
@@ -11,6 +12,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<AppShell />}>
         <Route index element={<Overview />} />
+        <Route path="missions/:missionId" element={<MissionDetail />} />
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />

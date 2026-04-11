@@ -47,9 +47,15 @@ class ReceiptService:
             payload=payload,
             summary=summary,
         )
-        ev_payload: dict[str, Any] = {"receipt_type": receipt_type, "source": source}
-        if summary is not None:
-            ev_payload["summary"] = summary
+        # Always include summary key so clients avoid fragile None/omit branching.
+        ev_payload: dict[str, Any] = {
+            "receipt_type": receipt_type,
+            "source": source,
+            "summary": summary if summary is not None else "",
+        }
+        em = payload.get("execution_meta")
+        if isinstance(em, dict):
+            ev_payload["execution_meta"] = em
         await MissionEventRepository.create(
             self._session,
             mission_id=mission_id,

@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mission_event import MissionEvent
+from app.realtime.emit import queue_mission_event
 
 
 class EventService:
@@ -33,4 +34,5 @@ class EventService:
         self._session.add(event)
         await self._session.flush()
         await self._session.refresh(event)
+        queue_mission_event(self._session, event)
         return event

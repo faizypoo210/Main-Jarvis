@@ -1,5 +1,15 @@
 import { Bell, Mic, Pause, Play, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { StreamPhase } from "../../contexts/ControlPlaneLiveContext";
+import { useControlPlaneLive, usePendingApprovals } from "../../hooks/useControlPlane";
+import * as api from "../../lib/api";
+import {
+  countPendingElsewhere,
+  derivePostApprovalPhase,
+  getFocusedPendingApproval,
+} from "../../lib/voiceApproval";
+import { VoiceApprovalBrief } from "./VoiceApprovalBrief";
 import { VoiceOrb, type VoiceOrbState } from "./VoiceOrb";
 
 type WsState = "connecting" | "open" | "closed" | "error";
@@ -25,13 +35,53 @@ function pickRecorderMime(): string {
   return "audio/webm";
 }
 
-export function VoiceMode({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function VoiceMode({
+  open,
+  onClose,
+  threadMissionId = null,
+  activeMissionCount = 0,
+  liveStreamError = null,
+  streamPhase = "live",
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Same anchor as thread / right panel / mission detail (`AppShell`). */
+  threadMissionId?: string | null;
+  activeMissionCount?: number;
+  liveStreamError?: string | null;
+  streamPhase?: StreamPhase;
+}) {
+  const navigate = useNavigate();
+  const live = useControlPlaneLive();
+  const { approvals } = usePendingApprovals();
+
+  const mission = threadMissionId ? live.missionById[threadMissionId] ?? null : null;
+  const events = threadMissionId ? live.eventsByMissionId[threadMissionId] ?? [] : [];
+  const threadMissionStatus = mission?.status ?? null;
+
+  const focusedPending = useMemo(
+    () => getFocusedPendingApproval(threadMissionId ?? null, approvals),
+    [threadMissionId, approvals]
+  );
+  const otherPendingCount = useMemo(
+    () => countPendingElsewhere(threadMissionId ?? null, approvals),
+    [threadMissionId, approvals]
+  );
+  const postApprovalPhase = useMemo(() => derivePostApprovalPhase(mission, events), [mission, events]);
+
+  const totalPending = useMemo(
+    () => approvals.filter((a) => a.status === "pending").length,
+    [approvals]
+  );
+
   const [wsState, setWsState] = useState<WsState>("closed");
   const [serverOrb, setServerOrb] = useState<"idle" | "thinking" | "speaking">("idle");
   const [transcript, setTranscript] = useState("");
   const [reply, setReply] = useState("");
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resolvingApproval, setResolvingApproval] = useState(false);
+  const [resolveApprovalError, setResolveApprovalError] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -40,22 +90,44 @@ export function VoiceMode({ open, onClose }: { open: boolean; onClose: () => voi
   const mimeRef = useRef<string>(pickRecorderMime());
   const audioCtxRef = useRef<AudioContext | null>(null);
 
+  const governanceOrb = Boolean(
+    focusedPending || (threadMissionStatus === "awaiting_approval" && !focusedPending)
+  );
+
   const orbState: VoiceOrbState = useMemo(() => {
     if (recording) return "listening";
     if (error) return "error";
     if (serverOrb === "thinking") return "thinking";
     if (serverOrb === "speaking") return "speaking";
+    if (governanceOrb) return "awaiting_approval";
     return "idle";
-  }, [error, recording, serverOrb]);
+  }, [error, recording, serverOrb, governanceOrb]);
 
   const label = useMemo(() => {
     if (wsState === "connecting") return "Connecting...";
     if (recording) return "Listening...";
     if (serverOrb === "thinking") return "Thinking...";
     if (serverOrb === "speaking") return "Speaking...";
+    if (governanceOrb) return "Governance";
     if (wsState === "open") return "Jarvis";
     return "Disconnected";
-  }, [wsState, recording, serverOrb]);
+  }, [wsState, recording, serverOrb, governanceOrb]);
+
+  const missionLoopLine = useMemo(() => {
+    if (threadMissionStatus === "awaiting_approval" && !focusedPending) {
+      return "Governance syncing.";
+    }
+    if (threadMissionStatus === "active") {
+      if (postApprovalPhase === "awaiting_result") return "Awaiting execution output.";
+      if (postApprovalPhase === "resumed") return "Execution updated.";
+      return "Mission active.";
+    }
+    if (threadMissionStatus === "complete") return "Mission complete.";
+    if (threadMissionStatus === "failed") return "Mission ended in failure.";
+    if (threadMissionStatus === "blocked") return "Mission blocked.";
+    if (threadMissionStatus === "pending") return "Mission pending.";
+    return null;
+  }, [threadMissionStatus, focusedPending, postApprovalPhase]);
 
   const stopRecordingTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -73,12 +145,43 @@ export function VoiceMode({ open, onClose }: { open: boolean; onClose: () => voi
     }
   }, [stopRecordingTracks]);
 
+  const handleResolve = useCallback(
+    async (decision: "approved" | "denied") => {
+      if (!focusedPending) return;
+      setResolvingApproval(true);
+      setResolveApprovalError(false);
+      try {
+        await api.resolveApproval(focusedPending.id, {
+          decision,
+          decided_by: "operator",
+          decided_via: "command_center",
+        });
+        await live.refetchPendingApprovals();
+        if (threadMissionId?.trim()) {
+          await live.bootstrapMission(threadMissionId);
+        }
+      } catch {
+        setResolveApprovalError(true);
+      } finally {
+        setResolvingApproval(false);
+      }
+    },
+    [focusedPending, live, threadMissionId]
+  );
+
+  const handleViewMission = useCallback(() => {
+    if (!threadMissionId?.trim()) return;
+    navigate(`/missions/${encodeURIComponent(threadMissionId)}`);
+    onClose();
+  }, [navigate, onClose, threadMissionId]);
+
   useEffect(() => {
     if (!open) return;
 
     setTranscript("");
     setReply("");
     setError(null);
+    setResolveApprovalError(false);
     setWsState("connecting");
     setServerOrb("idle");
 
@@ -261,6 +364,7 @@ export function VoiceMode({ open, onClose }: { open: boolean; onClose: () => voi
   if (!open) return null;
 
   const canUseMic = wsState === "open";
+  const showGlobalPendingLine = totalPending > 0 && !focusedPending;
 
   return (
     <div
@@ -288,8 +392,52 @@ export function VoiceMode({ open, onClose }: { open: boolean; onClose: () => voi
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center px-6 pb-12">
+      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 pb-8">
         <p className="font-display text-lg font-semibold text-[var(--accent-blue)] md:text-xl">{label}</p>
+        <div className="mt-2 max-w-sm space-y-1 text-center text-xs">
+          {streamPhase === "reconnecting" ? (
+            <p className="text-[var(--text-muted)]">Live updates reconnecting.</p>
+          ) : null}
+          {streamPhase === "offline" ? (
+            <p className="text-[var(--status-amber)]/85">
+              Live stream offline — periodic sync
+              {liveStreamError ? ` (${liveStreamError})` : ""}.
+            </p>
+          ) : null}
+          {focusedPending ? (
+            <p className="text-white/55">Decision required on this mission.</p>
+          ) : null}
+          {showGlobalPendingLine ? (
+            <p className="text-[var(--status-amber)]/90">
+              {threadMissionId?.trim()
+                ? totalPending === 1
+                  ? "One approval pending elsewhere."
+                  : `${totalPending} approvals pending elsewhere.`
+                : totalPending === 1
+                  ? "One approval pending."
+                  : `${totalPending} approvals pending.`}
+            </p>
+          ) : null}
+          {activeMissionCount > 0 ? (
+            <p className="text-[var(--text-muted)]">
+              {activeMissionCount === 1 ? "1 active mission." : `${activeMissionCount} active missions.`}
+            </p>
+          ) : null}
+          {missionLoopLine ? <p className="text-white/50">{missionLoopLine}</p> : null}
+        </div>
+
+        {focusedPending ? (
+          <VoiceApprovalBrief
+            approval={focusedPending}
+            otherPendingCount={otherPendingCount}
+            onViewMission={handleViewMission}
+            onApprove={() => void handleResolve("approved")}
+            onDeny={() => void handleResolve("denied")}
+            resolving={resolvingApproval}
+            resolveError={resolveApprovalError}
+          />
+        ) : null}
+
         <div className="mt-8">
           <VoiceOrb state={orbState} size="lg" />
         </div>

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -20,7 +21,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
 OPENCLAW_CMD = os.getenv(
     "OPENCLAW_CMD",
-    r"C:\Users\faizt\AppData\Roaming\npm\openclaw.cmd",
+    str(Path.home() / "AppData" / "Roaming" / "npm" / "openclaw.cmd"),
 )
 
 STREAM_EXECUTION = "jarvis.execution"
@@ -35,6 +36,84 @@ FALLBACK_ERROR = (
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout, force=True)
 sys.stdout.reconfigure(line_buffering=True)
 log = logging.getLogger("jarvis.executor")
+
+OPENCLAW_JSON = Path.home() / ".openclaw" / "openclaw.json"
+AUTH_PROFILES_JSON = (
+    Path.home() / ".openclaw" / "agents" / "main" / "agent" / "auth-profiles.json"
+)
+
+
+def _load_openclaw_json() -> dict[str, Any] | None:
+    if not OPENCLAW_JSON.is_file():
+        return None
+    try:
+        return json.loads(OPENCLAW_JSON.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _default_gateway_model(cfg: dict[str, Any] | None) -> str | None:
+    if not cfg:
+        return None
+    try:
+        lst = cfg.get("agents", {}).get("list", [])
+        for a in lst:
+            if a.get("default") is True:
+                m = a.get("model")
+                if m:
+                    return str(m).strip()
+    except (TypeError, AttributeError):
+        pass
+    return None
+
+
+def _lane_from_gateway_model(model: str | None) -> str:
+    """OpenClaw-routed local Ollama vs cloud/other (no secret data)."""
+    if not model:
+        return "gateway"
+    if str(model).strip().lower().startswith("ollama/"):
+        return "local"
+    return "gateway"
+
+
+def _local_model_from_gateway(model: str | None, lane: str) -> str | None:
+    if lane != "local" or not model:
+        return None
+    s = str(model).strip()
+    if s.lower().startswith("ollama/"):
+        return s.split("/", 1)[1].strip() if "/" in s else s
+    return s
+
+
+def _auth_profiles_appear_configured() -> bool:
+    """True if auth-profiles.json exists and parses to a non-empty object (no token values logged)."""
+    if not AUTH_PROFILES_JSON.is_file():
+        return False
+    try:
+        if AUTH_PROFILES_JSON.stat().st_size < 3:
+            return False
+        data = json.loads(AUTH_PROFILES_JSON.read_text(encoding="utf-8"))
+        return isinstance(data, dict) and len(data) > 0
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def _build_execution_meta(
+    data: dict[str, Any],
+    *,
+    gateway_model: str | None,
+) -> dict[str, Any]:
+    lane = _lane_from_gateway_model(gateway_model)
+    resumed = bool(data.get("resumed")) or bool(data.get("approval_id"))
+    meta: dict[str, Any] = {
+        "lane": lane,
+        "gateway_model": gateway_model,
+        "local_model": _local_model_from_gateway(gateway_model, lane),
+        "resumed_from_approval": resumed,
+    }
+    if lane == "gateway":
+        meta["auth_profiles_present"] = _auth_profiles_appear_configured()
+    return meta
 
 
 def _decode_fields(raw: dict[Any, Any]) -> dict[str, str]:
@@ -195,6 +274,12 @@ async def handle_execution(
 
     reply_text, ok = await _call_openclaw(session, command_text, mission_id)
 
+    cfg = _load_openclaw_json()
+    gateway_model = _default_gateway_model(cfg)
+    if not gateway_model:
+        gateway_model = os.getenv("JARVIS_OPENCLAW_GATEWAY_MODEL", "").strip() or None
+    execution_meta = _build_execution_meta(data, gateway_model=gateway_model)
+
     await _post_control_plane(
         session,
         "/api/v1/receipts",
@@ -206,6 +291,7 @@ async def handle_execution(
                 "action": command_text,
                 "result": reply_text,
                 "success": ok,
+                "execution_meta": execution_meta,
             },
             "summary": reply_text,
         },

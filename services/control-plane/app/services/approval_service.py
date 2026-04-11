@@ -86,7 +86,14 @@ class ApprovalService:
             self._session,
             mission_id=mission_id,
             event_type="approval_requested",
-            payload={"action_type": action_type, "risk_class": risk_class},
+            payload={
+                "approval_id": str(approval.id),
+                "mission_id": str(mission_id),
+                "action_type": action_type,
+                "risk_class": risk_class,
+                "reason": reason,
+                "status": approval.status,
+            },
         )
         await self._mission_repo.update_status(mission_id, "awaiting_approval")
         return approval
@@ -126,16 +133,24 @@ class ApprovalService:
         )
         assert updated is not None
 
-        await MissionEventRepository.create(
-            self._session,
-            mission_id=updated.mission_id,
-            event_type="approval_resolved",
-            payload={"decision": decision, "decided_by": decided_by},
-        )
-
         mid = updated.mission_id
         aid = updated.id
         cmd_text = (updated.command_text or "").strip()
+
+        decided_at_iso = updated.decided_at.isoformat() if updated.decided_at else None
+        await MissionEventRepository.create(
+            self._session,
+            mission_id=mid,
+            event_type="approval_resolved",
+            payload={
+                "approval_id": str(aid),
+                "mission_id": str(mid),
+                "decision": decision,
+                "decided_by": decided_by,
+                "decided_via": decided_via,
+                **({"decided_at": decided_at_iso} if decided_at_iso else {}),
+            },
+        )
 
         if decision == "approved":
             await self._mission_repo.update_status(mid, "active")

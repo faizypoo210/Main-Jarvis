@@ -1,7 +1,7 @@
 # JARVIS — AI Command Center
 
 Personal autonomous AI assistant: **Command Center** (operator UI), **Control Plane** (authoritative API), **Voice Server**, **Coordinator** (Redis), **Executor** (OpenClaw CLI), plus OpenClaw Gateway, LobsterBoard, Ollama, Composio, and DashClaw.  
-Deployed on Windows 11 (10.0.0.249).
+Deployed on Windows 11 (single-machine / LAN dev; see `docs/SECURITY_REVIEW.md`).
 
 ## Canonical architecture
 
@@ -30,8 +30,7 @@ The old **openclaw-mission-control** UI (3000/3001) is **deprecated** and not st
 ## Machine
 
 - Windows 11, AMD Ryzen 5 3600, RTX 4070 Ti, 32GB RAM  
-- Local IP: 10.0.0.249  
-- Services on home WiFi: `http://10.0.0.249:<port>`
+- Same-network access: set User env **`JARVIS_LAN_IP`** to this PC’s IPv4, then use `http://<JARVIS_LAN_IP>:<port>` from other devices (see `jarvis.ps1` / verify scripts).
 
 ## Repo structure (`F:\Jarvis`)
 
@@ -82,18 +81,20 @@ Primary URLs after start:
 
 ## Secrets
 
-All secrets live in **Windows User environment variables** and **`%USERPROFILE%\.openclaw\`** — never committed.
+All secrets live in **Windows User environment variables** and **`%USERPROFILE%\.openclaw\`** — never committed. **Rotation checklist:** [`docs/SECRET_ROTATION.md`](docs/SECRET_ROTATION.md). **Trust model:** [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
 Examples (set only what your providers require; names follow OpenClaw / vendor docs):
 
 - Composio: `COMPOSIO_API_KEY`  
-- OpenClaw gateway token: in `%USERPROFILE%\.openclaw\openclaw.json` (or set `JARVIS_OPENCLAW_GATEWAY_TOKEN` before running configure scripts — see script comments)  
+- OpenClaw gateway token: set **`JARVIS_OPENCLAW_GATEWAY_TOKEN`** before `scripts/03-configure-openclaw.ps1`, or edit `%USERPROFILE%\.openclaw\openclaw.json` manually (never commit)  
+- Control plane: `CONTROL_PLANE_API_KEY` (must match `services/control-plane/.env`)  
+- DashClaw (coordinator): `DASHCLAW_API_KEY`  
 - MiniMax / other cloud providers: configure via OpenClaw **`auth-profiles.json`** and env vars **per OpenClaw documentation** (not hardcoded here)
 
 Config files with secrets (not in repo):
 
 - `%USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json`  
-- Deprecated UI only: `C:\projects\openclaw-mission-control\` `.env` if you still run that stack
+- Deprecated UI only: `openclaw-mission-control` `.env` if you still run that stack
 
 ## OpenClaw workspace (persona vs code)
 
@@ -109,6 +110,7 @@ See [docs/WORKSPACE_SYNC.md](docs/WORKSPACE_SYNC.md) and [config/workspace/READM
 ## Architecture
 
 See [context/ARCHITECTURE.md](context/ARCHITECTURE.md) for service map and data flow.  
+See [docs/MODEL_LANES.md](docs/MODEL_LANES.md) for local Ollama vs OpenClaw gateway lanes and verification scripts.  
 See [context/JARVIS_SPEC.md](context/JARVIS_SPEC.md) for the broader system specification.
 
 ## Roadmap

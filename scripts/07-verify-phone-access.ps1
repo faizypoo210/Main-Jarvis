@@ -2,7 +2,9 @@
 # Phase 7: Print LAN URLs and probe each with HTTP GET (informational; always exits 0).
 $ErrorActionPreference = 'Continue'
 
-$LanIp = '10.0.0.249'
+$LanIp = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = $env:JARVIS_LAN_IP }
+if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = '127.0.0.1' }
 $urls = @(
     @{ Label = 'Command Center (primary UI)'; Url = "http://${LanIp}:5173" },
     @{ Label = 'Control Plane /health';      Url = "http://${LanIp}:8001/health" },
@@ -12,7 +14,7 @@ $urls = @(
     @{ Label = 'Ollama';                    Url = "http://${LanIp}:11434" }
 )
 
-Write-Host "LAN base address: $LanIp (same WiFi as this PC)" -ForegroundColor Cyan
+Write-Host "LAN base address: $LanIp (set User env JARVIS_LAN_IP to your Wi‑Fi IPv4 for phone access)" -ForegroundColor Cyan
 Write-Host ""
 
 foreach ($u in $urls) {

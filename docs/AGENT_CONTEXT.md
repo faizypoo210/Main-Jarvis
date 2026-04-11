@@ -1,9 +1,10 @@
 # JARVIS — Agent context map
 
-**Repository root (source of truth for code):** `F:\Jarvis`  
-**Typical LAN IP for this machine:** `10.0.0.249` (service URLs often use this host).
+**Repository root (source of truth for code):** your local clone (do not hardcode machine paths in docs).
 
-This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). **Persona/policy markdown** is edited either live under `%USERPROFILE%\.openclaw\workspace\main\` or as **tracked mirrors** in `F:\Jarvis\config\workspace\` (sync via `scripts/10-sync-openclaw-workspace.ps1`). **Application source** lives **only** under `F:\Jarvis` code directories.
+This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). **Persona/policy markdown** is edited either live under `%USERPROFILE%\.openclaw\workspace\main\` or as **tracked mirrors** in `config/workspace/` (sync via `scripts/10-sync-openclaw-workspace.ps1`). **Application source** lives in this repo’s code directories.
+
+**LAN / phone access:** set User env `JARVIS_LAN_IP` to this PC’s IPv4; scripts print `http://<IP>:<port>` hints. Do not commit host-specific IPs.
 
 ---
 
@@ -74,7 +75,7 @@ This file is the **codebase map** for AI agents (OpenClaw, Cursor, Copilot). **P
 
 **Governance:** Persona/context files shape how models sound; `AGENTS.md` / `TOOLS.md` shape allowed behavior; **mission/control-plane state** remains separate and authoritative (FastAPI + PostgreSQL).
 
-Full detail: [WORKSPACE_SYNC.md](WORKSPACE_SYNC.md), [config/workspace/README.md](../config/workspace/README.md).
+Full detail: [WORKSPACE_SYNC.md](WORKSPACE_SYNC.md), [config/workspace/README.md](../config/workspace/README.md). Model lanes (Ollama vs OpenClaw): [MODEL_LANES.md](MODEL_LANES.md).
 
 ---
 

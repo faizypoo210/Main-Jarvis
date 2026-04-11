@@ -46,7 +46,16 @@ if (-not (Test-Path -LiteralPath $ComposeTemplateYml)) {
 Copy-Item -LiteralPath $ComposeTemplateYml -Destination (Join-Path $RepoRoot "compose.yml") -Force
 Write-Ok "Applied JARVIS compose.yml (host PostgreSQL + Redis)"
 
-$localToken = "+ktPQuNTGmw072CnNMgRd7t3cVFzWMp6dmSh7Hw+SjPmZ69iu9ogebldNCJ/1zbN"
+# Never commit auth tokens. Prefer User env; otherwise generate once per run (persist via env for stable local dev).
+$localToken = [Environment]::GetEnvironmentVariable('JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN', 'User')
+if ([string]::IsNullOrWhiteSpace($localToken)) { $localToken = $env:JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN }
+if ([string]::IsNullOrWhiteSpace($localToken)) {
+    $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+    $bytes = New-Object byte[] 32
+    $rng.GetBytes($bytes)
+    $localToken = [Convert]::ToBase64String($bytes)
+    Write-Host "[INFO] Generated ephemeral LOCAL_AUTH_TOKEN (not saved). Set User env JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN to reuse the same token across compose restarts." -ForegroundColor Yellow
+}
 
 $rootEnv = @"
 FRONTEND_PORT=3000

@@ -1,32 +1,24 @@
 # OpenClaw workspace sync
 
-**What each markdown file is for** (SOUL, AGENTS, TOOLS, MEMORY, etc.): see **[`OPENCLAW_WORKSPACE_FILES.md`](./OPENCLAW_WORKSPACE_FILES.md)**.
+**File roles and authority split:** **[`OPENCLAW_WORKSPACE_FILES.md`](./OPENCLAW_WORKSPACE_FILES.md)** (canonical).
 
 ## Three locations (do not confuse them)
 
-1. **`F:\Jarvis` (git repo)**  
-   Source code, services, scripts, and **tracked markdown mirrors** under `config/workspace/`.
+1. **Git repo (`config/workspace/`)** — Reviewable mirrors; list driven by **`governance-manifest.json`**.
+2. **Live OpenClaw workspace** — `%USERPROFILE%\.openclaw\workspace\main\` — what the gateway reads at runtime.
+3. **Control plane** — Mission/approval/receipt/routing truth in PostgreSQL (not these markdown files).
 
-2. **`config/workspace/*.md` (tracked mirrors)**  
-   Reviewable copies of persona/policy files. **Not** the runtime source by themselves until synced. **`IDENTITY.md`** and **`USERS.md`** are **optional**—if absent, the sync script skips them (`[MISSING-SOURCE]`); **`SOUL.md`** is usually enough for identity.
+## Scripts
 
-3. **`%USERPROFILE%\.openclaw\workspace\main\` (live)**  
-   What OpenClaw Gateway uses at runtime. Update by editing mirrors in the repo and running **`scripts/10-sync-openclaw-workspace.ps1`**, or edit live files directly (then consider copying back into the repo for version control).
+| Script | Purpose |
+|--------|---------|
+| **`scripts/10-sync-openclaw-workspace.ps1`** | Repo → live copy for every file in `sync_order`; **fails** if a `required_files` entry is missing from disk; warns on `USER.md` drift |
+| **`scripts/11-audit-workspace-governance.ps1`** | PASS/WARN/FAIL audit: required files, manifest vs sync script, docs consistency |
 
-Mission and control-plane state **never** live in these markdown files; they live in the **Control Plane** API and database.
+Backups of overwritten live files: `%USERPROFILE%\.openclaw\workspace\main\.jarvis-sync-backups\pre-sync-<timestamp>\`
 
-## Script: `scripts/10-sync-openclaw-workspace.ps1`
-
-- Backs up any existing destination file to  
-  `%USERPROFILE%\.openclaw\workspace\main\.jarvis-sync-backups\pre-sync-<timestamp>\`
-- Copies only: `SOUL.md`, `AGENTS.md`, `IDENTITY.md`, `USERS.md`, `TOOLS.md` from `config/workspace/`
-- Does **not** read or write `auth-profiles.json`, `openclaw.json`, tokens, or secrets
-- Prints `[UPDATED]`, `[UNCHANGED]`, `[MISSING-SOURCE]` per file
+**Not copied:** `governance-manifest.json`, this folder’s `README.md` (repo-only).
 
 ## MiniMax / cloud auth (manual)
 
-Provider keys and MiniMax profile wiring stay **outside** this sync. After choosing a gateway model (`JARVIS_OPENCLAW_GATEWAY_MODEL` / `openclaw.json`), merge credentials per OpenClaw docs into:
-
-`%USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json`
-
-See also `README.md` and comments in `scripts/03-configure-openclaw.ps1`.
+Provider keys stay outside sync. See `README.md` and `scripts/03-configure-openclaw.ps1`.

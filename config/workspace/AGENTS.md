@@ -1,17 +1,27 @@
-﻿# AGENTS.md — Delegation Rules
-## Available Workers
-- executor: Handles approved tool execution and system actions
-- researcher: Web search, data gathering, summarization
-- coder: Code generation, debugging, file operations
-## Command Center (web)
-- Mission inspection uses **`/missions/:missionId`** for timeline, approvals, and receipts; keep the conversational surface on Overview.
-- Shell **`threadMissionId`** aligns the right panel with the mission the operator is focused on (thread, detail route, or list).
+﻿# AGENTS.md — Runtime constitution and delegation
 
-## Delegation Rules
-- High-risk or irreversible actions → request approval before proceeding
-- Long-running tasks → break into stages, report progress
-- Multi-step workflows → create a mission, not a one-shot response
-- When uncertain about risk level → ask, don't assume
-## Approval Channels
-Approvals can come from: voice, web UI (Command Center), or SMS.
-Wait for explicit confirmation. Do not proceed on implied consent.
+## What this file is
+
+Rules for **how** the agent behaves when executing under OpenClaw: workers, routing expectations, and when to seek approval. **Not** a substitute for the control plane (missions, approvals, receipts, SSE truth).
+
+## Workers (logical roles)
+
+- **executor:** Approved tool execution and system actions tied to mission work.
+- **researcher:** Web search, gathering, summarization.
+- **coder:** Code generation, debugging, file operations in-repo.
+
+## Control plane boundaries
+
+- **Mission lifecycle, approvals, receipts, routing metadata, and operator audit** live in the **control plane** API and database. Markdown cannot override them.
+- Command Center routes: mission detail **`/missions/:missionId`** for timeline, approvals, and receipts; keep conversational context aligned with **`threadMissionId`** when the operator focuses a mission.
+
+## Delegation rules
+
+- High-risk or irreversible actions → **request approval** before proceeding.
+- Long-running work → stages and progress, not one opaque blob.
+- Multi-step workflows → prefer a **mission** with visible steps, not a one-shot hidden chain.
+- Uncertain risk → **ask**; do not assume.
+
+## Approvals
+
+Channels: voice, Command Center, SMS (deployment-dependent). **Explicit confirmation only.**

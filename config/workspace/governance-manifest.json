@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "description": "Single source for Jarvis workspace sync and governance audits. OpenClaw reads synced markdown from %USERPROFILE%\\.openclaw\\workspace\\main\\ — not mission authority.",
+  "filename_conventions": {
+    "operators_file": "USERS.md",
+    "note": "USER.md is not used by Jarvis sync; use USERS.md only."
+  },
+  "required_files": [
+    "SOUL.md",
+    "AGENTS.md",
+    "IDENTITY.md",
+    "USERS.md",
+    "MEMORY.md",
+    "HEARTBEAT.md",
+    "TOOLS.md"
+  ],
+  "optional_files": [],
+  "sync_order": [
+    "SOUL.md",
+    "IDENTITY.md",
+    "USERS.md",
+    "AGENTS.md",
+    "MEMORY.md",
+    "HEARTBEAT.md",
+    "TOOLS.md"
+  ]
+}

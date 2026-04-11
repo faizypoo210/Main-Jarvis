@@ -63,7 +63,7 @@ Executor ◄── jarvis.execution
 
 ## OpenClaw vs this repo
 
-- **In repo**: execution worker code, workspace **mirrors** (`config/workspace/` — **`SOUL.md`**, **`AGENTS.md`**, **`TOOLS.md`**, optional **`IDENTITY.md` / `USERS.md`**, optional **`MEMORY.md`**), scripts, UI. **File-by-file meaning:** `docs/OPENCLAW_WORKSPACE_FILES.md`.
+- **In repo**: execution worker code, workspace **mirrors** (`config/workspace/` — see **`governance-manifest.json`** and **`docs/OPENCLAW_WORKSPACE_FILES.md`**), scripts, UI.
 - **Machine-local**: `openclaw.json`, auth profiles, plugins, **live** `%USERPROFILE%\.openclaw\workspace\main\` (must be updated via sync or manual copy)—**MACHINE_CONFIG_REQUIRED**.
 
 ## Command Center vs control plane

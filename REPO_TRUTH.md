@@ -15,7 +15,7 @@ Jarvis is a **layered** system: a **governed control plane** (missions, timeline
 | Redis → policy → control plane bridging | `coordinator/` |
 | `jarvis.execution` → OpenClaw → receipts | `executor/` |
 | Voice STT/TTS and control-plane/Redis integration | `voice/` |
-| Workspace persona/policy **mirrors** (not mission state) | `config/workspace/` — see **`docs/OPENCLAW_WORKSPACE_FILES.md`** for **SOUL / AGENTS / TOOLS / …** roles |
+| Workspace persona/policy **mirrors** (not mission state) | `config/workspace/` — **`governance-manifest.json`** defines the canonical file set; **`docs/OPENCLAW_WORKSPACE_FILES.md`** explains roles vs control plane |
 | Deployment, smoke, golden-path, benchmark scripts | `scripts/` |
 | High-level architecture and spec narrative | `context/ARCHITECTURE.md`, `context/JARVIS_SPEC.md` |
 | Operational docs (security, sync, evals, lanes) | `docs/` |
@@ -36,7 +36,7 @@ These are the **non-negotiable mechanisms** to understand Jarvis end-to-end. The
 | **Redis coordination** | Stream-based handoff between services; mission execution payloads carry compact **routing** metadata (`requested_lane` / `actual_lane` / fallback) | Stream names in `coordinator/coordinator.py`, `executor/executor.py`, `voice/server.py`; routing heuristics in `shared/routing.py` | Redis persistence / Docker volume; **no** separate local-fast mission executor beyond OpenClaw |
 | **Governance bridge** | Policy via DashClaw → control plane + streams | `coordinator/` | DashClaw deployment URL, `DASHCLAW_API_KEY` |
 | **Execution plane** | Work off `jarvis.execution`, run agent via OpenClaw, post receipts | `executor/` | **OpenClaw CLI install**, **gateway process**, **`openclaw.json`**, **`auth-profiles.json`**, provider accounts |
-| **OpenClaw agent layer** | Models, tools, **persona/policy markdown** (`SOUL`, `AGENTS`, `TOOLS`, optional `IDENTITY`/`USERS`/`MEMORY`) the gateway reads | **Mirrors + sync:** `config/workspace/`, `scripts/10-sync-openclaw-workspace.ps1`, `docs/OPENCLAW_WORKSPACE_FILES.md`, `docs/WORKSPACE_SYNC.md` | **Live** `%USERPROFILE%\.openclaw\workspace\main\`; **`openclaw.json`**, **`auth-profiles.json`**, plugins—never fully in git |
+| **OpenClaw agent layer** | Models, tools, **persona/policy markdown** (`SOUL`, `IDENTITY`, `USERS`, `AGENTS`, `MEMORY`, `HEARTBEAT`, `TOOLS`) the gateway reads after sync | **Mirrors + manifest + sync + audit:** `config/workspace/governance-manifest.json`, `scripts/10-sync-openclaw-workspace.ps1`, `scripts/11-audit-workspace-governance.ps1`, `docs/OPENCLAW_WORKSPACE_FILES.md` | **Live** `%USERPROFILE%\.openclaw\workspace\main\`; **`openclaw.json`**, **`auth-profiles.json`**, plugins—never fully in git |
 | **Voice path** | STT/TTS and forwarding toward control plane / streams | `voice/` | Whisper/GPU env, local `.env` beside `server.py` |
 | **Verification** | Prove API and optional live stack | `scripts/13-rehearse-golden-path.ps1`, `14-rehearse-live-stack.ps1`, `docs/LIVE_STACK_REHEARSAL.md` | Your machine’s services all up |
 
@@ -59,7 +59,7 @@ These are the **non-negotiable mechanisms** to understand Jarvis end-to-end. The
 
 ## Machine-local truth (outside git)
 
-Secrets, gateway model selection, OAuth tokens, LAN IP, and the **live** OpenClaw tree under `%USERPROFILE%\.openclaw\` are **not** reproducible from clone alone. Tracked mirrors under `config/workspace/` (**`SOUL.md`**, **`AGENTS.md`**, **`TOOLS.md`**, optional **`IDENTITY.md` / `USERS.md`**, optional **`MEMORY.md`**) are the **versioned** representation of **agent persona and policy**; you still run **`10-sync-openclaw-workspace.ps1`** (or edit live and copy back) so the gateway sees updates. See **`docs/OPENCLAW_WORKSPACE_FILES.md`** for a file-by-file map. Tracked mirrors are **not** the control plane.
+Secrets, gateway model selection, OAuth tokens, LAN IP, and the **live** OpenClaw tree under `%USERPROFILE%\.openclaw\` are **not** reproducible from clone alone. Tracked mirrors under `config/workspace/` (see **`governance-manifest.json`**) are the **versioned** representation of **agent persona and policy** for the local gateway; run **`10-sync-openclaw-workspace.ps1`** and **`11-audit-workspace-governance.ps1`** (or edit live and copy back). **`USERS.md`** is the canonical operator file name (**not** `USER.md`). See **`docs/OPENCLAW_WORKSPACE_FILES.md`**. Tracked mirrors are **not** the control plane.
 
 See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 
@@ -93,11 +93,14 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 | Command Center build | `cd services/command-center && npm run build` |
 | Heartbeat open findings | `GET /api/v1/operator/heartbeat` (same session as other operator routes) |
 | Heartbeat run (API key) | `POST /api/v1/heartbeat/run` with `x-api-key`; or run `python heartbeat/heartbeat.py` with `CONTROL_PLANE_URL`, `CONTROL_PLANE_API_KEY`, `HEARTBEAT_INTERVAL_SEC` |
+| Workspace pack audit | `.\scripts\11-audit-workspace-governance.ps1` from repo root |
+| Workspace sync to OpenClaw | `.\scripts\10-sync-openclaw-workspace.ps1` |
 | Broader deployment phases | `DEPLOYMENT_STATUS.md`, `docs/E2E_SMOKE_TEST.md` |
 
 ## Known limitations
 
 - **Command Center** exposes **Integrations**, **Workers**, **Cost & Usage**, **System Health**, and **Activity** as **API-backed** operator pages. Integrations shows **readiness and honesty signals** from `GET /api/v1/operator/integrations` (DB rows + safe machine/repo probes); it does **not** perform OAuth or store vendor tokens.
+- **OpenClaw workspace markdown** (`config/workspace/`) shapes **local** model/runtime behavior after sync; it is **not** an authority layer over missions or approvals—those remain in the **control plane**.
 - **Control Plane** includes DB models for workers and cost events; **first-class REST CRUD** for those domains may still be incomplete—operator routes under `/api/v1/operator/*` and `/api/v1/system/health` are **read-only** aggregates (see `STATUS.md`).
 - **Coordinator** and **executor** require correct env and Redis stream consumers; misconfiguration surfaces as silent stalls or errors in logs, not as compile-time failures.
 

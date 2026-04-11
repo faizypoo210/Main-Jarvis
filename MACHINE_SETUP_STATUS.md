@@ -61,14 +61,15 @@ Check **`services/control-plane/.env.example`**, **`executor/.env.example`**, **
 
 ## Sync OpenClaw workspace mirrors
 
-After editing `config/workspace/*.md` (**`SOUL.md`**, **`AGENTS.md`**, **`TOOLS.md`**, optional **`IDENTITY.md` / `USERS.md`**):
+After editing `config/workspace/*.md`, run the audit then sync (canonical list: **`governance-manifest.json`**):
 
 ```powershell
 cd F:\Jarvis
+.\scripts\11-audit-workspace-governance.ps1
 .\scripts\10-sync-openclaw-workspace.ps1
 ```
 
-Live files remain under `%USERPROFILE%\.openclaw\workspace\main\`. **`MEMORY.md`** is optional in git and is **not** on the script’s copy list unless you change the script—see **`docs/OPENCLAW_WORKSPACE_FILES.md`**.
+Live files remain under `%USERPROFILE%\.openclaw\workspace\main\`. See **`docs/OPENCLAW_WORKSPACE_FILES.md`**.
 
 ## Quick “am I aligned?” checks
 

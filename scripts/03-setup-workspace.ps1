@@ -2,8 +2,8 @@
 .SYNOPSIS
   Bootstrap: creates %USERPROFILE%\.openclaw\workspace\main and writes SOUL.md, AGENTS.md, MEMORY.md (Phase 3 scaffold).
 
-  For ongoing sync of approved mirrors (SOUL, AGENTS, IDENTITY, USERS, TOOLS), use scripts\10-sync-openclaw-workspace.ps1
-  after files exist under config\workspace\. IDENTITY.md / USERS.md are not generated here (add to repo when ready).
+  For the full governed pack, keep mirrors under config\workspace\ (see governance-manifest.json) and use:
+  scripts\11-audit-workspace-governance.ps1 then scripts\10-sync-openclaw-workspace.ps1
 #>
 $ErrorActionPreference = "Stop"
 

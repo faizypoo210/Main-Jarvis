@@ -114,8 +114,8 @@ Config files with secrets (not in repo):
 | What | Where |
 |------|--------|
 | **Executable source** | This repo (`services/`, `coordinator/`, `executor/`, …) |
-| **Tracked markdown mirrors** | `config/workspace/` (`SOUL.md`, `AGENTS.md`, `TOOLS.md`; optional `IDENTITY.md` / `USERS.md` if you split persona later) |
-| **Live files OpenClaw reads** | `%USERPROFILE%\.openclaw\workspace\main\` (sync with `scripts/10-sync-openclaw-workspace.ps1`) |
+| **Tracked markdown mirrors** | `config/workspace/` — canonical set in `governance-manifest.json` (`SOUL`, `IDENTITY`, `USERS`, `AGENTS`, `MEMORY`, `HEARTBEAT`, `TOOLS`; operator file is **`USERS.md`**, not `USER.md`) |
+| **Live files OpenClaw reads** | `%USERPROFILE%\.openclaw\workspace\main\` (`10-sync-openclaw-workspace.ps1`; audit with `11-audit-workspace-governance.ps1`) |
 | **Mission state (authoritative)** | Control Plane API + PostgreSQL — not in workspace markdown |
 
 See [docs/WORKSPACE_SYNC.md](docs/WORKSPACE_SYNC.md) and [config/workspace/README.md](config/workspace/README.md).

@@ -115,14 +115,16 @@ export function deriveMissionStalenessHint(
 export function compareMissionsForOperatorListing(
   a: Mission,
   b: Mission,
-  eventsByMissionId: Record<string, MissionEvent[]>,
-  approvals: Approval[],
+  eventsByMissionId: Record<string, MissionEvent[]> | null | undefined,
+  approvals: Approval[] | null | undefined,
   receipts: Receipt[] | null
 ): number {
-  const evA = eventsByMissionId[a.id] ?? [];
-  const evB = eventsByMissionId[b.id] ?? [];
-  const phaseA = deriveOperatorMissionPhase(a, evA, approvals, receipts).phase;
-  const phaseB = deriveOperatorMissionPhase(b, evB, approvals, receipts).phase;
+  const evMap = eventsByMissionId && typeof eventsByMissionId === "object" ? eventsByMissionId : {};
+  const appr = Array.isArray(approvals) ? approvals : [];
+  const evA = evMap[a.id] ?? [];
+  const evB = evMap[b.id] ?? [];
+  const phaseA = deriveOperatorMissionPhase(a, evA, appr, receipts).phase;
+  const phaseB = deriveOperatorMissionPhase(b, evB, appr, receipts).phase;
   const rankA = PHASE_LIST_RANK[phaseA];
   const rankB = PHASE_LIST_RANK[phaseB];
   if (rankA !== rankB) return rankA - rankB;
@@ -143,12 +145,13 @@ export function compareMissionsForOperatorListing(
 }
 
 export function sortMissionsForOperatorListing(
-  missions: Mission[],
-  eventsByMissionId: Record<string, MissionEvent[]>,
-  approvals: Approval[],
+  missions: Mission[] | null | undefined,
+  eventsByMissionId: Record<string, MissionEvent[]> | null | undefined,
+  approvals: Approval[] | null | undefined,
   receipts: Receipt[] | null
 ): Mission[] {
-  return [...missions].sort((a, b) =>
+  const list = Array.isArray(missions) ? missions : [];
+  return [...list].sort((a, b) =>
     compareMissionsForOperatorListing(a, b, eventsByMissionId, approvals, receipts)
   );
 }
@@ -218,19 +221,23 @@ const SETTLED_OVERVIEW_CAP = 5;
  * ordering as the mission list (`sortMissionsForOperatorListing`).
  */
 export function groupMissionsForOverview(
-  missions: Mission[],
-  eventsByMissionId: Record<string, MissionEvent[]>,
-  approvals: Approval[],
+  missions: Mission[] | null | undefined,
+  eventsByMissionId: Record<string, MissionEvent[]> | null | undefined,
+  approvals: Approval[] | null | undefined,
   receipts: Receipt[] | null
 ): OverviewGroupedMissions {
+  const list = Array.isArray(missions) ? missions : [];
+  const evMap = eventsByMissionId && typeof eventsByMissionId === "object" ? eventsByMissionId : {};
+  const appr = Array.isArray(approvals) ? approvals : [];
+
   const needs: Mission[] = [];
   const running: Mission[] = [];
   const recent: Mission[] = [];
   const settled: Mission[] = [];
 
-  for (const m of missions) {
-    const ev = eventsByMissionId[m.id] ?? [];
-    const bucket = getMissionOverviewTriageBucket(m, ev, approvals, receipts);
+  for (const m of list) {
+    const ev = evMap[m.id] ?? [];
+    const bucket = getMissionOverviewTriageBucket(m, ev, appr, receipts);
     switch (bucket) {
       case "needs_attention":
         needs.push(m);
@@ -248,10 +255,10 @@ export function groupMissionsForOverview(
   }
 
   return {
-    needs_attention: sortMissionsForOperatorListing(needs, eventsByMissionId, approvals, receipts),
-    running: sortMissionsForOperatorListing(running, eventsByMissionId, approvals, receipts),
-    recently_updated: sortMissionsForOperatorListing(recent, eventsByMissionId, approvals, receipts),
-    settled: sortMissionsForOperatorListing(settled, eventsByMissionId, approvals, receipts),
+    needs_attention: sortMissionsForOperatorListing(needs, evMap, appr, receipts),
+    running: sortMissionsForOperatorListing(running, evMap, appr, receipts),
+    recently_updated: sortMissionsForOperatorListing(recent, evMap, appr, receipts),
+    settled: sortMissionsForOperatorListing(settled, evMap, appr, receipts),
   };
 }
 

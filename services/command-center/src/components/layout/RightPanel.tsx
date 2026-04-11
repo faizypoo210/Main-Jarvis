@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useOutletContext } from "react-router-dom";
 import { MoreHorizontal, Search } from "lucide-react";
 import { useControlPlaneLive, usePendingApprovals, usePolledMissionDetail, useResolveApprovalAction } from "../../hooks/useControlPlane";
 import { ApprovalCard } from "../approvals/ApprovalCard";
@@ -13,24 +12,22 @@ import { MissionExecutiveSummaryBlock } from "../mission/MissionExecutiveSummary
 import { LiveLinkIndicator } from "./LiveLinkIndicator";
 import { operatorCopy } from "../../lib/operatorCopy";
 
-type ShellOutletContext = {
-  setThreadMissionId: (id: string | null) => void;
-};
-
 export function RightPanel({
   missions,
   missionsLoading,
   threadMissionId,
   onClose,
+  /** From AppShell state — RightPanel is a sibling of `<Outlet />`, so it cannot use `useOutletContext`. */
+  setThreadMissionId,
 }: {
   missions: Mission[];
   missionsLoading: boolean;
   /** When set, panel follows this mission (same anchor as the conversation thread). */
   threadMissionId: string | null;
   onClose?: () => void;
+  setThreadMissionId: (id: string | null) => void;
 }) {
   const { streamPhase } = useControlPlaneLive();
-  const { setThreadMissionId } = useOutletContext<ShellOutletContext>();
   const { approvals, loading: approvalsLoading } = usePendingApprovals();
   const focusFromList = useMemo(() => selectFocusMission(missions), [missions]);
   const focusMissionId = useMemo(() => {

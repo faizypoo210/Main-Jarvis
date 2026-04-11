@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
+import { RouteErrorBoundary } from "./components/layout/RouteErrorBoundary";
 import { Activity } from "./pages/Activity";
 import { Approvals } from "./pages/Approvals";
 import { MissionDetail } from "./pages/MissionDetail";
@@ -9,6 +10,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 
 export default function App() {
   return (
+    <RouteErrorBoundary>
     <Routes>
       <Route path="/" element={<AppShell />}>
         <Route index element={<Overview />} />
@@ -23,5 +25,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </RouteErrorBoundary>
   );
 }

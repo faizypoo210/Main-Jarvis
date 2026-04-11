@@ -26,7 +26,8 @@ function filterMissionReceipts(missionId: string, receipts: Receipt[] | null | u
 }
 
 function receiptRecordedForMission(missionId: string, events: MissionEvent[]): MissionEvent[] {
-  return events.filter((e) => e.event_type === "receipt_recorded" && e.mission_id === missionId);
+  const ev = Array.isArray(events) ? events : [];
+  return ev.filter((e) => e.event_type === "receipt_recorded" && e.mission_id === missionId);
 }
 
 function summaryFromEventPayload(p: Record<string, unknown> | null): string {
@@ -88,17 +89,30 @@ function resultHeadingForMission(mission: Mission): string {
  * Prefer the newest receipt row or `receipt_recorded` event by `created_at`; on tie, prefer the receipt row.
  */
 export function deriveLatestExecutionResult(
-  mission: Mission,
-  events: MissionEvent[],
+  mission: Mission | null | undefined,
+  events: MissionEvent[] | null | undefined,
   receipts: Receipt[] | null | undefined
 ): LatestExecutionResult {
-  const missionId = mission.id;
-  const label = resultHeadingForMission(mission);
+  const safeMission = mission && typeof mission.id === "string" && mission.id.trim() ? mission : null;
+  const safeEvents = Array.isArray(events) ? events : [];
+  if (!safeMission) {
+    return {
+      hasResult: false,
+      resultLabel: operatorCopy.latestResultHeadingActive,
+      resultSummary: null,
+      resultTimestamp: null,
+      resultDetailLine: null,
+      sourceReceiptId: null,
+    };
+  }
+
+  const missionId = safeMission.id;
+  const label = resultHeadingForMission(safeMission);
 
   const rRows = filterMissionReceipts(missionId, receipts)
     .slice()
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const rEvents = receiptRecordedForMission(missionId, events)
+  const rEvents = receiptRecordedForMission(missionId, safeEvents)
     .slice()
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
@@ -110,16 +124,16 @@ export function deriveLatestExecutionResult(
   if (topR && topE) {
     const cmp = topR.created_at.localeCompare(topE.created_at);
     if (cmp > 0) {
-      picked = pickFromReceiptRow(topR, mission);
+      picked = pickFromReceiptRow(topR, safeMission);
     } else if (cmp < 0) {
-      picked = pickFromReceiptEvent(topE, mission);
+      picked = pickFromReceiptEvent(topE, safeMission);
     } else {
-      picked = pickFromReceiptRow(topR, mission);
+      picked = pickFromReceiptRow(topR, safeMission);
     }
   } else if (topR) {
-    picked = pickFromReceiptRow(topR, mission);
+    picked = pickFromReceiptRow(topR, safeMission);
   } else if (topE) {
-    picked = pickFromReceiptEvent(topE, mission);
+    picked = pickFromReceiptEvent(topE, safeMission);
   }
 
   if (!picked) {
@@ -148,21 +162,27 @@ export function deriveLatestExecutionResult(
  * the derived phase is not a “still warming / governance / pure executing” row — presentation-only.
  */
 export function shouldShowMissionListLatestPreview(
-  mission: Mission,
-  events: MissionEvent[],
-  approvals: Approval[],
+  mission: Mission | null | undefined,
+  events: MissionEvent[] | null | undefined,
+  approvals: Approval[] | null | undefined,
   latest: LatestExecutionResult
 ): boolean {
-  if (!latest.hasResult || !latest.resultSummary?.trim()) return false;
-  if (!hasExecutionEvidence(events, null)) return false;
+  try {
+    if (!mission?.id?.trim() || !latest?.hasResult || !latest.resultSummary?.trim()) return false;
+    const ev = Array.isArray(events) ? events : [];
+    const appr = Array.isArray(approvals) ? approvals : [];
+    if (!hasExecutionEvidence(ev, null)) return false;
 
-  const phase = deriveOperatorMissionPhase(mission, events, approvals, null).phase;
+    const phase = deriveOperatorMissionPhase(mission, ev, appr, null).phase;
 
-  if (phase === "awaiting_approval") return false;
-  if (phase === "resumed_waiting_for_execution") return false;
-  if (phase === "executing") return false;
+    if (phase === "awaiting_approval") return false;
+    if (phase === "resumed_waiting_for_execution") return false;
+    if (phase === "executing") return false;
 
-  return true;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Stable fragment for the receipts block on mission detail (`#receipts`). */
@@ -178,6 +198,7 @@ export function receiptAnchorDomId(receiptId: string): string {
  * Presentation/navigation only — same ids as mission detail receipt anchors.
  */
 export function missionDetailLatestResultHref(missionId: string, latest: LatestExecutionResult): string {
+  if (!missionId?.trim()) return "/missions";
   const base = `/missions/${encodeURIComponent(missionId)}`;
   const frag = latest.sourceReceiptId?.trim()
     ? receiptAnchorDomId(latest.sourceReceiptId)

@@ -58,7 +58,12 @@ export function AppShell() {
 
         {/* Desktop right panel */}
         <div className="hidden min-h-0 lg:block">
-          <RightPanel missions={panelMissions} missionsLoading={missionsLoading} threadMissionId={threadMissionId} />
+          <RightPanel
+            missions={panelMissions}
+            missionsLoading={missionsLoading}
+            threadMissionId={threadMissionId}
+            setThreadMissionId={setThreadMissionId}
+          />
         </div>
       </div>
 
@@ -79,6 +84,7 @@ export function AppShell() {
               missions={panelMissions}
               missionsLoading={missionsLoading}
               threadMissionId={threadMissionId}
+              setThreadMissionId={setThreadMissionId}
               onClose={() => setRightSheetOpen(false)}
             />
           </div>

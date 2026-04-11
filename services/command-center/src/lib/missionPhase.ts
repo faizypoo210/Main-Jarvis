@@ -32,18 +32,21 @@ export const OPERATOR_PHASE_LABELS: Record<OperatorMissionPhase, string> = {
 };
 
 function hasPendingApprovalForMission(mission: Mission, approvals: Approval[]): boolean {
-  return approvals.some((a) => a.mission_id === mission.id && a.status === "pending");
+  const appr = Array.isArray(approvals) ? approvals : [];
+  return appr.some((a) => a.mission_id === mission.id && a.status === "pending");
 }
 
 /** True when timeline or bundle lists execution evidence (receipt). See also `missionLatestResult.ts` for compact “latest output” scan lines. */
-export function hasExecutionEvidence(events: MissionEvent[], receipts: Receipt[] | null): boolean {
-  if (events.some((e) => e.event_type === "receipt_recorded")) return true;
+export function hasExecutionEvidence(events: MissionEvent[] | null | undefined, receipts: Receipt[] | null): boolean {
+  const ev = Array.isArray(events) ? events : [];
+  if (ev.some((e) => e.event_type === "receipt_recorded")) return true;
   return (receipts?.length ?? 0) > 0;
 }
 
 /** True when an approval_resolved event indicates approve (not deny). */
 function hasApprovedResolutionInTimeline(events: MissionEvent[]): boolean {
-  for (const e of events) {
+  const ev = Array.isArray(events) ? events : [];
+  for (const e of ev) {
     if (e.event_type !== "approval_resolved") continue;
     const p = e.payload as { decision?: string } | null;
     if (p?.decision === "denied") continue;
@@ -57,15 +60,21 @@ function hasApprovedResolutionInTimeline(events: MissionEvent[]): boolean {
  * Complete/failed take precedence; active + receipt is never labeled "Complete".
  */
 export function deriveOperatorMissionPhase(
-  mission: Mission,
-  events: MissionEvent[],
-  approvals: Approval[],
+  mission: Mission | null | undefined,
+  events: MissionEvent[] | null | undefined,
+  approvals: Approval[] | null | undefined,
   receipts: Receipt[] | null
 ): OperatorMissionPhaseView {
+  const ev = Array.isArray(events) ? events : [];
+  const appr = Array.isArray(approvals) ? approvals : [];
+  if (!mission || typeof mission.status !== "string") {
+    return { phase: "executing", label: OPERATOR_PHASE_LABELS.executing };
+  }
+
   const st = mission.status;
-  const pending = hasPendingApprovalForMission(mission, approvals);
-  const evidence = hasExecutionEvidence(events, receipts);
-  const approvedResolution = hasApprovedResolutionInTimeline(events);
+  const pending = hasPendingApprovalForMission(mission, appr);
+  const evidence = hasExecutionEvidence(ev, receipts);
+  const approvedResolution = hasApprovedResolutionInTimeline(ev);
 
   if (st === "failed") {
     return { phase: "failed", label: OPERATOR_PHASE_LABELS.failed };

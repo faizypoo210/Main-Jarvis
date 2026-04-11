@@ -7,7 +7,7 @@ import { CostUsage } from "./pages/CostUsage";
 import { MissionDetail } from "./pages/MissionDetail";
 import { Missions } from "./pages/Missions";
 import { Overview } from "./pages/Overview";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { Integrations } from "./pages/Integrations";
 import { SystemHealth } from "./pages/SystemHealth";
 import { Workers } from "./pages/Workers";
 
@@ -21,8 +21,7 @@ export default function App() {
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />
-        {/* Integrations placeholder — other operator pages are API-backed. */}
-        <Route path="integrations" element={<PlaceholderPage title="Integrations" />} />
+        <Route path="integrations" element={<Integrations />} />
         <Route path="workers" element={<Workers />} />
         <Route path="cost" element={<CostUsage />} />
         <Route path="system" element={<SystemHealth />} />

@@ -93,8 +93,8 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 
 ## Known limitations
 
-- **Command Center** routes such as **Integrations**, **Workers**, **Cost & Usage**, and **System Health** are **placeholder pages** (see `App.tsx`). **Activity** is a minimal stub until a unified feed exists.
-- **Control Plane** includes DB models for workers, integrations, and cost events; **not all** of these have first-class HTTP surfaces in the current API tree—treat as **partial** until routes exist (see `STATUS.md`).
+- **Command Center** exposes **Integrations**, **Workers**, **Cost & Usage**, **System Health**, and **Activity** as **API-backed** operator pages. Integrations shows **readiness and honesty signals** from `GET /api/v1/operator/integrations` (DB rows + safe machine/repo probes); it does **not** perform OAuth or store vendor tokens.
+- **Control Plane** includes DB models for workers and cost events; **first-class REST CRUD** for those domains may still be incomplete—operator routes under `/api/v1/operator/*` and `/api/v1/system/health` are **read-only** aggregates (see `STATUS.md`).
 - **Coordinator** and **executor** require correct env and Redis stream consumers; misconfiguration surfaces as silent stalls or errors in logs, not as compile-time failures.
 
 For a feature-level ledger, see **`STATUS.md`**. For boxes-and-arrows, see **`SYSTEM_MAP.md`**.

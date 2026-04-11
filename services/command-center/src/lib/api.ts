@@ -6,6 +6,7 @@ import type {
   MissionBundle,
   MissionEvent,
   OperatorActivityResponse,
+  OperatorIntegrationsResponse,
   OperatorUsageResponse,
   Receipt,
   SystemHealthResponse,
@@ -254,6 +255,10 @@ export async function getSystemHealth(): Promise<SystemHealthResponse> {
 
 export async function getOperatorUsage(): Promise<OperatorUsageResponse> {
   return requestJson<OperatorUsageResponse>(`${BASE}/operator/usage`);
+}
+
+export async function getOperatorIntegrations(): Promise<OperatorIntegrationsResponse> {
+  return requestJson<OperatorIntegrationsResponse>(`${BASE}/operator/integrations`);
 }
 
 export async function getOperatorActivity(params?: {

@@ -152,3 +152,32 @@ export interface OperatorActivityResponse {
   items: OperatorActivityItem[];
   next_before: string | null;
 }
+
+/** GET /api/v1/operator/integrations */
+export interface IntegrationHubSummary {
+  total: number;
+  connected: number;
+  needs_auth: number;
+  not_configured_or_unknown: number;
+}
+
+export interface OperatorIntegrationRow {
+  id: string;
+  name: string;
+  kind: string;
+  provider: string;
+  status: string;
+  connection_source: string;
+  last_checked_at: string | null;
+  last_activity_at: string | null;
+  summary: string;
+  next_action: string;
+  meta: Record<string, unknown>;
+}
+
+export interface OperatorIntegrationsResponse {
+  generated_at: string;
+  summary: IntegrationHubSummary;
+  items: OperatorIntegrationRow[];
+  truth_notes: string[];
+}

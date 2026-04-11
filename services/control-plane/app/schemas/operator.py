@@ -74,3 +74,44 @@ class OperatorActivityResponse(BaseModel):
         default=None,
         description="Pass as `before` to fetch the next older page (ISO-8601 UTC).",
     )
+
+
+class IntegrationHubSummary(BaseModel):
+    """Aggregate counts for operator filters (same labels as UI tabs)."""
+
+    total: int
+    connected: int
+    needs_auth: int
+    not_configured_or_unknown: int
+
+
+class OperatorIntegrationRow(BaseModel):
+    """Honest integration visibility — no secrets."""
+
+    id: str
+    name: str
+    kind: str
+    provider: str
+    status: str = Field(
+        ...,
+        description="connected | configured | needs_auth | not_configured | unknown | degraded",
+    )
+    connection_source: str = Field(
+        ...,
+        description="db | machine_probe | inferred | external_unknown",
+    )
+    last_checked_at: str | None = None
+    last_activity_at: str | None = None
+    summary: str
+    next_action: str
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class OperatorIntegrationsResponse(BaseModel):
+    generated_at: str
+    summary: IntegrationHubSummary
+    items: list[OperatorIntegrationRow]
+    truth_notes: list[str] = Field(
+        default_factory=list,
+        description="Short honesty lines about what this endpoint can and cannot verify.",
+    )

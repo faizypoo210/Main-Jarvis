@@ -16,14 +16,15 @@ from app.schemas.operator import (
     LaneCount,
     MissionStatusCount,
     OperatorActivityResponse,
+    OperatorIntegrationsResponse,
     OperatorUsageResponse,
 )
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
+from app.services.operator_integrations import build_integrations_report
 
 router = APIRouter()
 
 _ACTIVITY_CATEGORIES = frozenset({"mission", "approval", "execution", "attention"})
-
 
 def _parse_before_iso(raw: str | None) -> datetime | None:
     if raw is None or not str(raw).strip():
@@ -44,6 +45,14 @@ def _iso(dt: datetime | None) -> str | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z")
     return dt.isoformat().replace("+00:00", "Z")
+
+
+@router.get("/operator/integrations", response_model=OperatorIntegrationsResponse)
+async def operator_integrations(
+    session: AsyncSession = Depends(get_db),
+) -> OperatorIntegrationsResponse:
+    """Honest integration readiness: DB + safe machine probes (no OAuth or secrets)."""
+    return await build_integrations_report(session)
 
 
 @router.get("/operator/activity", response_model=OperatorActivityResponse)

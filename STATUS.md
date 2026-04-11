@@ -5,19 +5,20 @@ Categorization of **major surfaces** as they exist **today** in this repository.
 | Area | Status | Truth source | Note | Suggested verification |
 |------|--------|--------------|------|-------------------------|
 | **Control Plane** — missions, events, approvals, receipts, commands, bundle, health | **Implemented** | `services/control-plane/app/api/routes/`, PostgreSQL | Authoritative API for governed state | `GET /health`, `13-rehearse-golden-path.ps1` |
-| **Control Plane** — workers / integrations / cost **HTTP API** | **Partial** | DB models in `app/models/` | Tables exist in migrations; **no** `api/routes` modules for these domains found in current tree | Schema review + future route audit |
+| **Control Plane** — operator read APIs (system health, usage, activity, integrations) | **Implemented** | `app/api/routes/system.py`, `app/api/routes/operator.py` | Read-only aggregates for Command Center; **not** full CRUD on `workers` / `cost_events` tables | `GET /api/v1/system/health`, `GET /api/v1/operator/*` |
+| **Control Plane** — workers / cost **domain tables** (non-mission) | **Partial** | `app/models/` | Tables exist; first-class REST CRUD for workers/cost may still be missing | Schema / route audit |
 | **Control Plane** — SSE updates | **Implemented** | `app/api/routes/updates.py`, realtime hub | Stream + status endpoint | Command Center live badge; curl SSE as in benchmark docs |
 | **Command Center** — overview, missions, mission detail, approvals | **Implemented** | `services/command-center/src/pages/` | Core operator flows | `npm run build`; manual UI pass |
-| **Command Center** — activity feed | **Placeholder** | UI only | Single static message; no unified stream | N/A |
-| **Command Center** — integrations / workers / cost / system | **Placeholder** | `App.tsx` → `PlaceholderPage` | Copy says “wired next” | N/A |
+| **Command Center** — activity feed | **Implemented** | `pages/Activity.tsx`, `GET /api/v1/operator/activity` | Mission-event timeline; filters | `npm run build`; hit `/activity` |
+| **Command Center** — workers, cost & usage, system health | **Implemented** | `pages/*.tsx`, operator + system APIs | Operator surfaces backed by control plane | `npm run build` |
+| **Command Center** — integrations | **Implemented** (honest) | `pages/Integrations.tsx`, `GET /api/v1/operator/integrations` | DB + safe machine/repo signals; **no** OAuth or vendor secrets in API | `npm run build`; curl integrations endpoint |
 | **Coordinator** | **Implemented** | `coordinator/coordinator.py` | Stateless; DashClaw + Redis + control plane | Env set; run `09-start-coordinator.ps1`; observe logs |
 | **Executor** | **Implemented** | `executor/executor.py` | OpenClaw + receipts | Live stack rehearsal doc |
 | **Voice** | **Implemented** | `voice/server.py` | STT/TTS + control plane hooks | Start server; hit health/static routes per deployment |
 | **Approvals (end-to-end)** | **Implemented** | Control plane + UI + scripts | Shared schema `app/schemas/approvals.py` | Golden path script |
 | **Benchmark / operator evals** | **Implemented** | `scripts/15-benchmark-operator-loop.ps1`, `docs/OPERATOR_EVALS.md` | Assumes control plane up; optional live stack | Run scripts; inspect `docs/reports/` output |
 | **Model lanes** | **Partial** (documented + code paths) | `docs/MODEL_LANES.md`, executor/voice | Lane selection depends on **gateway model string** and **machine** OpenClaw/Ollama | `MODEL_LANES.md` verification section |
-| **Integrations (product)** | **Placeholder** UI; **External** OpenClaw/Composio | OpenClaw workspace + vendor | DB `integrations` table exists; Command Center page not wired | Composio/OpenClaw docs |
-| **Worker / cost / system health pages** | **Placeholder** | N/A | No dedicated API-backed pages in Command Center | N/A until routes exist |
+| **Integrations (vendor OAuth / Composio)** | **External / partial** | OpenClaw + Composio + machine | UI/API show **readiness only**; OAuth and keys stay outside repo | Vendor consoles + `DEPLOYMENT_STATUS.md` |
 | **OpenClaw workspace markdown (SOUL, AGENTS, TOOLS, …)** | **Implemented** (tracked mirrors) | `config/workspace/`, `docs/OPENCLAW_WORKSPACE_FILES.md` | Persona/policy/tool rules for the agent; **not** mission authority (control plane) | Sync script + file-by-file doc |
 | **Memory / governance docs** | **Implemented** (docs) | `docs/SECURITY_REVIEW.md`, etc. | Security/trust separate from workspace persona files | — |
 | **Deployment / smoke automation** | **Partial** | `DEPLOYMENT_STATUS.md`, `scripts/08-*.ps1` | Phase 8 and some checks may still need manual green | `08-final-report.ps1`, `docs/E2E_SMOKE_TEST.md` |

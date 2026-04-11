@@ -182,6 +182,15 @@ def _title_summary_status(
             act = str(p.get("action") or "")
             repo = str(p.get("repo") or "")
             title = "Integration action requested"
+            if act == "merge_pull_request":
+                pn = p.get("pull_number")
+                mm = str(p.get("merge_method") or "squash")
+                pf = p.get("preflight") if isinstance(p.get("preflight"), dict) else {}
+                base = str(pf.get("base_ref") or "")
+                summary = f"GitHub merge_pull_request · {repo} · PR #{pn} · {mm}" + (
+                    f" · into {base}" if base else ""
+                )
+                return title, _truncate(summary) or title, "pending"
             if act == "create_pull_request":
                 base = str(p.get("base") or "")
                 head = str(p.get("head") or "")
@@ -214,6 +223,20 @@ def _title_summary_status(
             if gurl:
                 summary = f"{summary} · {gurl}"
             return "Gmail draft created", _truncate(summary) or "Draft saved", "complete"
+        if str(p.get("provider") or "") == "github" and str(p.get("action") or "") == "merge_pull_request":
+            repo = str(p.get("repo") or "")
+            num = p.get("pr_number")
+            msha = str(p.get("merge_sha") or "")
+            mm = str(p.get("merge_method") or "")
+            url = str(p.get("html_url") or "")
+            summary = f"{repo}" + (f" · PR #{num}" if num is not None else "")
+            if msha:
+                summary = f"{summary} · {msha[:12]}" if len(msha) > 12 else f"{summary} · {msha}"
+            if mm:
+                summary = f"{summary} · {mm}"
+            if url:
+                summary = f"{summary} · {url}"
+            return "GitHub PR merged", _truncate(summary) or "Merged", "complete"
         if str(p.get("provider") or "") == "github" and str(p.get("action") or "") == "create_pull_request":
             repo = str(p.get("repo") or "")
             num = p.get("pr_number")
@@ -242,6 +265,8 @@ def _title_summary_status(
             prefix = "Gmail send failed" if act == "send_draft" else "Gmail draft failed"
         elif prov == "github" and act == "create_pull_request":
             prefix = "GitHub PR failed"
+        elif prov == "github" and act == "merge_pull_request":
+            prefix = "GitHub PR merge failed"
         elif prov == "github":
             prefix = "GitHub issue failed"
         else:
@@ -259,6 +284,10 @@ def _title_summary_status(
             title = "GitHub PR created"
         elif rt == "github_pull_request_failed":
             title = "GitHub PR failed"
+        elif rt == "github_pull_request_merged":
+            title = "GitHub PR merged"
+        elif rt == "github_pull_request_merge_failed":
+            title = "GitHub PR merge failed"
         elif rt == "gmail_draft_created":
             title = "Gmail draft created"
         elif rt == "gmail_draft_failed":
@@ -302,6 +331,21 @@ def _title_summary_status(
                 if gh.get("html_url"):
                     line = f"{line} · {gh.get('html_url')}"
             return title, _truncate(line) or title, "succeeded" if rt == "github_pull_request_created" else "failed"
+        if rt in ("github_pull_request_merged", "github_pull_request_merge_failed"):
+            gh = rp.get("github") if isinstance(rp.get("github"), dict) else {}
+            line = f"{rt}"
+            if isinstance(gh, dict):
+                if gh.get("repo"):
+                    line = f"{line} · {gh.get('repo')}"
+                if gh.get("pr_number") is not None:
+                    line = f"{line} · PR #{gh.get('pr_number')}"
+                if gh.get("merge_method"):
+                    line = f"{line} · {gh.get('merge_method')}"
+                if gh.get("merge_sha"):
+                    line = f"{line} · {gh.get('merge_sha')}"
+                if gh.get("html_url"):
+                    line = f"{line} · {gh.get('html_url')}"
+            return title, _truncate(line) or title, "succeeded" if rt == "github_pull_request_merged" else "failed"
         if rt in (
             "gmail_draft_created",
             "gmail_draft_failed",
@@ -441,6 +485,8 @@ def _meta(
             "title",
             "issue_number",
             "pr_number",
+            "merge_method",
+            "merge_sha",
             "html_url",
             "base",
             "head",
@@ -541,6 +587,16 @@ _ATTENTION_COUNT = """(
       SELECT 1 FROM receipts rx
       WHERE rx.mission_id = mission_events.mission_id
         AND rx.receipt_type = 'github_pull_request_failed'
+        AND rx.created_at >= mission_events.created_at - interval '3 seconds'
+        AND rx.created_at <= mission_events.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = mission_events.mission_id
+        AND rx.receipt_type = 'github_pull_request_merge_failed'
         AND rx.created_at >= mission_events.created_at - interval '3 seconds'
         AND rx.created_at <= mission_events.created_at + interval '3 seconds'
     )

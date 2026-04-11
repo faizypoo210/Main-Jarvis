@@ -16,7 +16,7 @@ Jarvis is a **layered** system: a **governed control plane** (missions, timeline
 | `jarvis.execution` → OpenClaw → receipts | `executor/` |
 | Voice STT/TTS and control-plane/Redis integration | `voice/` |
 | Workspace persona/policy **mirrors** (not mission state) | `config/workspace/` — **`governance-manifest.json`** defines the canonical file set; **`docs/OPENCLAW_WORKSPACE_FILES.md`** explains roles vs control plane |
-| **GitHub create-issue + create draft PR workflows** | Approval + structured contract + REST adapter in control plane | `app/services/github_issue_workflow.py`, `app/services/github_pr_workflow.py`, `docs/INTEGRATIONS_GITHUB.md` | **Not** Composio/OpenClaw; requires **`JARVIS_GITHUB_TOKEN`**; PR workflow does **not** create branches or commits |
+| **GitHub issue + draft PR + PR merge workflows** | Approval + REST in control plane | `github_issue_workflow.py`, `github_pr_workflow.py`, `github_pr_merge_workflow.py`, `docs/INTEGRATIONS_GITHUB.md` | **Not** Composio/OpenClaw; **`JARVIS_GITHUB_TOKEN`**; merge is **preflight + merge existing PR only** |
 | **Gmail create-draft + send-draft workflows** | Approval + Gmail API `drafts.create` / `drafts.send` via control plane | `app/services/gmail_draft_workflow.py`, `docs/INTEGRATIONS_GMAIL.md` | **Not** inbox automation or freeform send; **send** is **existing draft id only**; requires **`JARVIS_GMAIL_*`**; send needs OAuth scope **`gmail.send`** (see doc) |
 | Deployment, smoke, golden-path, benchmark scripts | `scripts/` |
 | High-level architecture and spec narrative | `context/ARCHITECTURE.md`, `context/JARVIS_SPEC.md` |

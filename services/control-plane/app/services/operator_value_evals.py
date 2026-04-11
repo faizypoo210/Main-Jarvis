@@ -274,6 +274,7 @@ async def build_operator_value_evals(
               AND receipt_type IN (
                 'github_issue_created', 'github_issue_failed',
                 'github_pull_request_created', 'github_pull_request_failed',
+                'github_pull_request_merged', 'github_pull_request_merge_failed',
                 'gmail_draft_created', 'gmail_draft_failed',
                 'gmail_draft_sent', 'gmail_draft_send_failed'
               )
@@ -285,6 +286,10 @@ async def build_operator_value_evals(
     rc: dict[str, int] = {str(row[0]): int(row[1]) for row in r.fetchall()}
     integ.github_issue_created = rc.get("github_issue_created", 0)
     integ.github_issue_failed = rc.get("github_issue_failed", 0)
+    integ.github_pull_request_created = rc.get("github_pull_request_created", 0)
+    integ.github_pull_request_failed = rc.get("github_pull_request_failed", 0)
+    integ.github_pull_request_merged = rc.get("github_pull_request_merged", 0)
+    integ.github_pull_request_merge_failed = rc.get("github_pull_request_merge_failed", 0)
     integ.gmail_draft_created = rc.get("gmail_draft_created", 0)
     integ.gmail_draft_failed = rc.get("gmail_draft_failed", 0)
     integ.gmail_draft_sent = rc.get("gmail_draft_sent", 0)
@@ -302,6 +307,7 @@ async def build_operator_value_evals(
             WHERE created_at >= :start AND created_at < :end
               AND receipt_type IN (
                 'github_issue_failed', 'github_pull_request_failed',
+                'github_pull_request_merge_failed',
                 'gmail_draft_failed', 'gmail_draft_send_failed'
               )
             """

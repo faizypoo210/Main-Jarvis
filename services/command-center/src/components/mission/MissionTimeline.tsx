@@ -36,6 +36,16 @@ function timelineEventTitle(ev: MissionEvent): string {
     const act = typeof p.action === "string" ? p.action : "";
     const repo = typeof p.repo === "string" ? p.repo : "";
     const title = typeof p.title === "string" ? p.title.trim() : "";
+    if (act === "merge_pull_request") {
+      const pn = p.pull_number;
+      const mm = typeof p.merge_method === "string" ? p.merge_method : "squash";
+      const pf = p.preflight && typeof p.preflight === "object" ? (p.preflight as Record<string, unknown>) : null;
+      const base = pf && typeof pf.base_ref === "string" ? pf.base_ref : "";
+      const prn = typeof pn === "number" ? `#${pn}` : "";
+      return repo
+        ? `GitHub PR merge requested · ${repo} · ${prn} · ${mm}${base ? ` · into ${base}` : ""}`
+        : "GitHub PR merge requested";
+    }
     if (act === "create_pull_request") {
       const base = typeof p.base === "string" ? p.base : "";
       const head = typeof p.head === "string" ? p.head : "";
@@ -62,6 +72,16 @@ function timelineEventTitle(ev: MissionEvent): string {
     const act = typeof p.action === "string" ? p.action : "";
     const repo = typeof p.repo === "string" ? p.repo : "";
     const url = typeof p.html_url === "string" ? p.html_url : "";
+    if (act === "merge_pull_request") {
+      const pn = p.pull_number;
+      const msha = typeof p.merge_sha === "string" ? p.merge_sha : "";
+      const mm = typeof p.merge_method === "string" ? p.merge_method : "";
+      const prn = typeof pn === "number" ? `#${pn}` : "";
+      const short = msha.length > 12 ? `${msha.slice(0, 12)}…` : msha;
+      return repo
+        ? `GitHub PR merged · ${repo} · ${prn}${short ? ` · ${short}` : ""}${mm ? ` · ${mm}` : ""}${url ? ` · ${url}` : ""}`
+        : "GitHub PR merged";
+    }
     if (act === "create_pull_request") {
       const base = typeof p.base === "string" ? p.base : "";
       const head = typeof p.head === "string" ? p.head : "";
@@ -89,9 +109,11 @@ function timelineEventTitle(ev: MissionEvent): string {
           : "Gmail draft failed"
         : prov === "github" && act === "create_pull_request"
           ? "GitHub PR failed"
-          : prov === "github"
-            ? "GitHub issue failed"
-            : "GitHub action failed";
+          : prov === "github" && act === "merge_pull_request"
+            ? "GitHub PR merge failed"
+            : prov === "github"
+              ? "GitHub issue failed"
+              : "GitHub action failed";
     return code ? `${prefix} · ${code}${msg ? ` — ${msg}` : ""}` : prefix;
   }
   if (ev.event_type === "routing_decided" && p) {
@@ -287,6 +309,41 @@ export function MissionTimeline({
                         <p>
                           <span className="text-[var(--text-muted)]">PR:</span> #{gh.pr_number}
                           {gh.draft === true ? " (draft)" : gh.draft === false ? " (open)" : ""}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.html_url === "string" && gh.html_url ? (
+                        <a
+                          href={gh.html_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--accent-blue)] underline-offset-2 hover:underline"
+                        >
+                          {gh.html_url}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {rt === "github_pull_request_merged" || rt === "github_pull_request_merge_failed" ? (
+                    <div className="space-y-1 text-xs text-[var(--text-secondary)]">
+                      <p className="font-mono text-[10px] text-[var(--text-muted)]">{rt}</p>
+                      {gh && typeof gh.repo === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Repo:</span> {gh.repo}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.pr_number === "number" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">PR:</span> #{gh.pr_number}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.merge_method === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Merge:</span> {gh.merge_method}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.merge_sha === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Merge SHA:</span> {gh.merge_sha}
                         </p>
                       ) : null}
                       {gh && typeof gh.html_url === "string" && gh.html_url ? (

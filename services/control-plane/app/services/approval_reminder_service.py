@@ -11,15 +11,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.logging import get_logger
 from app.models.approval_reminder import ApprovalReminder
 from app.repositories.approval_reminder_repo import ApprovalReminderRepository
 from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.sms_approval_repo import SmsApprovalRepository
 from app.services.approval_review_packet import build_approval_bundle
 from app.services.sms_approval_service import send_operator_sms
-
-log = get_logger(__name__)
 
 
 def _dedupe_escalation(approval_id: UUID) -> str:

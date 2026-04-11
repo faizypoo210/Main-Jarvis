@@ -61,6 +61,8 @@ class IntegrationWorkflowCounts(BaseModel):
     github_pull_request_merge_failed: int = 0
     gmail_draft_created: int = 0
     gmail_draft_failed: int = 0
+    gmail_reply_draft_created: int = 0
+    gmail_reply_draft_failed: int = 0
     gmail_draft_sent: int = 0
     gmail_draft_send_failed: int = 0
 

@@ -10,9 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import require_api_key
 from app.core.db import get_db
 from app.schemas.approvals import ApprovalRead
-from app.schemas.gmail_draft import GmailCreateDraftRequest, GmailSendDraftRequest
+from app.schemas.gmail_draft import (
+    GmailCreateDraftRequest,
+    GmailCreateReplyDraftRequest,
+    GmailSendDraftRequest,
+)
 from app.services.gmail_draft_workflow import (
     submit_create_draft_request,
+    submit_create_reply_draft_request,
     submit_send_draft_request,
 )
 
@@ -31,6 +36,21 @@ async def request_gmail_create_draft(
     _: None = Depends(require_api_key),
 ) -> ApprovalRead:
     approval = await submit_create_draft_request(session, mission_id=mission_id, body=body)
+    return ApprovalRead.model_validate(approval)
+
+
+@router.post(
+    "/{mission_id}/integrations/gmail/create-reply-draft",
+    response_model=ApprovalRead,
+    summary="Request Gmail reply draft in an existing thread (approval-gated; does not send)",
+)
+async def request_gmail_create_reply_draft(
+    mission_id: UUID,
+    body: GmailCreateReplyDraftRequest,
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> ApprovalRead:
+    approval = await submit_create_reply_draft_request(session, mission_id=mission_id, body=body)
     return ApprovalRead.model_validate(approval)
 
 

@@ -360,6 +360,8 @@ export function MissionTimeline({
                   ) : null}
                   {rt === "gmail_draft_created" ||
                   rt === "gmail_draft_failed" ||
+                  rt === "gmail_reply_draft_created" ||
+                  rt === "gmail_reply_draft_failed" ||
                   rt === "gmail_draft_sent" ||
                   rt === "gmail_draft_send_failed" ? (
                     <div className="space-y-1 text-xs text-[var(--text-secondary)]">
@@ -367,6 +369,17 @@ export function MissionTimeline({
                       {gm && typeof gm.operation === "string" ? (
                         <p>
                           <span className="text-[var(--text-muted)]">Operation:</span> {gm.operation}
+                        </p>
+                      ) : null}
+                      {gm && typeof gm.reply_to_message_id === "string" && gm.reply_to_message_id ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Reply to message:</span>{" "}
+                          {gm.reply_to_message_id}
+                        </p>
+                      ) : null}
+                      {gm && typeof gm.thread_id === "string" && gm.thread_id ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Thread:</span> {gm.thread_id}
                         </p>
                       ) : null}
                       {gm && typeof gm.to_preview === "string" && gm.to_preview ? (

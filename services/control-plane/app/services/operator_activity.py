@@ -61,6 +61,16 @@ _ATTENTION_SQL = """(
         AND rx.created_at <= me.created_at + interval '3 seconds'
     )
   )
+  OR (
+    me.event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = me.mission_id
+        AND rx.receipt_type = 'gmail_reply_draft_failed'
+        AND rx.created_at >= me.created_at - interval '3 seconds'
+        AND rx.created_at <= me.created_at + interval '3 seconds'
+    )
+  )
 )"""
 
 
@@ -175,6 +185,12 @@ def _title_summary_status(
                 summary = f"Gmail send_draft · {did}" + (f" · {tp}" if tp else "") + (
                     f" · {subj}" if subj else ""
                 )
+            elif act == "create_reply_draft":
+                rid = str(p.get("reply_to_message_id") or "")
+                tid = str(p.get("thread_id") or "")
+                sp = str(p.get("subject_preview") or "")
+                summary = f"Gmail create_reply_draft · msg {rid}" + (f" · thread {tid}" if tid else "")
+                summary = summary + (f" · {tp}" if tp else "") + (f" · {sp}" if sp else "")
             else:
                 summary = f"Gmail create_draft · {tp}" + (f" · {subj}" if subj else "")
             return title, _truncate(summary) or title, "pending"
@@ -216,6 +232,19 @@ def _title_summary_status(
                 if gurl:
                     summary = f"{summary} · {gurl}"
                 return "Gmail draft sent", _truncate(summary) or "Sent", "complete"
+            if act == "create_reply_draft":
+                rid = str(p.get("reply_to_message_id") or "")
+                did = str(p.get("draft_id") or "")
+                tid = str(p.get("thread_id") or "")
+                tp = str(p.get("to_preview") or "")
+                subj = str(p.get("subject") or "")
+                gurl = str(p.get("gmail_url") or "")
+                summary = f"reply to msg {rid}" + (f" · {tp}" if tp else "")
+                summary = summary + (f" · {subj}" if subj else "") + (f" · thread {tid}" if tid else "")
+                summary = summary + (f" · draft {did}" if did else "")
+                if gurl:
+                    summary = f"{summary} · {gurl}"
+                return "Gmail reply draft created", _truncate(summary) or "Reply draft saved", "complete"
             subj = str(p.get("subject") or "")
             did = str(p.get("draft_id") or "")
             gurl = str(p.get("gmail_url") or "")
@@ -262,7 +291,12 @@ def _title_summary_status(
         code = str(p.get("error_code") or "")
         summary = str(p.get("error_message") or "Integration action failed")
         if prov == "gmail":
-            prefix = "Gmail send failed" if act == "send_draft" else "Gmail draft failed"
+            if act == "send_draft":
+                prefix = "Gmail send failed"
+            elif act == "create_reply_draft":
+                prefix = "Gmail reply draft failed"
+            else:
+                prefix = "Gmail draft failed"
         elif prov == "github" and act == "create_pull_request":
             prefix = "GitHub PR failed"
         elif prov == "github" and act == "merge_pull_request":
@@ -296,6 +330,10 @@ def _title_summary_status(
             title = "Gmail draft sent"
         elif rt == "gmail_draft_send_failed":
             title = "Gmail draft send failed"
+        elif rt == "gmail_reply_draft_created":
+            title = "Gmail reply draft created"
+        elif rt == "gmail_reply_draft_failed":
+            title = "Gmail reply draft failed"
         elif rt == "openclaw_execution":
             title = "Execution receipt recorded"
         else:
@@ -351,12 +389,16 @@ def _title_summary_status(
             "gmail_draft_failed",
             "gmail_draft_sent",
             "gmail_draft_send_failed",
+            "gmail_reply_draft_created",
+            "gmail_reply_draft_failed",
         ):
             gm = rp.get("gmail") if isinstance(rp.get("gmail"), dict) else {}
             line = f"{rt}"
             if isinstance(gm, dict):
                 if gm.get("operation"):
                     line = f"{line} · {gm.get('operation')}"
+                if gm.get("reply_to_message_id"):
+                    line = f"{line} · reply_to {gm.get('reply_to_message_id')}"
                 if gm.get("to_preview"):
                     line = f"{line} · {gm.get('to_preview')}"
                 if gm.get("subject"):
@@ -367,7 +409,7 @@ def _title_summary_status(
                     line = f"{line} · msg {gm.get('message_id')}"
                 if gm.get("gmail_url"):
                     line = f"{line} · {gm.get('gmail_url')}"
-            ok = rt in ("gmail_draft_created", "gmail_draft_sent")
+            ok = rt in ("gmail_draft_created", "gmail_draft_sent", "gmail_reply_draft_created")
             return title, _truncate(line) or title, "succeeded" if ok else "failed"
         if "success" in rp:
             ok = rp.get("success")
@@ -617,6 +659,16 @@ _ATTENTION_COUNT = """(
       SELECT 1 FROM receipts rx
       WHERE rx.mission_id = mission_events.mission_id
         AND rx.receipt_type = 'gmail_draft_send_failed'
+        AND rx.created_at >= mission_events.created_at - interval '3 seconds'
+        AND rx.created_at <= mission_events.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = mission_events.mission_id
+        AND rx.receipt_type = 'gmail_reply_draft_failed'
         AND rx.created_at >= mission_events.created_at - interval '3 seconds'
         AND rx.created_at <= mission_events.created_at + interval '3 seconds'
     )

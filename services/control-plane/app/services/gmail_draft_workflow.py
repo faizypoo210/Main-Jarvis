@@ -9,14 +9,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.integrations.gmail_adapter import create_draft, refresh_access_token, send_draft
+from app.integrations.gmail_adapter import (
+    _reply_recipient,
+    create_draft,
+    create_reply_draft,
+    get_message_metadata,
+    refresh_access_token,
+    send_draft,
+)
 from app.models.approval import Approval
 from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.mission_repo import MissionRepository
 from app.schemas.gmail_draft import (
     GmailCreateDraftContract,
     GmailCreateDraftRequest,
+    GmailCreateReplyDraftContract,
+    GmailCreateReplyDraftRequest,
     GmailDraftResult,
+    GmailReplyDraftResult,
     GmailSendDraftContract,
     GmailSendDraftRequest,
     GmailSendDraftResult,
@@ -27,6 +37,7 @@ log = get_logger(__name__)
 
 ACTION_TYPE = "gmail_create_draft"
 ACTION_TYPE_SEND = "gmail_send_draft"
+ACTION_TYPE_REPLY = "gmail_create_reply_draft"
 RISK_CLASS = "red"
 
 
@@ -514,3 +525,273 @@ async def _failure_path_send(
     )
     await missions.update_status(mission_id, "failed")
     log.warning("gmail send draft failed mission_id=%s code=%s", mission_id, result.error_code)
+
+
+def human_reason_reply(contract: GmailCreateReplyDraftContract, meta: dict[str, str]) -> str:
+    tp = _reply_recipient(meta.get("from", ""), meta.get("to", ""), meta.get("reply_to", ""))
+    if not tp and contract.to_preview:
+        tp = contract.to_preview.strip()
+    if not tp:
+        tp = "recipient"
+    subj = (contract.subject or meta.get("subject") or "").strip() or "thread"
+    return f"Create Gmail reply draft to {tp}: {subj[:120]}"
+
+
+def contract_reply_to_command_text(contract: GmailCreateReplyDraftContract) -> str:
+    return contract.model_dump_json()
+
+
+async def submit_create_reply_draft_request(
+    session: AsyncSession,
+    *,
+    mission_id: UUID,
+    body: GmailCreateReplyDraftRequest,
+) -> Approval:
+    from fastapi import HTTPException, status
+
+    from app.services.approval_service import ApprovalService
+
+    contract = GmailCreateReplyDraftContract.model_validate(
+        body.model_dump(exclude={"requested_by", "requested_via"})
+    )
+    missions = MissionRepository(session)
+    mission = await missions.get_by_id(mission_id)
+    if mission is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mission not found")
+
+    token, err = await resolve_gmail_access_token()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=err or "Gmail is not configured.",
+        )
+
+    meta = await get_message_metadata(
+        access_token=token, message_id=contract.reply_to_message_id.strip()
+    )
+    if not meta:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Gmail message not found or inaccessible (check reply_to_message_id and auth).",
+        )
+
+    hint = (contract.thread_id or "").strip()
+    api_tid = (meta.get("thread_id") or "").strip()
+    if hint and api_tid and hint != api_tid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="thread_id does not match the message's thread.",
+        )
+
+    svc = ApprovalService(session)
+    approval = await svc.request_approval(
+        mission_id=mission_id,
+        action_type=ACTION_TYPE_REPLY,
+        risk_class=RISK_CLASS,
+        reason=human_reason_reply(contract, meta),
+        requested_by=body.requested_by,
+        requested_via=body.requested_via,
+        command_text=contract_reply_to_command_text(contract),
+    )
+
+    to_pv = _reply_recipient(meta.get("from", ""), meta.get("to", ""), meta.get("reply_to", ""))
+    if not to_pv and contract.to_preview:
+        to_pv = contract.to_preview.strip()
+
+    safe_payload: dict[str, Any] = {
+        "provider": contract.provider,
+        "action": contract.action,
+        "reply_to_message_id": contract.reply_to_message_id,
+        "thread_id": api_tid or hint,
+        "subject_preview": (meta.get("subject") or "")[:200],
+        "to_preview": to_pv,
+        "snippet_preview": (meta.get("snippet") or "")[:300],
+        "approval_id": str(approval.id),
+    }
+    if contract.source_mission_id:
+        safe_payload["source_mission_id"] = str(contract.source_mission_id)
+
+    await MissionEventRepository.create(
+        session,
+        mission_id=mission_id,
+        event_type="integration_action_requested",
+        actor_type="system",
+        actor_id="gmail_reply_draft_workflow",
+        payload=safe_payload,
+    )
+
+    await session.refresh(approval)
+    return approval
+
+
+async def execute_gmail_reply_draft_after_approval(
+    session: AsyncSession,
+    approval: Approval,
+) -> None:
+    receipts = ReceiptService(session)
+    missions = MissionRepository(session)
+    mid = approval.mission_id
+    raw = (approval.command_text or "").strip()
+
+    if not raw:
+        await _failure_path_reply(
+            session,
+            receipts,
+            missions,
+            mid,
+            None,
+            GmailReplyDraftResult(
+                success=False,
+                reply_to_message_id="",
+                error_code="missing_contract",
+                error_message="Approval had no structured command_text payload.",
+            ),
+        )
+        await session.commit()
+        return
+
+    try:
+        contract = GmailCreateReplyDraftContract.model_validate_json(raw)
+    except Exception as e:
+        await _failure_path_reply(
+            session,
+            receipts,
+            missions,
+            mid,
+            None,
+            GmailReplyDraftResult(
+                success=False,
+                reply_to_message_id="",
+                error_code="invalid_contract",
+                error_message=str(e)[:500],
+            ),
+        )
+        await session.commit()
+        return
+
+    token, err = await resolve_gmail_access_token()
+    if not token:
+        await _failure_path_reply(
+            session,
+            receipts,
+            missions,
+            mid,
+            contract,
+            GmailReplyDraftResult(
+                success=False,
+                reply_to_message_id=contract.reply_to_message_id,
+                error_code="missing_gmail_auth",
+                error_message=err or "Gmail auth not configured.",
+            ),
+        )
+        await session.commit()
+        return
+
+    result = await create_reply_draft(access_token=token, contract=contract)
+    if result.success:
+        await _success_path_reply(session, receipts, missions, mid, contract, result)
+    else:
+        await _failure_path_reply(session, receipts, missions, mid, contract, result)
+    await session.commit()
+
+
+def _receipt_payload_reply(result: GmailReplyDraftResult) -> dict[str, Any]:
+    d: dict[str, Any] = result.model_dump()
+    d["gmail"] = {
+        "operation": "create_reply_draft",
+        "reply_to_message_id": result.reply_to_message_id,
+        "draft_id": result.draft_id,
+        "message_id": result.message_id,
+        "thread_id": result.thread_id,
+        "subject": result.subject,
+        "to_preview": result.to_preview,
+        "snippet": result.snippet,
+        "gmail_url": result.gmail_url,
+    }
+    return d
+
+
+async def _success_path_reply(
+    session: AsyncSession,
+    receipts: ReceiptService,
+    missions: MissionRepository,
+    mission_id: UUID,
+    contract: GmailCreateReplyDraftContract,
+    result: GmailReplyDraftResult,
+) -> None:
+    payload = _receipt_payload_reply(result)
+    summary = f"Reply draft for thread" + (
+        f" (draft {result.draft_id})" if result.draft_id else ""
+    )
+    if result.to_preview:
+        summary = f"Reply draft to {result.to_preview}" + (
+            f" (id {result.draft_id})" if result.draft_id else ""
+        )
+    await receipts.record_receipt(
+        mission_id=mission_id,
+        receipt_type="gmail_reply_draft_created",
+        source="gmail_integration",
+        payload=payload,
+        summary=summary,
+    )
+    await MissionEventRepository.create(
+        session,
+        mission_id=mission_id,
+        event_type="integration_action_executed",
+        actor_type="system",
+        actor_id="gmail_integration",
+        payload={
+            "provider": "gmail",
+            "action": "create_reply_draft",
+            "reply_to_message_id": result.reply_to_message_id,
+            "draft_id": result.draft_id,
+            "message_id": result.message_id,
+            "thread_id": result.thread_id,
+            "subject": result.subject,
+            "to_preview": result.to_preview,
+            "gmail_url": result.gmail_url,
+        },
+    )
+    await missions.update_status(mission_id, "complete")
+    log.info(
+        "gmail reply draft created mission_id=%s draft_id=%s reply_to=%s",
+        mission_id,
+        result.draft_id,
+        result.reply_to_message_id,
+    )
+
+
+async def _failure_path_reply(
+    session: AsyncSession,
+    receipts: ReceiptService,
+    missions: MissionRepository,
+    mission_id: UUID,
+    contract: GmailCreateReplyDraftContract | None,
+    result: GmailReplyDraftResult,
+) -> None:
+    payload = _receipt_payload_reply(result)
+    summary = result.error_message or "Gmail reply draft creation failed"
+    await receipts.record_receipt(
+        mission_id=mission_id,
+        receipt_type="gmail_reply_draft_failed",
+        source="gmail_integration",
+        payload=payload,
+        summary=f"{summary} ({result.error_code or 'error'})",
+    )
+    await MissionEventRepository.create(
+        session,
+        mission_id=mission_id,
+        event_type="integration_action_failed",
+        actor_type="system",
+        actor_id="gmail_integration",
+        payload={
+            "provider": "gmail",
+            "action": "create_reply_draft",
+            "reply_to_message_id": result.reply_to_message_id
+            or (contract.reply_to_message_id if contract else ""),
+            "error_code": result.error_code,
+            "error_message": result.error_message,
+        },
+    )
+    await missions.update_status(mission_id, "failed")
+    log.warning("gmail reply draft failed mission_id=%s code=%s", mission_id, result.error_code)

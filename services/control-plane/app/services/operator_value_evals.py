@@ -61,7 +61,14 @@ def _categorize_error_code(code: str | None) -> str:
         return "missing_auth"
     if c.startswith("gmail_http_") or c.startswith("github_http_") or c == "http_error":
         return "provider_http_error"
-    if c in ("invalid_contract", "missing_contract", "invalid_draft_id"):
+    if c in (
+        "invalid_contract",
+        "missing_contract",
+        "invalid_draft_id",
+        "message_not_found",
+        "no_reply_recipient",
+        "missing_rfc_message_id",
+    ):
         return "validation_error"
     if "timeout" in c or c == "timeout":
         return "timeout"
@@ -276,6 +283,7 @@ async def build_operator_value_evals(
                 'github_pull_request_created', 'github_pull_request_failed',
                 'github_pull_request_merged', 'github_pull_request_merge_failed',
                 'gmail_draft_created', 'gmail_draft_failed',
+                'gmail_reply_draft_created', 'gmail_reply_draft_failed',
                 'gmail_draft_sent', 'gmail_draft_send_failed'
               )
             GROUP BY receipt_type
@@ -292,6 +300,8 @@ async def build_operator_value_evals(
     integ.github_pull_request_merge_failed = rc.get("github_pull_request_merge_failed", 0)
     integ.gmail_draft_created = rc.get("gmail_draft_created", 0)
     integ.gmail_draft_failed = rc.get("gmail_draft_failed", 0)
+    integ.gmail_reply_draft_created = rc.get("gmail_reply_draft_created", 0)
+    integ.gmail_reply_draft_failed = rc.get("gmail_reply_draft_failed", 0)
     integ.gmail_draft_sent = rc.get("gmail_draft_sent", 0)
     integ.gmail_draft_send_failed = rc.get("gmail_draft_send_failed", 0)
 
@@ -308,7 +318,7 @@ async def build_operator_value_evals(
               AND receipt_type IN (
                 'github_issue_failed', 'github_pull_request_failed',
                 'github_pull_request_merge_failed',
-                'gmail_draft_failed', 'gmail_draft_send_failed'
+                'gmail_draft_failed', 'gmail_reply_draft_failed', 'gmail_draft_send_failed'
               )
             """
         ),

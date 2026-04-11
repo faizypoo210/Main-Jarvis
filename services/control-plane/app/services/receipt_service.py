@@ -97,6 +97,8 @@ class ReceiptService:
             "gmail_draft_failed",
             "gmail_draft_sent",
             "gmail_draft_send_failed",
+            "gmail_reply_draft_created",
+            "gmail_reply_draft_failed",
         ):
             gm = payload.get("gmail")
             if isinstance(gm, dict):
@@ -104,6 +106,7 @@ class ReceiptService:
                     k: gm[k]
                     for k in (
                         "operation",
+                        "reply_to_message_id",
                         "draft_id",
                         "message_id",
                         "thread_id",

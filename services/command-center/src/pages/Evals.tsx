@@ -56,6 +56,8 @@ export function Evals() {
       integ.github_pull_request_merge_failed +
       integ.gmail_draft_created +
       integ.gmail_draft_failed +
+      integ.gmail_reply_draft_created +
+      integ.gmail_reply_draft_failed +
       integ.gmail_draft_sent +
       integ.gmail_draft_send_failed
     );
@@ -234,6 +236,11 @@ export function Evals() {
                         <td className="px-3 py-2">Gmail create draft</td>
                         <td className="px-3 py-2 font-mono">{integ?.gmail_draft_created}</td>
                         <td className="px-3 py-2 font-mono">{integ?.gmail_draft_failed}</td>
+                      </tr>
+                      <tr>
+                        <td className="px-3 py-2">Gmail reply draft (thread)</td>
+                        <td className="px-3 py-2 font-mono">{integ?.gmail_reply_draft_created}</td>
+                        <td className="px-3 py-2 font-mono">{integ?.gmail_reply_draft_failed}</td>
                       </tr>
                       <tr>
                         <td className="px-3 py-2">Gmail send draft</td>

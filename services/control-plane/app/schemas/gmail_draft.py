@@ -99,3 +99,67 @@ class GmailSendDraftResult(BaseModel):
     gmail_url: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+
+
+class GmailCreateReplyDraftContract(BaseModel):
+    """Structured payload for gmail_create_reply_draft — reply draft in an existing thread."""
+
+    provider: Literal["gmail"] = "gmail"
+    action: Literal["create_reply_draft"] = "create_reply_draft"
+    reply_to_message_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description="Gmail API message id of the message being replied to.",
+    )
+    thread_id: str | None = Field(
+        None,
+        max_length=128,
+        description="Optional thread id hint; execution uses API metadata when omitted.",
+    )
+    to_preview: str | None = Field(
+        None,
+        max_length=512,
+        description="Optional display preview for approval copy (not verified against Gmail).",
+    )
+    subject: str | None = Field(
+        None,
+        max_length=998,
+        description="Override reply subject; default Re: <original subject>.",
+    )
+    body: str = Field("", max_length=1024 * 1024)
+    cc: list[EmailStr] = Field(default_factory=list, max_length=30)
+    bcc: list[EmailStr] = Field(default_factory=list, max_length=30)
+    source_mission_id: UUID | None = None
+
+    @field_validator("cc", "bcc", mode="before")
+    @classmethod
+    def normalize_lists(cls, v: object) -> object:
+        if v is None:
+            return []
+        return v
+
+
+class GmailCreateReplyDraftRequest(GmailCreateReplyDraftContract):
+    """POST body: reply-draft fields plus who requested approval."""
+
+    requested_by: str = Field(..., min_length=1, max_length=256)
+    requested_via: ApprovalSurface
+
+
+class GmailReplyDraftResult(BaseModel):
+    """Safe fields for reply-draft receipts (no tokens)."""
+
+    success: bool
+    provider: Literal["gmail"] = "gmail"
+    action: Literal["create_reply_draft"] = "create_reply_draft"
+    reply_to_message_id: str = ""
+    draft_id: str | None = None
+    message_id: str | None = None
+    thread_id: str | None = None
+    subject: str = ""
+    to_preview: str = ""
+    snippet: str | None = None
+    gmail_url: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None

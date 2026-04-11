@@ -28,7 +28,11 @@ from app.schemas.approvals import ApprovalRead
 from app.schemas.github_issue import GitHubCreateIssueContract
 from app.schemas.github_pr import GitHubCreatePullRequestContract
 from app.schemas.github_pr_merge import GitHubMergePullRequestContract
-from app.schemas.gmail_draft import GmailCreateDraftContract, GmailSendDraftContract
+from app.schemas.gmail_draft import (
+    GmailCreateDraftContract,
+    GmailCreateReplyDraftContract,
+    GmailSendDraftContract,
+)
 from app.schemas.missions import MissionRead
 
 
@@ -110,6 +114,7 @@ def build_review_packet(
         "github_create_pull_request": _packet_github_pr,
         "github_merge_pull_request": _packet_github_merge,
         "gmail_create_draft": _packet_gmail_draft,
+        "gmail_create_reply_draft": _packet_gmail_reply_draft,
         "gmail_send_draft": _packet_gmail_send,
     }
     fn = builders.get(action_type)
@@ -257,6 +262,46 @@ def _packet_gmail_draft(data: dict[str, Any], reason: str | None, ib: bool) -> A
         identity_bearing=ib,
         fields=fields,
         brief_summary=f"Draft to {to_s}: {c.subject}",
+        spoken_summary=spoken,
+        preflight_available=False,
+        parse_ok=True,
+    )
+
+
+def _packet_gmail_reply_draft(
+    data: dict[str, Any], reason: str | None, ib: bool
+) -> ApprovalReviewPacket:
+    c = GmailCreateReplyDraftContract.model_validate(data)
+    fields = [
+        PacketField(label="Reply to message id", value=c.reply_to_message_id),
+    ]
+    if c.thread_id:
+        fields.append(PacketField(label="Thread id (hint)", value=c.thread_id))
+    if c.to_preview:
+        fields.append(PacketField(label="To (preview)", value=c.to_preview))
+    subj = (c.subject or "").strip() or "(default Re: … from thread)"
+    fields.append(PacketField(label="Subject", value=subj))
+    fields.append(PacketField(label="Body", value=_truncate(c.body, 400) if c.body else "(empty)"))
+    if c.cc:
+        fields.append(PacketField(label="Cc", value=", ".join(str(x) for x in c.cc[:8])))
+    if c.bcc:
+        fields.append(PacketField(label="Bcc", value=", ".join(str(x) for x in c.bcc[:8])))
+    tp = c.to_preview or "recipient"
+    spoken = (
+        f"Create Gmail reply draft in thread to {tp}, replying to message {c.reply_to_message_id}, "
+        f"subject {subj}."
+    )
+    return ApprovalReviewPacket(
+        kind="typed",
+        action_type="gmail_create_reply_draft",
+        headline="Create Gmail reply draft",
+        subheadline=c.reply_to_message_id,
+        action_kind="gmail_reply_draft",
+        operator_effect="Creates a draft reply in the existing Gmail thread; does not send.",
+        target_summary=f"msg {c.reply_to_message_id} → {tp}",
+        identity_bearing=ib,
+        fields=fields,
+        brief_summary=f"Reply draft to {tp} (message {c.reply_to_message_id})",
         spoken_summary=spoken,
         preflight_available=False,
         parse_ok=True,

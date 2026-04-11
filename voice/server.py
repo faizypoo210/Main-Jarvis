@@ -5,8 +5,8 @@ MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Ollama/Whisper env; local
 UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to CI here.
 TRUTH_SOURCE: intent forwarding targets control plane HTTP; mission truth remains control plane + DB.
 
-Voice approval v1: approval_voice.try_handle_voice_approval runs before POST /commands; uses pending + bundle
-GETs and approval decision POST (decided_via=voice). Ephemeral focus state per WebSocket only.
+Voice approval v1: approval_voice.try_handle_voice_approval; briefing_voice.try_handle_voice_briefing (read-only).
+Both run before POST /commands. "Read that again" repeats the last briefing or approval reply (ephemeral).
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 
 from approval_voice import forget_voice_approval_state, try_handle_voice_approval
+from briefing_voice import forget_voice_briefing_state, try_handle_voice_briefing
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
@@ -68,6 +69,24 @@ _redis: Redis | None = None
 _manager = None
 _updates_task: asyncio.Task | None = None
 _worker_hb_task: asyncio.Task | None = None
+
+# Last spoken reply per WebSocket (briefing or approval) for "read that again"
+_last_voice_reply: dict[int, str] = {}
+
+RE_VOICE_READ_AGAIN = re.compile(
+    r"\b(read\s+that\s+again|repeat\s+(that|it|the\s+approval)|say\s+that\s+again)\b",
+    re.I,
+)
+
+
+def _norm_for_intent(text: str) -> str:
+    return " ".join(text.lower().strip().split())
+
+
+def _forget_voice_session(ws_key: int) -> None:
+    forget_voice_approval_state(ws_key)
+    forget_voice_briefing_state(ws_key)
+    _last_voice_reply.pop(ws_key, None)
 
 
 def _get_model():
@@ -321,6 +340,45 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await _manager.send_json(websocket, {"type": "heard", "text": text})
 
             ws_key = id(websocket)
+            tnorm = _norm_for_intent(text)
+
+            async def _speak_local(reply: str, *, kind: str) -> None:
+                await _manager.send_json(websocket, {"type": "reply", "text": reply})
+                await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
+                try:
+                    wav = await loop.run_in_executor(None, _tts_wav_bytes, reply)
+                    b64 = base64.b64encode(wav).decode("ascii")
+                    await _manager.send_json(
+                        websocket,
+                        {"type": "tts", "kind": kind, "text": reply, "audio_b64": b64},
+                    )
+                except Exception as e:
+                    log.exception("tts voice reply: %s", e)
+                await _manager.send_json(websocket, {"type": "status", "state": "idle"})
+
+            if RE_VOICE_READ_AGAIN.search(tnorm):
+                prev = _last_voice_reply.get(ws_key)
+                if prev:
+                    await _speak_local(prev, kind="repeat")
+                    continue
+                await _speak_local(
+                    "I don't have anything to repeat yet. Ask what's happening, what needs my attention, "
+                    "or what needs my approval.",
+                    kind="repeat",
+                )
+                continue
+
+            briefing_reply = await try_handle_voice_briefing(
+                text,
+                ws_key,
+                control_plane_url=CONTROL_PLANE_URL,
+                api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
+            )
+            if briefing_reply is not None:
+                _last_voice_reply[ws_key] = briefing_reply
+                await _speak_local(briefing_reply, kind="briefing")
+                continue
+
             approval_reply = await try_handle_voice_approval(
                 text,
                 ws_key,
@@ -328,31 +386,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
             )
             if approval_reply is not None:
-                await _manager.send_json(
-                    websocket, {"type": "reply", "text": approval_reply}
-                )
-                await _manager.send_json(
-                    websocket, {"type": "status", "state": "speaking"}
-                )
-                try:
-                    wav = await loop.run_in_executor(
-                        None, _tts_wav_bytes, approval_reply
-                    )
-                    b64 = base64.b64encode(wav).decode("ascii")
-                    await _manager.send_json(
-                        websocket,
-                        {
-                            "type": "tts",
-                            "kind": "approval",
-                            "text": approval_reply,
-                            "audio_b64": b64,
-                        },
-                    )
-                except Exception as e:
-                    log.exception("tts approval: %s", e)
-                await _manager.send_json(
-                    websocket, {"type": "status", "state": "idle"}
-                )
+                _last_voice_reply[ws_key] = approval_reply
+                await _speak_local(approval_reply, kind="approval")
                 continue
 
             mission_id = await post_command_to_control_plane(text)
@@ -392,6 +427,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             await _manager.send_json(websocket, {"type": "reply", "text": reply})
+            _last_voice_reply[id(websocket)] = reply
             await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
             try:
                 wav = await loop.run_in_executor(None, _tts_wav_bytes, reply)
@@ -408,7 +444,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except Exception as e:
         log.exception("websocket error: %s", e)
     finally:
-        forget_voice_approval_state(id(websocket))
+        _forget_voice_session(id(websocket))
         await _manager.disconnect(websocket)
 
 

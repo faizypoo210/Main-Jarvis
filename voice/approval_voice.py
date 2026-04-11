@@ -112,10 +112,6 @@ RE_READ_NEXT = re.compile(
     r"read\s+full\s+approval|tell\s+me\s+about\s+(this|the)\s+approval)\b",
     re.I,
 )
-RE_READ_AGAIN = re.compile(
-    r"\b(read\s+that\s+again|repeat\s+(that|it|the\s+approval)|say\s+that\s+again)\b",
-    re.I,
-)
 RE_APPROVE_IT = re.compile(
     r"^(approve\s+it|approve\s+this)(\s*[.!]?)?$",
     re.I,
@@ -316,11 +312,6 @@ async def try_handle_voice_approval(
             out = intro + spoken
             st.last_spoken = out
             return out
-
-        if RE_READ_AGAIN.search(t):
-            if st.last_spoken:
-                return st.last_spoken
-            return "There is nothing to repeat yet. Say what needs my approval first."
 
         if RE_NEXT.search(t):
             if not st.queue_ids:

@@ -448,6 +448,50 @@ export interface WorkerRegistryEvalMetrics {
   threshold_minutes: number;
 }
 
+/** GET /api/v1/operator/cost-events */
+export interface CostEventRead {
+  id: string;
+  mission_id: string | null;
+  source_kind: string;
+  source_receipt_id: string | null;
+  provider: string | null;
+  operation: string | null;
+  amount: string | number | null;
+  currency: string | null;
+  cost_status: string;
+  usage_tokens_input: number | null;
+  usage_tokens_output: number | null;
+  usage_units: Record<string, unknown> | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CostEventRollup {
+  direct_total_usd: string | number;
+  estimated_total_usd: string | number;
+  unknown_count: number;
+  not_applicable_count: number;
+  events_total: number;
+}
+
+export interface OperatorCostEventsResponse {
+  generated_at: string;
+  rollup: CostEventRollup;
+  provider_breakdown: Record<string, number>;
+  events: CostEventRead[];
+}
+
+export interface CostEventEvalMetrics {
+  events_in_window: number;
+  direct_count: number;
+  estimated_count: number;
+  unknown_count: number;
+  not_applicable_count: number;
+  direct_total_usd: string | number;
+  estimated_total_usd: string | number;
+  provider_breakdown: Record<string, number>;
+}
+
 export interface OperatorValueEvalsResponse {
   generated_at: string;
   window_hours: number;
@@ -461,5 +505,6 @@ export interface OperatorValueEvalsResponse {
   heartbeat_metrics: HeartbeatEvalMetrics;
   routing_metrics: RoutingEvalMetrics;
   worker_registry_metrics: WorkerRegistryEvalMetrics;
+  cost_event_metrics: CostEventEvalMetrics;
   timeseries: EvalDayBucket[];
 }

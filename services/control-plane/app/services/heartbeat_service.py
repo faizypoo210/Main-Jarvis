@@ -1,4 +1,7 @@
-"""Heartbeat v1 — explicit supervision checks, deduped findings."""
+"""Heartbeat v1 — explicit supervision checks, deduped findings.
+
+Future: cost anomaly rules can use persisted `cost_events` (see `cost_event_service.py`) without implying precision we do not store.
+"""
 
 from __future__ import annotations
 

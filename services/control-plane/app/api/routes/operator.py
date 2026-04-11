@@ -20,11 +20,14 @@ from app.schemas.operator import (
     OperatorIntegrationsResponse,
     OperatorUsageResponse,
 )
+from app.schemas.cost_events import OperatorCostEventsResponse
 from app.schemas.workers import OperatorWorkersResponse
 from app.schemas.operator_evals import OperatorValueEvalsResponse
+from app.services.cost_operator_service import fetch_operator_cost_events
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
 from app.services.operator_integrations import build_integrations_report
 from app.services.operator_value_evals import build_operator_value_evals
+from app.services.worker_registry_service import list_operator_workers
 
 router = APIRouter()
 
@@ -110,6 +113,26 @@ async def operator_activity(
         summary=summary,
         items=items,
         next_before=next_before,
+    )
+
+
+@router.get("/operator/cost-events", response_model=OperatorCostEventsResponse)
+async def operator_cost_events(
+    session: AsyncSession = Depends(get_db),
+    provider: str | None = None,
+    cost_status: str | None = None,
+    mission_id: UUID | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> OperatorCostEventsResponse:
+    """Persisted cost_events — direct / estimated / unknown / not_applicable; not inferred receipt volume."""
+    return await fetch_operator_cost_events(
+        session,
+        provider=provider,
+        cost_status=cost_status,
+        mission_id=mission_id,
+        limit=limit,
+        offset=offset,
     )
 
 

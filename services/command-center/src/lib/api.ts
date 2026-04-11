@@ -12,6 +12,7 @@ import type {
   MissionEvent,
   OperatorActivityResponse,
   OperatorIntegrationsResponse,
+  OperatorCostEventsResponse,
   OperatorUsageResponse,
   OperatorWorkersResponse,
   OperatorValueEvalsResponse,
@@ -268,6 +269,23 @@ export async function getSystemHealth(): Promise<SystemHealthResponse> {
 
 export async function getOperatorUsage(): Promise<OperatorUsageResponse> {
   return requestJson<OperatorUsageResponse>(`${BASE}/operator/usage`);
+}
+
+export async function getOperatorCostEvents(params?: {
+  provider?: string;
+  cost_status?: string;
+  mission_id?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<OperatorCostEventsResponse> {
+  const q = new URLSearchParams();
+  if (params?.provider) q.set("provider", params.provider);
+  if (params?.cost_status) q.set("cost_status", params.cost_status);
+  if (params?.mission_id) q.set("mission_id", params.mission_id);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return requestJson<OperatorCostEventsResponse>(`${BASE}/operator/cost-events${qs ? `?${qs}` : ""}`);
 }
 
 export async function getOperatorWorkers(): Promise<OperatorWorkersResponse> {

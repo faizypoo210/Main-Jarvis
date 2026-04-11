@@ -12,6 +12,7 @@ from app.models.receipt import Receipt
 from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.mission_repo import MissionRepository
 from app.repositories.receipt_repo import ReceiptRepository
+from app.services.cost_event_service import record_cost_event_for_receipt
 from app.services.memory_service import try_promote_from_receipt
 
 
@@ -127,4 +128,5 @@ class ReceiptService:
             payload=ev_payload,
         )
         await try_promote_from_receipt(self._session, receipt, mission_id)
+        await record_cost_event_for_receipt(self._session, receipt)
         return receipt

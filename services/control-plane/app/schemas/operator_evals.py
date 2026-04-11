@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from decimal import Decimal
+
 from pydantic import BaseModel, Field
 
 
@@ -117,6 +119,19 @@ class WorkerRegistryEvalMetrics(BaseModel):
     threshold_minutes: float = 15.0
 
 
+class CostEventEvalMetrics(BaseModel):
+    """cost_events rows in the eval UTC window — direct/estimated USD only when stored honestly."""
+
+    events_in_window: int = 0
+    direct_count: int = 0
+    estimated_count: int = 0
+    unknown_count: int = 0
+    not_applicable_count: int = 0
+    direct_total_usd: Decimal = Decimal("0")
+    estimated_total_usd: Decimal = Decimal("0")
+    provider_breakdown: dict[str, int] = Field(default_factory=dict)
+
+
 class OperatorValueEvalsResponse(BaseModel):
     generated_at: str
     window_hours: int
@@ -130,4 +145,5 @@ class OperatorValueEvalsResponse(BaseModel):
     heartbeat_metrics: HeartbeatEvalMetrics
     routing_metrics: RoutingEvalMetrics
     worker_registry_metrics: WorkerRegistryEvalMetrics
+    cost_event_metrics: CostEventEvalMetrics
     timeseries: list[EvalDayBucket] = Field(default_factory=list)

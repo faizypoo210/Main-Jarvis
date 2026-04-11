@@ -12,10 +12,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
-if TYPE_CHECKING:
-    from app.models.cost_event import CostEvent
-
-
 class Worker(Base):
     __tablename__ = "workers"
     __table_args__ = (UniqueConstraint("worker_type", "instance_id", name="uq_workers_worker_type_instance_id"),)
@@ -39,7 +35,3 @@ class Worker(Base):
         nullable=False,
     )
     metadata_ = Column("metadata", JSONB, nullable=True)
-
-    cost_events: Mapped[list["CostEvent"]] = relationship(
-        "CostEvent", back_populates="worker"
-    )

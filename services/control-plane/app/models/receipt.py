@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.cost_event import CostEvent
     from app.models.mission import Mission
 
 
@@ -37,3 +38,8 @@ class Receipt(Base):
     )
 
     mission: Mapped["Mission | None"] = relationship("Mission", back_populates="receipts")
+    cost_event: Mapped["CostEvent | None"] = relationship(
+        "CostEvent",
+        back_populates="receipt",
+        uselist=False,
+    )

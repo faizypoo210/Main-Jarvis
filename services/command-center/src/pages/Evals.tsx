@@ -9,6 +9,12 @@ function fmtSeconds(s: number | null | undefined): string {
   return `${(s / 3600).toFixed(1)}h`;
 }
 
+function fmtUsd(v: string | number): string {
+  const n = typeof v === "string" ? Number(v) : v;
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toFixed(6);
+}
+
 const WINDOW_PRESETS = [
   { label: "24h", hours: 24 },
   { label: "72h", hours: 72 },
@@ -314,6 +320,59 @@ export function Evals() {
                   hint="supervision alignment"
                 />
               </div>
+            </section>
+
+            <section className="mb-6">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Cost events (window)
+              </h2>
+              <p className="mb-2 max-w-3xl text-[10px] leading-relaxed text-[var(--text-muted)]">
+                Rows in <code className="font-mono">cost_events</code> with{" "}
+                <code className="font-mono">created_at</code> in the eval window. USD totals only where status and
+                currency were stored; not receipt-volume inference.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MetricCard
+                  label="Events in window"
+                  value={data.cost_event_metrics.events_in_window}
+                  hint="cost_events rows"
+                />
+                <MetricCard
+                  label="Direct (count)"
+                  value={data.cost_event_metrics.direct_count}
+                  hint="cost_status=direct"
+                />
+                <MetricCard
+                  label="Unknown cost"
+                  value={data.cost_event_metrics.unknown_count}
+                  hint="no USD in payload"
+                />
+                <MetricCard
+                  label="Not applicable"
+                  value={data.cost_event_metrics.not_applicable_count}
+                  hint="e.g. GitHub/Gmail API"
+                />
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <MetricCard
+                  label="Sum direct USD"
+                  value={fmtUsd(data.cost_event_metrics.direct_total_usd)}
+                  hint="stored amounts only"
+                />
+                <MetricCard
+                  label="Sum estimated USD"
+                  value={fmtUsd(data.cost_event_metrics.estimated_total_usd)}
+                  hint="explicit estimated_cost_usd"
+                />
+              </div>
+              {Object.keys(data.cost_event_metrics.provider_breakdown).length > 0 ? (
+                <p className="mt-2 text-[10px] text-[var(--text-secondary)]">
+                  <span className="text-[var(--text-muted)]">By provider: </span>
+                  {Object.entries(data.cost_event_metrics.provider_breakdown)
+                    .map(([k, c]) => `${k} (${c})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
             </section>
 
             <section className="mb-6">

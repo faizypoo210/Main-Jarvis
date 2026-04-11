@@ -5,11 +5,14 @@ from __future__ import annotations
 import math
 import os
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.operator_evals import (
     ApprovalEvalMetrics,
+    CostEventEvalMetrics,
     EvalDataQuality,
     EvalDayBucket,
     FailureCategoryCounts,
@@ -108,6 +111,7 @@ async def build_operator_value_evals(
     direct: list[str] = [
         "Mission/receipt/event/approval/heartbeat row counts filtered by created_at (or decided_at) in the UTC window.",
         "Open heartbeat counts are current snapshots (not window-limited).",
+        "cost_events aggregates filtered by created_at in the UTC window (USD totals only where cost_status and currency are stored).",
     ]
     derived: list[str] = [
         "Median/p90 seconds from per-mission deltas (mission created_at to first child row).",
@@ -522,6 +526,55 @@ async def build_operator_value_evals(
     except Exception:
         wr_metrics = WorkerRegistryEvalMetrics(threshold_minutes=thr_w)
 
+    try:
+        r_ce = await session.execute(
+            text(
+                """
+                SELECT
+                  COUNT(*)::int,
+                  COUNT(*) FILTER (WHERE cost_status = 'direct')::int,
+                  COUNT(*) FILTER (WHERE cost_status = 'estimated')::int,
+                  COUNT(*) FILTER (WHERE cost_status = 'unknown')::int,
+                  COUNT(*) FILTER (WHERE cost_status = 'not_applicable')::int,
+                  COALESCE(SUM(amount) FILTER (
+                    WHERE cost_status = 'direct' AND currency = 'USD'
+                  ), 0),
+                  COALESCE(SUM(amount) FILTER (
+                    WHERE cost_status = 'estimated' AND currency = 'USD'
+                  ), 0)
+                FROM cost_events
+                WHERE created_at >= :start AND created_at < :end
+                """
+            ),
+            bind,
+        )
+        crow = r_ce.one()
+        r_pb = await session.execute(
+            text(
+                """
+                SELECT COALESCE(provider, 'unset') AS p, COUNT(*)::int AS c
+                FROM cost_events
+                WHERE created_at >= :start AND created_at < :end
+                GROUP BY 1
+                ORDER BY c DESC
+                """
+            ),
+            bind,
+        )
+        ce_pb = {str(a[0]): int(a[1]) for a in r_pb.fetchall()}
+        cost_event_metrics = CostEventEvalMetrics(
+            events_in_window=int(crow[0] or 0),
+            direct_count=int(crow[1] or 0),
+            estimated_count=int(crow[2] or 0),
+            unknown_count=int(crow[3] or 0),
+            not_applicable_count=int(crow[4] or 0),
+            direct_total_usd=Decimal(str(crow[5] or 0)),
+            estimated_total_usd=Decimal(str(crow[6] or 0)),
+            provider_breakdown=ce_pb,
+        )
+    except Exception:
+        cost_event_metrics = CostEventEvalMetrics()
+
     return OperatorValueEvalsResponse(
         generated_at=end.isoformat().replace("+00:00", "Z"),
         window_hours=wh,
@@ -544,5 +597,6 @@ async def build_operator_value_evals(
         heartbeat_metrics=heartbeat_metrics,
         routing_metrics=routing_metrics,
         worker_registry_metrics=wr_metrics,
+        cost_event_metrics=cost_event_metrics,
         timeseries=timeseries,
     )

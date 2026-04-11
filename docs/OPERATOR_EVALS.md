@@ -2,10 +2,29 @@
 
 This document describes how to **measure** the current Jarvis operator stack (control plane, mission bundle, approvals, execution evidence, live updates) without changing product architecture. Use it to capture **baselines** before security hardening (for example token rotation) so you can compare runs later using the same harness.
 
+## Operator Value Evals v1 (real usefulness signals)
+
+**Purpose:** Inspectable **operational** metrics from **stored mission truth** — not LLM quality scores.
+
+| Metric area | Definition (v1) |
+| ----------- | ---------------- |
+| **Mission throughput** | Counts: missions with `created_at` in the UTC window; terminal rows where `status` is `complete` or `failed` and `updated_at` falls in the window (work finished during the window, regardless of when the mission was opened). |
+| **Time-to-useful-progress** | For missions **created** in the window: seconds from `missions.created_at` to (a) first `receipts.created_at`, (b) first `mission_events` row with `event_type = integration_action_executed`. Median/p90 are **derived** from per-mission deltas; low `n` is flagged in `data_quality.caveats`. |
+| **Approval turnaround** | Approvals with `created_at` in the window (requested); `decided_at` in the window (resolved); `approval_resolved` events with `decision=denied` (denied). Turnaround = `decided_at - created_at` for approvals resolved in the window. **Pending age** buckets are a **current snapshot** of `approvals.status = pending`. |
+| **Governed integration success** | Counts of `receipts.receipt_type` in the window: `github_issue_created` / `github_issue_failed`, `gmail_draft_*`, `gmail_draft_sent` / `gmail_draft_send_failed`. |
+| **Failure categorization** | **Derived** from `receipts.payload->>'error_code'` on failed integration receipts using small rules (`missing_*` → missing_auth, `*_http_*` → provider_http_error, `invalid_contract` / `missing_contract` / `invalid_draft_id` → validation_error, etc.). **`approval_denied`** is counted from **mission events**, not receipts. |
+| **Heartbeat usefulness** | Window: `first_seen_at` (opened), `resolved_at` (resolved). **Open by type** is a **current snapshot** of open findings. |
+| **Routing** | `routing_decided` events in window; lane match vs mismatch; `local_fast` → `gateway` when `fallback_applied` is true in the event payload. |
+
+**API:** `GET /api/v1/operator/evals?window_hours=…&group_by=day` (optional daily rollup). **UI:** Command Center `/evals`. **Script:** [`scripts/18-run-operator-value-evals.ps1`](../scripts/18-run-operator-value-evals.ps1) writes `docs/reports/operator-value-evals-<UTC>.json` plus a short `.txt` summary.
+
+**Direct vs derived:** Row counts and time-bounded filters are **direct** from PostgreSQL. Percentiles, failure buckets, and routing match counts are **derived** aggregates. This layer does **not** measure subjective “AI helpfulness.”
+
 ## Artifacts
 
 | Artifact | Purpose |
 | -------- | ------- |
+| [`scripts/18-run-operator-value-evals.ps1`](../scripts/18-run-operator-value-evals.ps1) | **Operator value v1:** GET `/api/v1/operator/evals`, JSON + text under `docs/reports/`. |
 | [`scripts/13-rehearse-golden-path.ps1`](../scripts/13-rehearse-golden-path.ps1) | Synthetic **API-only** golden path (fast, minimal deps). See [`GOLDEN_PATH.md`](./GOLDEN_PATH.md). |
 | [`scripts/14-rehearse-live-stack.ps1`](../scripts/14-rehearse-live-stack.ps1) | **Live stack** (Redis, coordinator, DashClaw, executor, OpenClaw). See [`LIVE_STACK_REHEARSAL.md`](./LIVE_STACK_REHEARSAL.md). |
 | [`scripts/15-benchmark-operator-loop.ps1`](../scripts/15-benchmark-operator-loop.ps1) | Timed benchmark: synthetic path + optional live stack + optional SSE TTFB; writes JSON under `docs/reports/`. |

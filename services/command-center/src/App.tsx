@@ -11,6 +11,7 @@ import { Integrations } from "./pages/Integrations";
 import { Memory } from "./pages/Memory";
 import { SystemHealth } from "./pages/SystemHealth";
 import { Workers } from "./pages/Workers";
+import { Evals } from "./pages/Evals";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />
+        <Route path="evals" element={<Evals />} />
         <Route path="memory" element={<Memory />} />
         <Route path="integrations" element={<Integrations />} />
         <Route path="workers" element={<Workers />} />

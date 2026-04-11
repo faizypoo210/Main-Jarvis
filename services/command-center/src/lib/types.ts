@@ -251,3 +251,99 @@ export interface MemoryCountsResponse {
   active: number;
   archived: number;
 }
+
+/** GET /api/v1/operator/evals — Operator Value Evals v1 */
+export interface EvalLatencyStats {
+  sample_count: number;
+  median_seconds: number | null;
+  p90_seconds: number | null;
+  min_seconds: number | null;
+  max_seconds: number | null;
+}
+
+export interface OperatorValueEvalsSummary {
+  window_start_utc: string;
+  window_end_utc: string;
+  window_hours: number;
+  notes: string[];
+}
+
+export interface EvalDataQuality {
+  direct_from_store: string[];
+  derived_aggregates: string[];
+  caveats: string[];
+}
+
+export interface MissionEvalMetrics {
+  missions_created_in_window: number;
+  missions_by_status_for_created_cohort: Record<string, number>;
+  missions_reached_complete_in_window: number;
+  missions_reached_failed_in_window: number;
+  time_created_to_first_receipt: EvalLatencyStats;
+  time_created_to_first_integration_executed: EvalLatencyStats;
+}
+
+export interface ApprovalEvalMetrics {
+  approvals_requested_in_window: number;
+  approvals_resolved_in_window: number;
+  approvals_denied_in_window: number;
+  turnaround_seconds: EvalLatencyStats;
+  pending_now: number;
+  pending_age_under_1h: number;
+  pending_age_1h_to_24h: number;
+  pending_age_over_24h: number;
+}
+
+export interface IntegrationWorkflowCounts {
+  github_issue_created: number;
+  github_issue_failed: number;
+  gmail_draft_created: number;
+  gmail_draft_failed: number;
+  gmail_draft_sent: number;
+  gmail_draft_send_failed: number;
+}
+
+export interface FailureCategoryCounts {
+  missing_auth: number;
+  provider_http_error: number;
+  validation_error: number;
+  approval_denied: number;
+  timeout: number;
+  unknown: number;
+}
+
+export interface HeartbeatEvalMetrics {
+  findings_first_seen_in_window: number;
+  findings_resolved_in_window: number;
+  open_findings_by_finding_type: Record<string, number>;
+  open_findings_total: number;
+}
+
+export interface RoutingEvalMetrics {
+  routing_decided_events_in_window: number;
+  requested_matches_actual_lane: number;
+  requested_differs_actual_lane: number;
+  local_fast_to_gateway_fallback: number;
+}
+
+export interface EvalDayBucket {
+  day_utc: string;
+  missions_created: number;
+  missions_reached_complete: number;
+  missions_reached_failed: number;
+}
+
+export interface OperatorValueEvalsResponse {
+  generated_at: string;
+  window_hours: number;
+  group_by: string | null;
+  summary: OperatorValueEvalsSummary;
+  data_quality: EvalDataQuality;
+  mission_metrics: MissionEvalMetrics;
+  approval_metrics: ApprovalEvalMetrics;
+  integration_metrics: IntegrationWorkflowCounts;
+  failure_categories: FailureCategoryCounts;
+  heartbeat_metrics: HeartbeatEvalMetrics;
+  routing_metrics: RoutingEvalMetrics;
+  timeseries: EvalDayBucket[];
+}

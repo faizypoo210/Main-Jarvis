@@ -19,8 +19,10 @@ from app.schemas.operator import (
     OperatorIntegrationsResponse,
     OperatorUsageResponse,
 )
+from app.schemas.operator_evals import OperatorValueEvalsResponse
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
 from app.services.operator_integrations import build_integrations_report
+from app.services.operator_value_evals import build_operator_value_evals
 
 router = APIRouter()
 
@@ -200,3 +202,26 @@ async def operator_usage(session: AsyncSession = Depends(get_db)) -> OperatorUsa
         last_receipt_at=last_receipt_at,
         last_openclaw_execution_at=last_openclaw_execution_at,
     )
+
+
+@router.get("/operator/evals", response_model=OperatorValueEvalsResponse)
+async def operator_value_evals(
+    session: AsyncSession = Depends(get_db),
+    window_hours: int = Query(
+        168,
+        ge=1,
+        le=720,
+        description="Rolling UTC window (max 720h). Default 168h (7 days).",
+    ),
+    group_by: str | None = Query(
+        None,
+        description="Optional rollup: 'day' for per-UTC-day buckets in timeseries.",
+    ),
+) -> OperatorValueEvalsResponse:
+    """Operator Value Evals v1 — bounded aggregates from mission truth (no subjective AI scoring)."""
+    if group_by is not None and group_by != "day":
+        raise HTTPException(
+            status_code=400,
+            detail="group_by must be omitted or 'day'",
+        )
+    return await build_operator_value_evals(session, window_hours=window_hours, group_by=group_by)

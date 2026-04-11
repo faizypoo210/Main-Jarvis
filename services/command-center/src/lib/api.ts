@@ -12,6 +12,7 @@ import type {
   OperatorActivityResponse,
   OperatorIntegrationsResponse,
   OperatorUsageResponse,
+  OperatorValueEvalsResponse,
   Receipt,
   SystemHealthResponse,
 } from "./types";
@@ -347,6 +348,19 @@ export async function promoteMemoryFromMission(data: {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export async function getOperatorEvals(params?: {
+  window_hours?: number;
+  group_by?: "day";
+}): Promise<OperatorValueEvalsResponse> {
+  const q = new URLSearchParams();
+  if (params?.window_hours != null) q.set("window_hours", String(params.window_hours));
+  if (params?.group_by) q.set("group_by", params.group_by);
+  const qs = q.toString();
+  return requestJson<OperatorValueEvalsResponse>(
+    `${BASE}/operator/evals${qs ? `?${qs}` : ""}`
+  );
 }
 
 export async function getOperatorActivity(params?: {

@@ -99,6 +99,7 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 | Workspace sync to OpenClaw | `.\scripts\10-sync-openclaw-workspace.ps1` |
 | GitHub issue workflow | `docs/INTEGRATIONS_GITHUB.md`; API under `/api/v1/missions/.../integrations/github/create-issue` |
 | Gmail draft + send-draft workflows | `docs/INTEGRATIONS_GMAIL.md`; APIs under `/api/v1/missions/.../integrations/gmail/create-draft` and `.../send-draft` |
+| Operator Value Evals v1 | `GET /api/v1/operator/evals`, `docs/OPERATOR_EVALS.md` (metric definitions), Command Center `/evals`, `scripts/18-run-operator-value-evals.ps1` | **Operational** aggregates from DB truth — not subjective scoring |
 | Broader deployment phases | `DEPLOYMENT_STATUS.md`, `docs/E2E_SMOKE_TEST.md` |
 
 ## Known limitations

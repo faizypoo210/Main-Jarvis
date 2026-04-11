@@ -9,7 +9,14 @@ import {
 } from "../lib/activityPresentation";
 import { formatRelativeTime } from "../lib/format";
 
-const filterTabs: ActivityFilterTab[] = ["all", "mission", "approval", "execution", "failures"];
+const filterTabs: ActivityFilterTab[] = [
+  "all",
+  "mission",
+  "approval",
+  "execution",
+  "memory",
+  "failures",
+];
 
 export function Activity() {
   const [tab, setTab] = useState<ActivityFilterTab>("all");
@@ -38,7 +45,7 @@ export function Activity() {
         </p>
 
         {summary ? (
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div className="rounded-xl border border-[var(--bg-border)] bg-[var(--bg-surface)]/60 p-3">
               <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
                 Items ({summary.window_hours}h window)
@@ -74,6 +81,15 @@ export function Activity() {
               <p className="mt-1 text-[9px] leading-snug text-[var(--text-muted)]">
                 Denied approvals, blocked/failed missions, failed executions (when success is stored).
               </p>
+            </div>
+            <div className="rounded-xl border border-[var(--bg-border)] bg-[var(--bg-surface)]/60 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                Memory events
+              </p>
+              <p className="mt-1 font-mono text-xl font-semibold text-[var(--text-primary)]">
+                {summary.memory_in_window ?? 0}
+              </p>
+              <p className="mt-1 text-[9px] text-[var(--text-muted)]">Saved / promoted / archived</p>
             </div>
           </div>
         ) : loading ? (

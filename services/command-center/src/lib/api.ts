@@ -2,6 +2,9 @@ import type {
   ActivityFeedCategory,
   Approval,
   CommandResponse,
+  MemoryCountsResponse,
+  MemoryItemRead,
+  MemoryListResponse,
   Mission,
   MissionBundle,
   MissionEvent,
@@ -259,6 +262,86 @@ export async function getOperatorUsage(): Promise<OperatorUsageResponse> {
 
 export async function getOperatorIntegrations(): Promise<OperatorIntegrationsResponse> {
   return requestJson<OperatorIntegrationsResponse>(`${BASE}/operator/integrations`);
+}
+
+export async function getMemoryCounts(): Promise<MemoryCountsResponse> {
+  return requestJson<MemoryCountsResponse>(`${BASE}/operator/memory/counts`);
+}
+
+export async function getMemoryList(params?: {
+  memory_type?: string;
+  status?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<MemoryListResponse> {
+  const q = new URLSearchParams();
+  if (params?.memory_type) q.set("memory_type", params.memory_type);
+  if (params?.status) q.set("status", params.status);
+  if (params?.q) q.set("q", params.q);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return requestJson<MemoryListResponse>(`${BASE}/operator/memory${qs ? `?${qs}` : ""}`);
+}
+
+export async function getMemory(id: string): Promise<MemoryItemRead> {
+  return requestJson<MemoryItemRead>(
+    `${BASE}/operator/memory/${encodeURIComponent(id)}`
+  );
+}
+
+export async function createMemory(data: {
+  memory_type: string;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  importance?: number;
+  tags?: string[];
+  mission_id?: string | null;
+  dedupe_key?: string | null;
+}): Promise<MemoryItemRead> {
+  return requestJson<MemoryItemRead>(`${BASE}/operator/memory`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function patchMemory(
+  id: string,
+  data: {
+    title?: string;
+    summary?: string | null;
+    content?: string | null;
+    status?: "active" | "archived";
+    importance?: number;
+    tags?: string[];
+    last_reviewed_at?: string | null;
+  }
+): Promise<MemoryItemRead> {
+  return requestJson<MemoryItemRead>(
+    `${BASE}/operator/memory/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export async function promoteMemoryFromMission(data: {
+  mission_id: string;
+  memory_type: string;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  importance?: number;
+  tags?: string[];
+  dedupe_key?: string | null;
+}): Promise<MemoryItemRead> {
+  return requestJson<MemoryItemRead>(`${BASE}/operator/memory/promote-from-mission`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getOperatorActivity(params?: {

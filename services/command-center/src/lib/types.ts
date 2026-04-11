@@ -121,7 +121,7 @@ export interface OperatorUsageResponse {
 }
 
 /** GET /api/v1/operator/activity */
-export type ActivityFeedCategory = "mission" | "approval" | "execution" | "attention";
+export type ActivityFeedCategory = "mission" | "approval" | "execution" | "attention" | "memory";
 
 export interface ActivitySummary {
   window_hours: number;
@@ -129,6 +129,8 @@ export interface ActivitySummary {
   approvals_in_window: number;
   execution_in_window: number;
   attention_in_window: number;
+  /** Present on control planes that expose memory timeline counts. */
+  memory_in_window?: number;
 }
 
 export interface OperatorActivityItem {
@@ -180,4 +182,37 @@ export interface OperatorIntegrationsResponse {
   summary: IntegrationHubSummary;
   items: OperatorIntegrationRow[];
   truth_notes: string[];
+}
+
+/** GET /api/v1/operator/memory */
+export interface MemoryItemRead {
+  id: UUID;
+  memory_type: string;
+  title: string;
+  summary: string | null;
+  content: string | null;
+  status: string;
+  importance: number;
+  source_kind: string;
+  source_mission_id: UUID | null;
+  source_receipt_id: UUID | null;
+  source_event_id: UUID | null;
+  tags: string[];
+  dedupe_key: string | null;
+  created_at: string;
+  updated_at: string;
+  last_reviewed_at: string | null;
+}
+
+export interface MemoryListResponse {
+  items: MemoryItemRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MemoryCountsResponse {
+  by_type: Record<string, number>;
+  active: number;
+  archived: number;
 }

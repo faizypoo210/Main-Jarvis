@@ -4,13 +4,13 @@ This file is the **honesty contract** for the `faizypoo210/Main-Jarvis` reposito
 
 ## Purpose
 
-Jarvis is a **layered** system: a **governed control plane** (missions, timeline events, approvals, receipts, realtime updates) plus **execution**, **coordination**, **operator UI**, and **voice**—with **OpenClaw**, **Redis**, **PostgreSQL**, and **machine-local** configuration living at known boundaries. This repo holds the application code and scripts for that stack; it does **not** replace vendor installers, cloud accounts, or files under `%USERPROFILE%\.openclaw\` unless explicitly synced from tracked mirrors.
+Jarvis is a **layered** system: a **governed control plane** (missions, timeline events, approvals, receipts, realtime updates, **durable operator memory**) plus **execution**, **coordination**, **operator UI**, and **voice**—with **OpenClaw**, **Redis**, **PostgreSQL**, and **machine-local** configuration living at known boundaries. **Mission state** (missions + mission-scoped events) is not the same as **memory state** (`memory_items`): memory is long-lived operator context, not a dump of chat or mission logs. This repo holds the application code and scripts for that stack; it does **not** replace vendor installers, cloud accounts, or files under `%USERPROFILE%\.openclaw\` unless explicitly synced from tracked mirrors.
 
 ## Repo ownership (in-repo)
 
 | Concern | Where truth lives in git |
 |--------|---------------------------|
-| Control Plane HTTP API and persistence | `services/control-plane/` (FastAPI, Alembic, PostgreSQL) |
+| Control Plane HTTP API and persistence | `services/control-plane/` (FastAPI, Alembic, PostgreSQL) — includes **`memory_items`** for operator durable memory |
 | Operator web UI | `services/command-center/` (React/Vite) |
 | Redis → policy → control plane bridging | `coordinator/` |
 | `jarvis.execution` → OpenClaw → receipts | `executor/` |
@@ -29,6 +29,7 @@ These are the **non-negotiable mechanisms** to understand Jarvis end-to-end. The
 | Mechanism | What it does | Represented in repo as | Not in repo (typical) |
 |-----------|----------------|-------------------------|------------------------|
 | **Mission authority** | Single source of truth for missions, timeline events, approvals, receipts, SSE | `services/control-plane/`, Alembic, `docs/GOLDEN_PATH.md` | Your PostgreSQL data |
+| **Durable operator memory** | Long-lived `memory_items` rows + mission timeline hooks (`memory_saved` / `memory_promoted` / `memory_archived`) when tied to a mission | `app/models/memory_item.py`, `app/services/memory_service.py`, `app/services/memory_promotion.py`, `GET/POST /api/v1/operator/memory*` | **Not** automatic extraction from every command; **not** full receipt/chat ingest (see promotion rules in code) |
 | **Operator UI** | Browse missions, act on approvals, mission detail, live updates | `services/command-center/` | N/A |
 | **Command intake** | Create missions from text + surface metadata | `POST /api/v1/commands`, `app/schemas/commands.py` | — |
 | **Redis coordination** | Stream-based handoff between services; mission execution payloads carry compact **routing** metadata (`requested_lane` / `actual_lane` / fallback) | Stream names in `coordinator/coordinator.py`, `executor/executor.py`, `voice/server.py`; routing heuristics in `shared/routing.py` | Redis persistence / Docker volume; **no** separate local-fast mission executor beyond OpenClaw |

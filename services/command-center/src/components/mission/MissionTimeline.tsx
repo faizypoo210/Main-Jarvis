@@ -5,6 +5,20 @@ import { operatorCopy } from "../../lib/operatorCopy";
 
 function timelineEventTitle(ev: MissionEvent): string {
   const p = ev.payload as Record<string, unknown> | null;
+  if (ev.event_type === "memory_saved" && p) {
+    const t = typeof p.title === "string" ? p.title.trim() : "";
+    const sk = typeof p.source_kind === "string" ? p.source_kind : "";
+    return t ? `Operator memory saved · ${t}${sk ? ` (${sk})` : ""}` : "Operator memory saved";
+  }
+  if (ev.event_type === "memory_promoted" && p) {
+    const t = typeof p.title === "string" ? p.title.trim() : "";
+    const sk = typeof p.source_kind === "string" ? p.source_kind : "";
+    return t ? `Memory promoted · ${t}${sk ? ` · ${sk}` : ""}` : "Memory promoted";
+  }
+  if (ev.event_type === "memory_archived" && p) {
+    const t = typeof p.title === "string" ? p.title.trim() : "";
+    return t ? `Memory archived · ${t}` : "Memory archived";
+  }
   if (ev.event_type === "routing_decided" && p) {
     const req = typeof p.requested_lane === "string" ? p.requested_lane : "";
     const act = typeof p.actual_lane === "string" ? p.actual_lane : "";
@@ -108,6 +122,17 @@ export function MissionTimeline({
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   {typeof p.decision === "string" ? p.decision : ""}
                   {typeof p.decided_by === "string" ? ` · ${p.decided_by}` : ""}
+                </p>
+              ) : null}
+              {ev.event_type === "memory_saved" && p ? (
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {typeof p.source_kind === "string" ? `Source: ${p.source_kind}` : null}
+                </p>
+              ) : null}
+              {ev.event_type === "memory_promoted" && p ? (
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {typeof p.source_kind === "string" ? `Source: ${p.source_kind}` : null}
+                  {typeof p.source_receipt_id === "string" ? ` · receipt ${p.source_receipt_id.slice(0, 8)}…` : null}
                 </p>
               ) : null}
               {ev.event_type === "routing_decided" && p ? (

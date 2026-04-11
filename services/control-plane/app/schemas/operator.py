@@ -49,6 +49,10 @@ class ActivitySummary(BaseModel):
     approvals_in_window: int
     execution_in_window: int
     attention_in_window: int
+    memory_in_window: int = Field(
+        0,
+        description="memory_saved / memory_promoted / memory_archived events in window.",
+    )
 
 
 class OperatorActivityItem(BaseModel):

@@ -1,10 +1,17 @@
 import type { ActivityFeedCategory } from "./types";
 
-export type ActivityFilterTab = "all" | "mission" | "approval" | "execution" | "failures";
+export type ActivityFilterTab =
+  | "all"
+  | "mission"
+  | "approval"
+  | "execution"
+  | "failures"
+  | "memory";
 
 export function mapActivityFilterToQuery(tab: ActivityFilterTab): ActivityFeedCategory | undefined {
   if (tab === "all") return undefined;
   if (tab === "failures") return "attention";
+  if (tab === "memory") return "memory";
   return tab;
 }
 
@@ -20,6 +27,8 @@ export function activityFilterLabel(tab: ActivityFilterTab): string {
       return "Execution";
     case "failures":
       return "Failures / attention";
+    case "memory":
+      return "Memory";
     default:
       return tab;
   }
@@ -33,6 +42,8 @@ export function categoryBadgeClass(category: string): string {
       return "border-[var(--status-amber)]/50 text-[var(--status-amber)]";
     case "execution":
       return "border-[var(--status-green)]/40 text-[var(--status-green)]";
+    case "memory":
+      return "border-[var(--accent-blue)]/35 text-[var(--accent-blue)]";
     default:
       return "border-[var(--bg-border)] text-[var(--text-muted)]";
   }
@@ -42,5 +53,6 @@ export function kindBadgeLabel(kind: string): string {
   if (kind === "mission_event") return "Mission";
   if (kind === "approval") return "Approval";
   if (kind === "receipt") return "Execution";
+  if (kind === "memory") return "Memory";
   return kind;
 }

@@ -52,6 +52,8 @@ def _kind_and_category(event_type: str) -> tuple[str, str]:
     if event_type == "routing_decided":
         # Category "mission" so mission-filtered activity includes routing without a new filter enum.
         return "routing", "mission"
+    if event_type in ("memory_saved", "memory_promoted", "memory_archived"):
+        return "memory", "memory"
     if event_type in ("created", "mission_status_changed"):
         return "mission_event", "mission"
     return "mission_event", "mission"
@@ -144,6 +146,28 @@ def _title_summary_status(
             line = f"{line} · lane {lane}"
         return title, _truncate(line) or title, "recorded"
 
+    if event_type == "memory_saved":
+        title = "Operator memory saved"
+        sk = str(p.get("source_kind") or "manual")
+        mt = str(p.get("memory_type") or "")
+        ti = str(p.get("title") or "").strip()
+        summary = f"{ti}" + (f" · type {mt}" if mt else "") + (f" · source {sk}" if sk else "")
+        return title, _truncate(summary) or title, "saved"
+    if event_type == "memory_promoted":
+        title = "Memory promoted"
+        sk = str(p.get("source_kind") or "")
+        mt = str(p.get("memory_type") or "")
+        ti = str(p.get("title") or "").strip()
+        summary = f"{ti}" + (f" · {mt}" if mt else "")
+        if sk:
+            summary = f"{summary} · {sk}".strip()
+        return title, _truncate(summary) or title, "promoted"
+    if event_type == "memory_archived":
+        title = "Memory archived"
+        ti = str(p.get("title") or "").strip()
+        summary = ti or "Memory item archived."
+        return title, _truncate(summary) or title, "archived"
+
     return (
         event_type.replace("_", " ").title(),
         f"Mission event `{event_type}` recorded.",
@@ -205,6 +229,10 @@ def _meta(
             "reason_code",
             "pending_approval",
         ):
+            if k in p:
+                meta[k] = p.get(k)
+    if event_type in ("memory_saved", "memory_promoted", "memory_archived"):
+        for k in ("memory_id", "memory_type", "title", "source_kind", "source_receipt_id"):
             if k in p:
                 meta[k] = p.get(k)
     if event_type == "receipt_recorded":
@@ -286,7 +314,10 @@ def _category_sql_me(category: str | None) -> str:
         return ""
     if category == "mission":
         return (
-            "AND me.event_type IN ('created', 'mission_status_changed', 'routing_decided')"
+            "AND me.event_type IN ("
+            "'created', 'mission_status_changed', 'routing_decided', "
+            "'memory_saved', 'memory_promoted', 'memory_archived'"
+            ")"
         )
     if category == "approval":
         return "AND me.event_type IN ('approval_requested', 'approval_resolved')"
@@ -294,6 +325,10 @@ def _category_sql_me(category: str | None) -> str:
         return "AND me.event_type = 'receipt_recorded'"
     if category == "attention":
         return f"AND {_ATTENTION_ME}"
+    if category == "memory":
+        return (
+            "AND me.event_type IN ('memory_saved', 'memory_promoted', 'memory_archived')"
+        )
     return ""
 
 
@@ -357,12 +392,22 @@ async def fetch_activity_summary(session: AsyncSession, *, window_days: int = 7)
             """
         )
     )
+    mem = await session.execute(
+        text(
+            f"""
+            SELECT COUNT(*)::int FROM mission_events
+            WHERE created_at >= NOW() - {win}
+              AND event_type IN ('memory_saved', 'memory_promoted', 'memory_archived')
+            """
+        )
+    )
     return ActivitySummary(
         window_hours=window_days * 24,
         total_in_window=int(total.scalar_one() or 0),
         approvals_in_window=int(appr.scalar_one() or 0),
         execution_in_window=int(exe.scalar_one() or 0),
         attention_in_window=int(att.scalar_one() or 0),
+        memory_in_window=int(mem.scalar_one() or 0),
     )
 
 

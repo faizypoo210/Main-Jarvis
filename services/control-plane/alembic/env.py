@@ -26,6 +26,7 @@ from app.models import (  # noqa: E402, F401
     approval,
     cost_event,
     integration,
+    memory_item,
     mission,
     mission_event,
     receipt,

@@ -15,6 +15,7 @@ from app.api.routes import (
     health,
     missions,
     operator,
+    operator_memory,
     receipts,
     system,
     updates,
@@ -60,3 +61,4 @@ app.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["r
 app.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])
 app.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
 app.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])
+app.include_router(operator_memory.router, prefix=api_v1_prefix, tags=["operator-memory"])

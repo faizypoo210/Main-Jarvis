@@ -48,6 +48,12 @@ function eventTitle(type: string): string {
       return "Receipt recorded";
     case "routing_decided":
       return "Routing decided";
+    case "memory_saved":
+      return "Memory saved";
+    case "memory_promoted":
+      return "Memory promoted";
+    case "memory_archived":
+      return "Memory archived";
     default:
       return type.replace(/_/g, " ");
   }
@@ -90,6 +96,20 @@ function describeEventOneLine(ev: MissionEvent): string {
       }
       if (pending) line = `${line} · pending approval`;
       return line;
+    }
+    case "memory_saved": {
+      const t = p && typeof p.title === "string" ? p.title.trim() : "";
+      const sk = p && typeof p.source_kind === "string" ? p.source_kind : "manual";
+      return t ? `Memory saved · ${t} (${sk})` : `Operator memory saved (${sk})`;
+    }
+    case "memory_promoted": {
+      const t = p && typeof p.title === "string" ? p.title.trim() : "";
+      const sk = p && typeof p.source_kind === "string" ? p.source_kind : "";
+      return t ? `Memory promoted · ${t}${sk ? ` · ${sk}` : ""}` : "Memory promoted";
+    }
+    case "memory_archived": {
+      const t = p && typeof p.title === "string" ? p.title.trim() : "";
+      return t ? `Memory archived · ${t}` : "Memory archived";
     }
     case "receipt_recorded": {
       const summary = p && typeof p.summary === "string" ? p.summary.trim() : "";

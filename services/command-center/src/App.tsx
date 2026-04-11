@@ -8,6 +8,7 @@ import { MissionDetail } from "./pages/MissionDetail";
 import { Missions } from "./pages/Missions";
 import { Overview } from "./pages/Overview";
 import { Integrations } from "./pages/Integrations";
+import { Memory } from "./pages/Memory";
 import { SystemHealth } from "./pages/SystemHealth";
 import { Workers } from "./pages/Workers";
 
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="missions" element={<Missions />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />
+        <Route path="memory" element={<Memory />} />
         <Route path="integrations" element={<Integrations />} />
         <Route path="workers" element={<Workers />} />
         <Route path="cost" element={<CostUsage />} />

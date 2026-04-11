@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart2,
+  Brain,
   Cpu,
   Heart,
   LayoutDashboard,
@@ -18,6 +19,7 @@ const nav = [
   { to: "/missions", label: "Missions", icon: Target, badge: "missions" as const },
   { to: "/approvals", label: "Approvals", icon: ShieldCheck, badge: "approvals" as const },
   { to: "/activity", label: "Activity", icon: Activity },
+  { to: "/memory", label: "Memory", icon: Brain },
   { to: "/integrations", label: "Integrations", icon: Plug },
   { to: "/workers", label: "Workers", icon: Cpu },
   { to: "/cost", label: "Cost & Usage", icon: BarChart2 },

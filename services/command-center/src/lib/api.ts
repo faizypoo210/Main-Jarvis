@@ -9,6 +9,7 @@ import type {
   GmailCreateDraftRequestBody,
   GmailCreateReplyDraftRequestBody,
   GmailSendDraftRequestBody,
+  GovernedActionCatalogResponse,
   HeartbeatOperatorResponse,
   MemoryCountsResponse,
   MemoryItemRead,
@@ -390,6 +391,10 @@ export async function promoteMemoryFromMission(data: {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export async function getOperatorActionCatalog(): Promise<GovernedActionCatalogResponse> {
+  return requestJson<GovernedActionCatalogResponse>(`${BASE}/operator/action-catalog`);
 }
 
 export async function getOperatorEvals(params?: {

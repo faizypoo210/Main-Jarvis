@@ -30,7 +30,9 @@ from app.schemas.operator_inbox import (
 from app.schemas.cost_events import OperatorCostEventsResponse
 from app.schemas.cost_guardrails import OperatorCostGuardrailsResponse
 from app.schemas.workers import OperatorWorkersResponse
+from app.schemas.governed_action_catalog import GovernedActionCatalogResponse
 from app.schemas.operator_evals import OperatorValueEvalsResponse
+from app.services.governed_action_catalog import build_governed_action_catalog_response
 from app.services.cost_guardrail_service import build_operator_cost_guardrails_response
 from app.services.cost_operator_service import fetch_operator_cost_events
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
@@ -41,6 +43,12 @@ from app.services.worker_registry_service import list_operator_workers
 from app.repositories.operator_inbox_state_repo import OperatorInboxStateRepository
 
 router = APIRouter()
+
+
+@router.get("/operator/action-catalog", response_model=GovernedActionCatalogResponse)
+async def operator_action_catalog() -> GovernedActionCatalogResponse:
+    """Launch metadata for governed GitHub/Gmail actions (Command Center + voice). No secrets."""
+    return build_governed_action_catalog_response()
 
 
 def _worker_stale_threshold_minutes() -> float:

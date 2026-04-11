@@ -82,6 +82,10 @@ RE_START_GM_REPLY = re.compile(
 _drafts: dict[int, GovernedDraft] = {}
 _last_mission_by_ws: dict[int, str] = {}
 
+# Cached GET /api/v1/operator/action-catalog (launch metadata only; no secrets).
+_catalog_cache: dict[str, Any] | None = None
+_catalog_load_failed: bool = False
+
 
 @dataclass
 class GovernedDraft:
@@ -206,7 +210,7 @@ async def _resolve_mission_id(
     return None, f"No mission matches id starting with {token[:8]}."
 
 
-def _field_order(kind: str) -> list[str]:
+def _field_order_legacy(kind: str) -> list[str]:
     if kind == "gh_issue":
         return ["mission_id", "repo", "title", "body"]
     if kind == "gh_pr":
@@ -222,12 +226,53 @@ def _field_order(kind: str) -> list[str]:
     return []
 
 
+def _catalog_entry_for_voice(kind: str) -> dict[str, Any] | None:
+    global _catalog_cache
+    if not _catalog_cache or not isinstance(_catalog_cache.get("actions"), list):
+        return None
+    for a in _catalog_cache["actions"]:
+        if isinstance(a, dict) and a.get("voice_internal_kind") == kind:
+            return a
+    return None
+
+
+def _voice_body_field_names(entry: dict[str, Any]) -> list[str]:
+    """Catalog field_order minus voice-silent checkboxes (e.g. draft default)."""
+    order = list(entry.get("field_order") or [])
+    fields_list = list(entry.get("fields") or [])
+    by_name = {str(f.get("name")): f for f in fields_list if isinstance(f, dict)}
+    out: list[str] = []
+    for name in order:
+        fld = by_name.get(name)
+        if not isinstance(fld, dict):
+            continue
+        if fld.get("type") == "checkbox" and fld.get("voice_prompt") in (None, ""):
+            continue
+        out.append(name)
+    return out
+
+
+def _field_order(kind: str) -> list[str]:
+    entry = _catalog_entry_for_voice(kind)
+    if entry:
+        return ["mission_id"] + _voice_body_field_names(entry)
+    return _field_order_legacy(kind)
+
+
 def _prompt_for(kind: str, field: str) -> str:
     if field == "mission_id":
         return (
             "Which mission should this attach to? Say last for the mission from your last voice command, "
             "or say the mission id or the first eight characters."
         )
+    entry = _catalog_entry_for_voice(kind)
+    if entry:
+        for f in entry.get("fields") or []:
+            if isinstance(f, dict) and f.get("name") == field:
+                vp = f.get("voice_prompt")
+                if isinstance(vp, str) and vp.strip():
+                    return vp
+                break
     if field == "repo":
         return "Say the GitHub repository as owner slash name, like acme slash repo."
     if field == "title":
@@ -253,7 +298,33 @@ def _prompt_for(kind: str, field: str) -> str:
     return f"Say the {field}."
 
 
+def _summary_from_catalog(entry: dict[str, Any], f: dict[str, str]) -> str:
+    tpl = str(entry.get("summary_template") or "")
+    body = f.get("body", "") or ""
+    body_state = "empty" if not body.strip() else "provided"
+    try:
+        return tpl.format(
+            repo=f.get("repo", ""),
+            title=f.get("title", ""),
+            body=body,
+            body_state=body_state,
+            base=f.get("base", ""),
+            head=f.get("head", ""),
+            pull_number=f.get("pull_number", ""),
+            merge_method=f.get("merge_method", "squash"),
+            to=f.get("to", ""),
+            subject=f.get("subject", ""),
+            reply_to_message_id=f.get("reply_to_message_id", ""),
+            draft_id=f.get("draft_id", ""),
+        )
+    except Exception:
+        return tpl or "This approval request."
+
+
 def _confirm_summary(d: GovernedDraft) -> str:
+    entry = _catalog_entry_for_voice(d.kind)
+    if entry:
+        return _summary_from_catalog(entry, d.fields)
     f = d.fields
     if d.kind == "gh_issue":
         return (
@@ -277,6 +348,27 @@ def _confirm_summary(d: GovernedDraft) -> str:
     if d.kind == "gm_reply":
         return f"Gmail reply draft on message {f.get('reply_to_message_id', '')}."
     return "This approval request."
+
+
+async def _ensure_action_catalog(client: httpx.AsyncClient, base: str, api_key: str) -> None:
+    global _catalog_cache, _catalog_load_failed
+    if _catalog_cache is not None or _catalog_load_failed:
+        return
+    try:
+        r = await client.get(
+            f"{base}/api/v1/operator/action-catalog",
+            headers={"x-api-key": api_key, "Accept": "application/json"},
+            timeout=20.0,
+        )
+        r.raise_for_status()
+        body = r.json()
+        if isinstance(body, dict):
+            _catalog_cache = body
+        else:
+            _catalog_load_failed = True
+    except Exception as e:
+        log.warning("action catalog: %s", e)
+        _catalog_load_failed = True
 
 
 def _next_field(kind: str, fields: dict[str, str]) -> str | None:
@@ -369,16 +461,23 @@ async def _submit_draft(
                 timeout=60.0,
             )
         elif draft.kind == "gh_merge":
+            mm = (f.get("merge_method") or "squash").strip().lower()
+            if mm not in ("merge", "squash", "rebase"):
+                mm = "squash"
+            merge_body: dict[str, Any] = {
+                "repo": f["repo"],
+                "pull_number": int(f["pull_number"]),
+                "merge_method": mm,
+                "requested_by": rb,
+                "requested_via": via,
+                "source_mission_id": mid,
+            }
+            sha = (f.get("expected_head_sha") or "").strip()
+            if sha:
+                merge_body["expected_head_sha"] = sha
             r = await client.post(
                 f"{base}/api/v1/missions/{mid}/integrations/github/merge-pull-request",
-                json={
-                    "repo": f["repo"],
-                    "pull_number": int(f["pull_number"]),
-                    "merge_method": "squash",
-                    "requested_by": rb,
-                    "requested_via": via,
-                    "source_mission_id": mid,
-                },
+                json=merge_body,
                 headers=headers,
                 timeout=90.0,
             )
@@ -489,6 +588,8 @@ async def try_handle_governed_action_voice(
         return "Finish or cancel the current action request first. Say cancel that to abort."
 
     async with httpx.AsyncClient() as client:
+        await _ensure_action_catalog(client, base, api_key)
+
         # --- Active draft ---
         if draft:
             if draft.step == "confirm":
@@ -552,6 +653,37 @@ async def try_handle_governed_action_voice(
                 draft.fields["body"] = ""
             elif nf == "thread_id" and low in ("skip", "none", "no"):
                 draft.fields["thread_id"] = ""
+            elif nf == "labels":
+                low = _norm(val)
+                if low in ("skip", "none", "no", "no labels"):
+                    draft.fields["labels"] = ""
+                else:
+                    draft.fields["labels"] = val.strip()
+            elif nf == "merge_method":
+                low = _norm(val)
+                if low in ("skip", "default", ""):
+                    draft.fields["merge_method"] = "squash"
+                elif "squash" in low:
+                    draft.fields["merge_method"] = "squash"
+                elif "rebase" in low:
+                    draft.fields["merge_method"] = "rebase"
+                elif "merge" in low:
+                    draft.fields["merge_method"] = "merge"
+                else:
+                    return "Say merge method squash, merge, or rebase. Or say skip for squash."
+            elif nf == "expected_head_sha":
+                low = _norm(val)
+                if low in ("skip", "none", "no", ""):
+                    draft.fields["expected_head_sha"] = ""
+                else:
+                    draft.fields["expected_head_sha"] = val.strip()
+            elif nf in ("cc", "bcc"):
+                low = _norm(val)
+                if low in ("skip", "none", "no"):
+                    draft.fields[nf] = ""
+                else:
+                    parts = [x.strip() for x in val.split(",") if x.strip()]
+                    draft.fields[nf] = ",".join(parts)
             elif nf == "repo":
                 if not _REPO_RE.match(val.strip()):
                     return "Repository must look like owner slash name. Try again."
@@ -566,10 +698,21 @@ async def try_handle_governed_action_voice(
                 if not parts:
                     return "I need at least one email address."
                 draft.fields["to"] = ",".join(parts)
-            elif nf in ("title", "subject"):
+            elif nf == "title":
                 if not val.strip():
-                    return "I need a non-empty title." if nf == "title" else "I need a non-empty subject."
-                draft.fields[nf] = val.strip()
+                    return "I need a non-empty title."
+                draft.fields["title"] = val.strip()
+            elif nf == "subject":
+                if draft.kind == "gm_reply":
+                    s_low = _norm(val)
+                    if s_low in ("skip", "none", "no"):
+                        draft.fields["subject"] = ""
+                    else:
+                        draft.fields["subject"] = val.strip()
+                elif not val.strip():
+                    return "I need a non-empty subject."
+                else:
+                    draft.fields["subject"] = val.strip()
             elif nf == "reply_to_message_id":
                 if not val.strip():
                     return "I need the Gmail message id to reply to."
@@ -608,14 +751,19 @@ async def try_handle_governed_action_voice(
         _drafts[ws_key] = new_d
         nf = _next_field(kind, new_d.fields)
         if nf:
-            intro = {
-                "gh_issue": "Starting a GitHub issue approval request.",
-                "gh_pr": "Starting a GitHub draft pull request approval request.",
-                "gh_merge": "Starting a GitHub merge approval request.",
-                "gm_draft": "Starting a Gmail draft approval request.",
-                "gm_send": "Starting a Gmail send-draft approval request.",
-                "gm_reply": "Starting a Gmail reply draft approval request.",
-            }.get(kind, "Starting an approval request.")
+            entry = _catalog_entry_for_voice(kind)
+            intro = None
+            if entry and isinstance(entry.get("voice_intro"), str) and entry["voice_intro"].strip():
+                intro = entry["voice_intro"].strip()
+            if not intro:
+                intro = {
+                    "gh_issue": "Starting a GitHub issue approval request.",
+                    "gh_pr": "Starting a GitHub draft pull request approval request.",
+                    "gh_merge": "Starting a GitHub merge approval request.",
+                    "gm_draft": "Starting a Gmail draft approval request.",
+                    "gm_send": "Starting a Gmail send-draft approval request.",
+                    "gm_reply": "Starting a Gmail reply draft approval request.",
+                }.get(kind, "Starting an approval request.")
             return f"{intro} {_prompt_for(kind, nf)}"
         new_d.step = "confirm"
         return (

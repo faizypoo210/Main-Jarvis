@@ -220,6 +220,43 @@ export interface GmailSendDraftRequestBody {
   source_mission_id?: string;
 }
 
+/** GET /api/v1/operator/action-catalog */
+export interface GovernedActionFieldDTO {
+  name: string;
+  type: string;
+  required: boolean;
+  label: string;
+  placeholder?: string | null;
+  help_hint?: string | null;
+  validation_hint?: string | null;
+  voice_prompt?: string | null;
+  options?: { value: string; label: string }[] | null;
+}
+
+export interface GovernedActionCatalogEntryDTO {
+  action_kind: GovernedActionKind;
+  provider: string;
+  title: string;
+  description: string;
+  route_method: string;
+  route_path_suffix: string;
+  surfaces: Record<string, boolean>;
+  approval_action_type: string;
+  risk_class: string;
+  field_order: string[];
+  fields: GovernedActionFieldDTO[];
+  summary_template: string;
+  voice_internal_kind?: string | null;
+  voice_intro?: string | null;
+  enabled: boolean;
+}
+
+export interface GovernedActionCatalogResponse {
+  catalog_version: number;
+  generated_at: string;
+  actions: GovernedActionCatalogEntryDTO[];
+}
+
 /** GET /missions/:id/bundle */
 export interface MissionBundle {
   mission: Mission;

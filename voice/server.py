@@ -7,7 +7,8 @@ TRUTH_SOURCE: intent forwarding targets control plane HTTP; mission truth remain
 
 Voice approval v1: approval_voice.try_handle_voice_approval; briefing_voice.try_handle_voice_briefing (read-only).
 Voice governed action requests v1: governed_action_voice.try_handle_governed_action_voice (approval creation only).
-Handlers run before POST /commands. "Read that again" repeats the last briefing, governed, or approval reply (ephemeral).
+Voice inbox triage v1: inbox_voice.try_handle_voice_inbox (operator inbox readout + explicit ack/snooze/dismiss).
+Handlers run before POST /commands. "Read that again" repeats the last inbox, briefing, governed, or approval reply (ephemeral).
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from redis.asyncio import Redis
 
 from approval_voice import forget_voice_approval_state, try_handle_voice_approval
 from briefing_voice import forget_voice_briefing_state, try_handle_voice_briefing
+from inbox_voice import forget_voice_inbox_state, try_handle_voice_inbox
 from governed_action_voice import (
     forget_voice_governed_action_state,
     note_voice_command_mission,
@@ -92,6 +94,7 @@ def _norm_for_intent(text: str) -> str:
 def _forget_voice_session(ws_key: int) -> None:
     forget_voice_approval_state(ws_key)
     forget_voice_briefing_state(ws_key)
+    forget_voice_inbox_state(ws_key)
     forget_voice_governed_action_state(ws_key)
     _last_voice_reply.pop(ws_key, None)
 
@@ -369,10 +372,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     await _speak_local(prev, kind="repeat")
                     continue
                 await _speak_local(
-                    "I don't have anything to repeat yet. Ask what's happening, what needs my attention, "
-                    "or what needs my approval.",
+                    "I don't have anything to repeat yet. Ask what's in your inbox, what's happening, "
+                    "what needs my attention, or what needs my approval.",
                     kind="repeat",
                 )
+                continue
+
+            inbox_reply = await try_handle_voice_inbox(
+                text,
+                ws_key,
+                control_plane_url=CONTROL_PLANE_URL,
+                api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
+            )
+            if inbox_reply is not None:
+                _last_voice_reply[ws_key] = inbox_reply
+                await _speak_local(inbox_reply, kind="inbox")
                 continue
 
             briefing_reply = await try_handle_voice_briefing(

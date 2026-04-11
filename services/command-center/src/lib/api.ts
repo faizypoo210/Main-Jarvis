@@ -1,6 +1,7 @@
 import type {
   ActivityFeedCategory,
   Approval,
+  ApprovalBundleResponse,
   CommandResponse,
   HeartbeatOperatorResponse,
   MemoryCountsResponse,
@@ -233,6 +234,12 @@ export async function resolveApproval(
       decision_notes: decision.decision_notes ?? null,
     }),
   });
+}
+
+export async function getApprovalBundle(approvalId: string): Promise<ApprovalBundleResponse> {
+  return requestJson<ApprovalBundleResponse>(
+    `${BASE}/approvals/${encodeURIComponent(approvalId)}/bundle`
+  );
 }
 
 export async function getReceipt(id: string): Promise<Receipt> {

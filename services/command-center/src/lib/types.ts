@@ -46,6 +46,76 @@ export interface Approval {
   expires_at: string | null;
 }
 
+/** GET /api/v1/approvals/:id/bundle — Approval Review Packets v1 */
+export interface PacketField {
+  label: string;
+  value: string;
+}
+
+export interface ApprovalReviewPacket {
+  kind: string;
+  action_type: string;
+  headline: string;
+  subheadline?: string | null;
+  action_kind?: string | null;
+  operator_effect?: string | null;
+  target_summary?: string | null;
+  identity_bearing?: boolean | null;
+  fields: PacketField[];
+  brief_summary: string;
+  spoken_summary: string;
+  preflight_summary?: string | null;
+  preflight_available: boolean;
+  parse_ok: boolean;
+  parse_note?: string | null;
+}
+
+export interface ApprovalContextBlock {
+  requested_by: string;
+  requested_via: string;
+  risk_class: string;
+  created_at: string;
+  age_seconds: number;
+  mission_id: UUID;
+  mission_title?: string | null;
+  mission_status?: string | null;
+  mission_link?: string | null;
+  identity_bearing: boolean;
+  reason_line?: string | null;
+}
+
+export interface MissionEventSnippet {
+  id: UUID;
+  event_type: string;
+  created_at: string;
+  summary: string;
+}
+
+export interface ReceiptSnippet {
+  id: UUID;
+  receipt_type: string;
+  created_at: string;
+  summary?: string | null;
+}
+
+export interface BundleDataQuality {
+  direct_from_store: string[];
+  derived: string[];
+  notes: string[];
+}
+
+export interface ApprovalBundleResponse {
+  generated_at: string;
+  approval: Approval;
+  mission: Mission | null;
+  context: ApprovalContextBlock;
+  packet: ApprovalReviewPacket;
+  recent_events: MissionEventSnippet[];
+  related_receipts: ReceiptSnippet[];
+  data_quality: BundleDataQuality;
+  notes: string[];
+}
+
 export interface Receipt {
   id: UUID;
   mission_id: UUID | null;

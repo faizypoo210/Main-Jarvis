@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useControlPlaneLive } from "../contexts/ControlPlaneLiveContext";
-import type { Approval, Mission, MissionEvent } from "../lib/types";
+import * as api from "../lib/api";
+import type { Approval, ApprovalBundleResponse, Mission, MissionEvent } from "../lib/types";
 
 export { useControlPlaneLive } from "../contexts/ControlPlaneLiveContext";
 export type { StreamPhase } from "../contexts/ControlPlaneLiveContext";
@@ -43,6 +44,43 @@ export function useMissions(params?: {
     error: ctx.missionsError,
     refetch: ctx.refetchMissions,
   };
+}
+
+/** GET /approvals/:id/bundle — operator review packet (v1). */
+export function useApprovalBundle(approvalId: string | null): {
+  bundle: ApprovalBundleResponse | null;
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+} {
+  const [bundle, setBundle] = useState<ApprovalBundleResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    if (!approvalId?.trim()) {
+      setBundle(null);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const b = await api.getApprovalBundle(approvalId);
+      setBundle(b);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBundle(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [approvalId]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  return { bundle, loading, error, refetch };
 }
 
 export function usePendingApprovals(params?: { pollIntervalMs?: number }): {

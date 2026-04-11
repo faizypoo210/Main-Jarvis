@@ -17,10 +17,15 @@ import json
 import logging
 import os
 import re
+import sys
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import httpx
 from dotenv import load_dotenv
@@ -62,6 +67,7 @@ _model = None
 _redis: Redis | None = None
 _manager = None
 _updates_task: asyncio.Task | None = None
+_worker_hb_task: asyncio.Task | None = None
 
 
 def _get_model():
@@ -146,6 +152,10 @@ class ConnectionManager:
             for ws in dead:
                 self._clients.discard(ws)
 
+    async def count_clients(self) -> int:
+        async with self._lock:
+            return len(self._clients)
+
 
 async def _tts_and_broadcast(manager: ConnectionManager, text: str, *, kind: str) -> None:
     if not text.strip():
@@ -197,13 +207,49 @@ async def _redis_updates_loop(manager: ConnectionManager) -> None:
                 await _tts_and_broadcast(manager, str(text), kind="update")
 
 
+async def _voice_worker_heartbeat_loop() -> None:
+    from shared.worker_registry_client import (
+        default_instance_id,
+        heartbeat_interval_sec,
+        heartbeat_worker,
+        register_worker,
+    )
+
+    if not os.getenv("CONTROL_PLANE_API_KEY", "").strip():
+        return
+    iid = default_instance_id()
+    await register_worker(
+        worker_type="voice",
+        name=f"Voice ({iid})",
+        meta={"redis_stream": STREAM_UPDATES, "pid": os.getpid()},
+        instance_id=iid,
+    )
+    assert _manager is not None
+    while True:
+        await asyncio.sleep(heartbeat_interval_sec())
+        n = await _manager.count_clients()
+        await heartbeat_worker(
+            worker_type="voice",
+            meta={"websocket_clients": n, "pid": os.getpid()},
+            instance_id=iid,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    global _redis, _manager, _updates_task
+    global _redis, _manager, _updates_task, _worker_hb_task
     _redis = Redis.from_url(REDIS_URL, decode_responses=False)
     _manager = ConnectionManager()
     _updates_task = asyncio.create_task(_redis_updates_loop(_manager))
+    if os.getenv("CONTROL_PLANE_API_KEY", "").strip():
+        _worker_hb_task = asyncio.create_task(_voice_worker_heartbeat_loop())
     yield
+    if _worker_hb_task:
+        _worker_hb_task.cancel()
+        try:
+            await _worker_hb_task
+        except asyncio.CancelledError:
+            pass
     if _updates_task:
         _updates_task.cancel()
         try:

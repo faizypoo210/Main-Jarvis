@@ -26,6 +26,12 @@ from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
 from shared.lane_truth import MISSION_EXECUTION_PATH_OPENCLAW, build_lane_truth_block
+from shared.worker_registry_client import (
+    default_instance_id,
+    heartbeat_interval_sec,
+    heartbeat_worker,
+    register_worker,
+)
 
 load_dotenv()
 
@@ -627,42 +633,83 @@ class ExecutorWorker:
         assert self._redis is not None
         r = self._redis
         timeout = aiohttp.ClientTimeout(total=60)
-        async with aiohttp.ClientSession(timeout=timeout) as http:
+        iid = default_instance_id()
+
+        async def _executor_heartbeat_loop() -> None:
+            if not os.getenv("CONTROL_PLANE_API_KEY", "").strip():
+                return
+            await register_worker(
+                worker_type="executor",
+                name=f"Executor ({iid})",
+                meta={
+                    "stream": STREAM_EXECUTION,
+                    "group": GROUP_EXECUTOR,
+                    "consumer": CONSUMER_NAME,
+                    "pid": os.getpid(),
+                },
+                instance_id=iid,
+            )
             while True:
-                try:
-                    out = await r.xreadgroup(
-                        GROUP_EXECUTOR,
-                        CONSUMER_NAME,
-                        {STREAM_EXECUTION: ">"},
-                        count=10,
-                        block=5000,
-                    )
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    log.error(json.dumps({"error": "read_loop", "detail": str(e)}))
-                    await asyncio.sleep(2)
-                    continue
-                if not out:
-                    continue
-                for _s, messages in out:
-                    for msg_id, raw_fields in messages:
-                        try:
-                            await handle_execution(r, http, msg_id, raw_fields)
-                        except Exception as e:
-                            log.error(
-                                json.dumps(
-                                    {"error": "handle_execution", "detail": str(e)}
-                                )
-                            )
+                await asyncio.sleep(heartbeat_interval_sec())
+                await heartbeat_worker(
+                    worker_type="executor",
+                    meta={"stream": STREAM_EXECUTION, "pid": os.getpid()},
+                    instance_id=iid,
+                )
+
+        async def _read_loop() -> None:
+            async with aiohttp.ClientSession(timeout=timeout) as http:
+                while True:
+                    try:
+                        out = await r.xreadgroup(
+                            GROUP_EXECUTOR,
+                            CONSUMER_NAME,
+                            {STREAM_EXECUTION: ">"},
+                            count=10,
+                            block=5000,
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        log.error(json.dumps({"error": "read_loop", "detail": str(e)}))
+                        await asyncio.sleep(2)
+                        continue
+                    if not out:
+                        continue
+                    for _s, messages in out:
+                        for msg_id, raw_fields in messages:
                             try:
-                                await r.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
-                            except Exception as ack_e:
-                                log.warning(
+                                await handle_execution(r, http, msg_id, raw_fields)
+                            except Exception as e:
+                                log.error(
                                     json.dumps(
-                                        {"error": "xack_after_fail", "detail": str(ack_e)}
+                                        {"error": "handle_execution", "detail": str(e)}
                                     )
                                 )
+                                try:
+                                    await r.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+                                except Exception as ack_e:
+                                    log.warning(
+                                        json.dumps(
+                                            {"error": "xack_after_fail", "detail": str(ack_e)}
+                                        )
+                                    )
+
+        tasks: list[asyncio.Task[None]] = [
+            asyncio.create_task(_read_loop()),
+        ]
+        if os.getenv("CONTROL_PLANE_API_KEY", "").strip():
+            tasks.append(asyncio.create_task(_executor_heartbeat_loop()))
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            for t in tasks:
+                t.cancel()
+            for t in tasks:
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
 
 
 async def _main() -> None:

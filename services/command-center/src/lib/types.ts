@@ -148,6 +148,13 @@ export interface ComponentHealth {
   detail: string | null;
 }
 
+export interface WorkerRegistrySummary {
+  registered_total: number;
+  healthy_heartbeat: number;
+  stale_or_absent: number;
+  threshold_minutes: number;
+}
+
 export interface SystemHealthResponse {
   checked_at: string;
   control_plane: ComponentHealth;
@@ -155,6 +162,29 @@ export interface SystemHealthResponse {
   redis: ComponentHealth;
   openclaw_gateway: ComponentHealth;
   ollama: ComponentHealth;
+  worker_registry: WorkerRegistrySummary;
+}
+
+/** GET /api/v1/operator/workers */
+export interface WorkerRead {
+  id: UUID;
+  worker_type: string;
+  instance_id: string;
+  name: string;
+  status: string;
+  host: string | null;
+  version: string | null;
+  last_heartbeat_at: string | null;
+  started_at: string | null;
+  last_error: string | null;
+  updated_at: string;
+  meta: Record<string, unknown> | null;
+}
+
+export interface OperatorWorkersResponse {
+  generated_at: string;
+  workers: WorkerRead[];
+  stale_threshold_minutes: number;
 }
 
 /** GET /api/v1/operator/usage */
@@ -411,6 +441,13 @@ export interface EvalDayBucket {
   missions_reached_failed: number;
 }
 
+export interface WorkerRegistryEvalMetrics {
+  registered_total: number;
+  healthy_heartbeat: number;
+  stale_or_absent: number;
+  threshold_minutes: number;
+}
+
 export interface OperatorValueEvalsResponse {
   generated_at: string;
   window_hours: number;
@@ -423,5 +460,6 @@ export interface OperatorValueEvalsResponse {
   failure_categories: FailureCategoryCounts;
   heartbeat_metrics: HeartbeatEvalMetrics;
   routing_metrics: RoutingEvalMetrics;
+  worker_registry_metrics: WorkerRegistryEvalMetrics;
   timeseries: EvalDayBucket[];
 }

@@ -29,6 +29,12 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 from shared.routing import decide_route  # noqa: E402
+from shared.worker_registry_client import (
+    default_instance_id,
+    heartbeat_interval_sec,
+    heartbeat_worker,
+    register_worker,
+)
 
 # Control plane (Jarvis API). Override via .env: CONTROL_PLANE_URL=http://localhost:8001
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001")
@@ -460,17 +466,51 @@ class Coordinator:
                         log.error(json.dumps({"error": f"{label}_handle", "detail": str(e)}))
 
 
+async def _coordinator_heartbeat_loop() -> None:
+    iid = default_instance_id()
+    while True:
+        await asyncio.sleep(heartbeat_interval_sec())
+        await heartbeat_worker(
+            worker_type="coordinator",
+            meta={"consumer": CONSUMER_NAME, "pid": os.getpid()},
+            instance_id=iid,
+        )
+
+
 async def _main() -> None:
     c = Coordinator()
     await c.connect()
     assert c._redis is not None
     r = c._redis
-    try:
-        await asyncio.gather(
-            c._poll_stream(r, STREAM_COMMANDS, GROUP_COMMANDS, "commands", c.handle_command),
-            c._poll_stream(r, STREAM_RECEIPTS, GROUP_RECEIPTS, "receipts", c.handle_receipt),
+    iid = default_instance_id()
+    hb_task: asyncio.Task[None] | None = None
+    if os.getenv("CONTROL_PLANE_API_KEY", "").strip():
+        await register_worker(
+            worker_type="coordinator",
+            name=f"Coordinator ({iid})",
+            meta={
+                "streams": [STREAM_COMMANDS, STREAM_RECEIPTS],
+                "consumer": CONSUMER_NAME,
+                "pid": os.getpid(),
+            },
+            instance_id=iid,
         )
+        hb_task = asyncio.create_task(_coordinator_heartbeat_loop())
+    tasks = [
+        c._poll_stream(r, STREAM_COMMANDS, GROUP_COMMANDS, "commands", c.handle_command),
+        c._poll_stream(r, STREAM_RECEIPTS, GROUP_RECEIPTS, "receipts", c.handle_receipt),
+    ]
+    if hb_task is not None:
+        tasks.append(hb_task)
+    try:
+        await asyncio.gather(*tasks)
     finally:
+        if hb_task is not None:
+            hb_task.cancel()
+            try:
+                await hb_task
+            except asyncio.CancelledError:
+                pass
         await c.close()
 
 

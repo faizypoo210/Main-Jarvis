@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -19,12 +20,24 @@ from app.schemas.operator import (
     OperatorIntegrationsResponse,
     OperatorUsageResponse,
 )
+from app.schemas.workers import OperatorWorkersResponse
 from app.schemas.operator_evals import OperatorValueEvalsResponse
 from app.services.operator_activity import fetch_activity_items, fetch_activity_summary
 from app.services.operator_integrations import build_integrations_report
 from app.services.operator_value_evals import build_operator_value_evals
 
 router = APIRouter()
+
+
+def _worker_stale_threshold_minutes() -> float:
+    raw = os.environ.get("HEARTBEAT_WORKER_STALE_MINUTES", "").strip()
+    if not raw:
+        return 15.0
+    try:
+        return float(raw)
+    except ValueError:
+        return 15.0
+
 
 _ACTIVITY_CATEGORIES = frozenset(
     {"mission", "approval", "execution", "attention", "memory", "heartbeat"}
@@ -57,6 +70,14 @@ async def operator_integrations(
 ) -> OperatorIntegrationsResponse:
     """Honest integration readiness: DB + safe machine probes (no OAuth or secrets)."""
     return await build_integrations_report(session)
+
+
+@router.get("/operator/workers", response_model=OperatorWorkersResponse)
+async def operator_workers(session: AsyncSession = Depends(get_db)) -> OperatorWorkersResponse:
+    """Registered workers + last heartbeats (direct DB truth)."""
+    return await list_operator_workers(
+        session, stale_threshold_minutes=_worker_stale_threshold_minutes()
+    )
 
 
 @router.get("/operator/activity", response_model=OperatorActivityResponse)

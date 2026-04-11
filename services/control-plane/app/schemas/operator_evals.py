@@ -108,6 +108,15 @@ class OperatorValueEvalsSummary(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class WorkerRegistryEvalMetrics(BaseModel):
+    """Snapshot from workers table (same threshold as supervision stale_worker)."""
+
+    registered_total: int = 0
+    healthy_heartbeat: int = 0
+    stale_or_absent: int = 0
+    threshold_minutes: float = 15.0
+
+
 class OperatorValueEvalsResponse(BaseModel):
     generated_at: str
     window_hours: int
@@ -120,4 +129,5 @@ class OperatorValueEvalsResponse(BaseModel):
     failure_categories: FailureCategoryCounts
     heartbeat_metrics: HeartbeatEvalMetrics
     routing_metrics: RoutingEvalMetrics
+    worker_registry_metrics: WorkerRegistryEvalMetrics
     timeseries: list[EvalDayBucket] = Field(default_factory=list)

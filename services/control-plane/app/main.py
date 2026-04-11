@@ -22,6 +22,7 @@ from app.api.routes import (
     receipts,
     system,
     updates,
+    workers,
 )
 from app.core.config import get_settings
 from app.core.db import engine
@@ -72,6 +73,7 @@ app.include_router(
 app.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
 app.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])
 app.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])
+app.include_router(workers.router, prefix=api_v1_prefix, tags=["workers"])
 app.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
 app.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])
 app.include_router(operator_memory.router, prefix=api_v1_prefix, tags=["operator-memory"])

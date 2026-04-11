@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.workers import WorkerRegistrySummary
+
 HealthState = Literal["healthy", "degraded", "offline", "unknown"]
 
 
@@ -24,3 +26,7 @@ class SystemHealthResponse(BaseModel):
     redis: ComponentHealth
     openclaw_gateway: ComponentHealth
     ollama: ComponentHealth
+    worker_registry: WorkerRegistrySummary = Field(
+        default_factory=WorkerRegistrySummary,
+        description="Worker registry heartbeats (direct DB truth).",
+    )

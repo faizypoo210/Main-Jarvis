@@ -217,6 +217,16 @@ async def _collect_candidates(session: AsyncSession) -> list[_Candidate]:
         wid = row["id"]
         nm = str(row["name"] or "worker")
         lb = row["last_heartbeat_at"]
+        if lb is not None:
+            prov = (
+                "Direct: last worker heartbeat older than threshold "
+                f"(POST /api/v1/workers/heartbeat); last at {lb.isoformat()}."
+            )
+        else:
+            prov = (
+                "Direct: worker row has no heartbeat timestamp yet "
+                "(expecting POST /api/v1/workers/heartbeat)."
+            )
         candidates.append(
             _Candidate(
                 dedupe_key=f"stale_worker:{wid}",
@@ -227,7 +237,7 @@ async def _collect_candidates(session: AsyncSession) -> list[_Candidate]:
                     f"{lb.isoformat() if lb else 'never'} (threshold {worker_min}m)."
                 ),
                 worker_id=wid,
-                provenance_note="Inferred stale from workers.last_heartbeat_at only; not a live process list.",
+                provenance_note=prov,
             )
         )
 

@@ -285,6 +285,39 @@ export function Evals() {
 
             <section className="mb-6">
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Worker registry (snapshot)
+              </h2>
+              <p className="mb-2 max-w-3xl text-[10px] leading-relaxed text-[var(--text-muted)]">
+                Direct registrations and heartbeats from workers posting to the control plane. Stale threshold
+                aligns with supervision <code className="font-mono">stale_worker</code> (same minutes as the Workers
+                page).
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MetricCard
+                  label="Registered"
+                  value={data.worker_registry_metrics.registered_total}
+                  hint="snapshot"
+                />
+                <MetricCard
+                  label="Fresh heartbeat"
+                  value={data.worker_registry_metrics.healthy_heartbeat}
+                  hint="within threshold"
+                />
+                <MetricCard
+                  label="Stale / absent"
+                  value={data.worker_registry_metrics.stale_or_absent}
+                  hint="over threshold or no heartbeat"
+                />
+                <MetricCard
+                  label="Stale threshold"
+                  value={`${data.worker_registry_metrics.threshold_minutes}m`}
+                  hint="supervision alignment"
+                />
+              </div>
+            </section>
+
+            <section className="mb-6">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Heartbeat
               </h2>
               <div className="mb-2 grid gap-3 sm:grid-cols-3">

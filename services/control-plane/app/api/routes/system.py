@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from redis.asyncio import Redis
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.db import engine
+from app.core.db import engine, get_db
 from app.schemas.system import ComponentHealth, SystemHealthResponse
+from app.schemas.workers import WorkerRegistrySummary
+from app.services.worker_registry_service import build_registry_summary
 
 router = APIRouter()
 
@@ -60,6 +64,16 @@ def _http_probe_sync(url: str, timeout: float = 2.0) -> ComponentHealth:
 
 async def _probe_http(url: str) -> ComponentHealth:
     return await asyncio.to_thread(_http_probe_sync, url)
+
+
+def _worker_stale_threshold_minutes() -> float:
+    raw = os.environ.get("HEARTBEAT_WORKER_STALE_MINUTES", "").strip()
+    if not raw:
+        return 15.0
+    try:
+        return float(raw)
+    except ValueError:
+        return 15.0
 
 
 async def _probe_http_chain(urls: list[str]) -> ComponentHealth:
@@ -109,4 +123,5 @@ async def system_health() -> SystemHealthResponse:
         redis=redis,
         openclaw_gateway=gateway,
         ollama=ollama,
+        worker_registry=wr,
     )

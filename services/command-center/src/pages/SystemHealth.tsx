@@ -4,7 +4,14 @@ import { useControlPlaneLive } from "../hooks/useControlPlane";
 import { useOperatorHeartbeat } from "../hooks/useOperatorHeartbeat";
 import { useSystemHealth } from "../hooks/useSystemHealth";
 import { formatRelativeTime } from "../lib/format";
-import type { HealthState } from "../lib/types";
+import type { HealthState, WorkerRegistrySummary } from "../lib/types";
+
+function workerRegistryStatus(wr: WorkerRegistrySummary): HealthState {
+  if (wr.registered_total === 0) return "unknown";
+  if (wr.stale_or_absent === 0) return "healthy";
+  if (wr.healthy_heartbeat > 0) return "degraded";
+  return "offline";
+}
 
 function sseStatus(phase: string, err: string | null): { status: HealthState; detail: string } {
   if (phase === "live") return { status: "healthy", detail: "Stream open; receiving live mission updates." };
@@ -95,6 +102,21 @@ export function SystemHealth() {
                   <p className="text-[10px] text-[var(--text-muted)]">
                     Default probe: <code className="font-mono text-[9px]">/api/tags</code>. Override with{" "}
                     <code className="font-mono text-[9px]">JARVIS_HEALTH_OLLAMA_URL</code>.
+                  </p>
+                }
+              />
+              <OperatorHealthCard
+                title="Worker registry"
+                status={workerRegistryStatus(data.worker_registry)}
+                detail={
+                  data.worker_registry.registered_total === 0
+                    ? "No workers registered yet (workers POST register/heartbeat with API key)."
+                    : `${data.worker_registry.healthy_heartbeat} fresh heartbeat(s), ${data.worker_registry.stale_or_absent} stale or missing within ${data.worker_registry.threshold_minutes}m threshold.`
+                }
+                footer={
+                  <p className="text-[10px] text-[var(--text-muted)]">
+                    Direct rows in <code className="font-mono text-[9px]">workers</code> table. See Workers
+                    page for detail.
                   </p>
                 }
               />

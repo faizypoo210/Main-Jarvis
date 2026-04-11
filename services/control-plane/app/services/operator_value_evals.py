@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +20,21 @@ from app.schemas.operator_evals import (
     OperatorValueEvalsResponse,
     OperatorValueEvalsSummary,
     RoutingEvalMetrics,
+    WorkerRegistryEvalMetrics,
 )
+from app.services.worker_registry_service import build_registry_summary
 
 _MAX_WINDOW_H = 720
+
+
+def _worker_stale_threshold_minutes() -> float:
+    raw = os.environ.get("HEARTBEAT_WORKER_STALE_MINUTES", "").strip()
+    if not raw:
+        return 15.0
+    try:
+        return float(raw)
+    except ValueError:
+        return 15.0
 
 
 def _percentile_linear(sorted_vals: list[float], p: float) -> float | None:
@@ -497,6 +510,18 @@ async def build_operator_value_evals(
     if wh >= 168:
         notes.append("Long windows include idle days; prefer shorter windows for active-dev review.")
 
+    thr_w = _worker_stale_threshold_minutes()
+    try:
+        wr_snap = await build_registry_summary(session, threshold_minutes=thr_w)
+        wr_metrics = WorkerRegistryEvalMetrics(
+            registered_total=wr_snap.registered_total,
+            healthy_heartbeat=wr_snap.healthy_heartbeat,
+            stale_or_absent=wr_snap.stale_or_absent,
+            threshold_minutes=wr_snap.threshold_minutes,
+        )
+    except Exception:
+        wr_metrics = WorkerRegistryEvalMetrics(threshold_minutes=thr_w)
+
     return OperatorValueEvalsResponse(
         generated_at=end.isoformat().replace("+00:00", "Z"),
         window_hours=wh,
@@ -518,5 +543,6 @@ async def build_operator_value_evals(
         failure_categories=fail,
         heartbeat_metrics=heartbeat_metrics,
         routing_metrics=routing_metrics,
+        worker_registry_metrics=wr_metrics,
         timeseries=timeseries,
     )

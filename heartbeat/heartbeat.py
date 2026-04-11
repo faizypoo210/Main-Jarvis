@@ -12,9 +12,14 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 load_dotenv()
 
@@ -55,6 +60,19 @@ async def main() -> None:
     if not API_KEY.strip():
         log.error("CONTROL_PLANE_API_KEY is required for heartbeat/run")
         sys.exit(1)
+    from shared.worker_registry_client import (
+        default_instance_id,
+        heartbeat_worker,
+        register_worker,
+    )
+
+    iid = default_instance_id()
+    await register_worker(
+        worker_type="heartbeat",
+        name=f"Heartbeat worker ({iid})",
+        meta={"interval_sec": INTERVAL_SEC, "pid": os.getpid()},
+        instance_id=iid,
+    )
     log.info(
         json.dumps(
             {
@@ -67,6 +85,11 @@ async def main() -> None:
     async with httpx.AsyncClient() as client:
         while True:
             t0 = time.monotonic()
+            await heartbeat_worker(
+                worker_type="heartbeat",
+                meta={"interval_sec": INTERVAL_SEC, "pid": os.getpid()},
+                instance_id=iid,
+            )
             await run_once(client)
             elapsed = time.monotonic() - t0
             sleep_for = max(0.1, INTERVAL_SEC - elapsed)

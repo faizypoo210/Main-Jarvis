@@ -13,6 +13,7 @@ import type {
   OperatorActivityResponse,
   OperatorIntegrationsResponse,
   OperatorUsageResponse,
+  OperatorWorkersResponse,
   OperatorValueEvalsResponse,
   Receipt,
   SystemHealthResponse,
@@ -267,6 +268,10 @@ export async function getSystemHealth(): Promise<SystemHealthResponse> {
 
 export async function getOperatorUsage(): Promise<OperatorUsageResponse> {
   return requestJson<OperatorUsageResponse>(`${BASE}/operator/usage`);
+}
+
+export async function getOperatorWorkers(): Promise<OperatorWorkersResponse> {
+  return requestJson<OperatorWorkersResponse>(`${BASE}/operator/workers`);
 }
 
 export async function getOperatorIntegrations(): Promise<OperatorIntegrationsResponse> {

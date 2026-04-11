@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useControlPlaneLive } from "../hooks/useControlPlane";
 import { useOperatorUsage } from "../hooks/useOperatorUsage";
+import { useOperatorWorkers } from "../hooks/useOperatorWorkers";
 import { useSystemHealth } from "../hooks/useSystemHealth";
 import { formatRelativeTime } from "../lib/format";
 import { healthDotClass, healthLabel } from "../lib/operatorHealth";
@@ -10,13 +11,14 @@ export function Workers() {
   const live = useControlPlaneLive();
   const { data: health, error: healthErr, loading: healthLoading } = useSystemHealth();
   const { data: usage, error: usageErr, loading: usageLoading } = useOperatorUsage();
+  const { data: workers, error: workersErr, loading: workersLoading } = useOperatorWorkers();
 
   const rows = useMemo(
-    () => buildWorkerRows(live.streamPhase, live.streamError, usage, health),
-    [live.streamPhase, live.streamError, usage, health]
+    () => buildWorkerRows(live.streamPhase, live.streamError, usage, health, workers),
+    [live.streamPhase, live.streamError, usage, health, workers]
   );
 
-  const err = healthErr ?? usageErr;
+  const err = healthErr ?? usageErr ?? workersErr;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -30,11 +32,14 @@ export function Workers() {
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6">
         <p className="mb-4 max-w-2xl text-xs leading-relaxed text-[var(--text-muted)]">
-          Executive view of runtime actors. Some rows use{" "}
-          <span className="font-medium text-[var(--text-secondary)]">inferred</span> activity from
-          control-plane data — not direct process heartbeats.
+          Workers that call{" "}
+          <code className="font-mono text-[10px]">POST /api/v1/workers/register</code> and{" "}
+          <code className="font-mono text-[10px]">heartbeat</code> show{" "}
+          <span className="font-medium text-[var(--text-secondary)]">direct</span> last heartbeat from
+          the registry. Coordinator / executor rows fall back to inferred timestamps only when no registry
+          row exists.
         </p>
-        {healthLoading && usageLoading ? (
+        {healthLoading && usageLoading && workersLoading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading…</p>
         ) : null}
         <ul className="space-y-3">

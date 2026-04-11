@@ -1,5 +1,11 @@
 import type { StreamPhase } from "../contexts/ControlPlaneLiveContext";
-import type { HealthState, OperatorUsageResponse, SystemHealthResponse } from "./types";
+import type {
+  HealthState,
+  OperatorUsageResponse,
+  OperatorWorkersResponse,
+  SystemHealthResponse,
+  WorkerRead,
+} from "./types";
 
 export type WorkerOpsRow = {
   id: string;
@@ -39,13 +45,57 @@ function inferFromRecency(
   };
 }
 
+function mapWorkerStatus(s: string): HealthState {
+  const x = s.toLowerCase();
+  if (x === "healthy") return "healthy";
+  if (x === "degraded" || x === "starting") return "degraded";
+  if (x === "offline" || x === "stopped") return "offline";
+  return "unknown";
+}
+
+function rowFromRegistry(w: WorkerRead, staleThresholdMin: number): WorkerOpsRow {
+  const st = mapWorkerStatus(w.status);
+  const hb = w.last_heartbeat_at;
+  const ms = msSince(hb);
+  const thrMs = staleThresholdMin * 60 * 1000;
+  let status: HealthState = st;
+  if (ms != null && ms > thrMs) {
+    status = "offline";
+  } else if (ms != null && ms > thrMs / 2 && st === "healthy") {
+    status = "degraded";
+  }
+  const metaKeys = w.meta && typeof w.meta === "object" ? Object.keys(w.meta as object).slice(0, 6) : [];
+  const metaHint = metaKeys.length ? ` · meta: ${metaKeys.join(", ")}` : "";
+  return {
+    id: `reg:${w.worker_type}:${w.instance_id}`,
+    title: `${w.name} (${w.worker_type})`,
+    status,
+    detail: `${w.status}${w.last_error ? ` — ${String(w.last_error).slice(0, 200)}` : ""}${metaHint}`,
+    lastActivityLabel: hb ? new Date(hb).toLocaleString() : "No heartbeat yet",
+    evidence: `Direct: GET /operator/workers · instance ${w.instance_id}`,
+  };
+}
+
+function hasRegistryType(workers: OperatorWorkersResponse | null, t: string): boolean {
+  if (!workers?.workers?.length) return false;
+  return workers.workers.some((w) => w.worker_type === t);
+}
+
 export function buildWorkerRows(
   streamPhase: StreamPhase,
   streamError: string | null,
   usage: OperatorUsageResponse | null,
-  health: SystemHealthResponse | null
+  health: SystemHealthResponse | null,
+  registry: OperatorWorkersResponse | null
 ): WorkerOpsRow[] {
   const rows: WorkerOpsRow[] = [];
+  const staleMin = registry?.stale_threshold_minutes ?? health?.worker_registry?.threshold_minutes ?? 15;
+
+  if (registry && registry.workers.length > 0) {
+    for (const w of registry.workers) {
+      rows.push(rowFromRegistry(w, staleMin));
+    }
+  }
 
   const cp = health?.control_plane.status ?? "unknown";
   rows.push({
@@ -98,39 +148,43 @@ export function buildWorkerRows(
     evidence: "HTTP probe from control plane (configurable URL).",
   });
 
-  const coord = inferFromRecency(
-    "Command intake",
-    usage?.last_mission_event_at ?? null,
-    15 * 60 * 1000,
-    24 * 60 * 60 * 1000
-  );
-  rows.push({
-    id: "coordinator",
-    title: "Coordinator",
-    status: coord.status,
-    detail: coord.note,
-    lastActivityLabel: usage?.last_mission_event_at
-      ? new Date(usage.last_mission_event_at).toLocaleString()
-      : null,
-    evidence: "Inferred from latest mission_events timestamp (not a process heartbeat).",
-  });
+  if (!hasRegistryType(registry, "coordinator")) {
+    const coord = inferFromRecency(
+      "Command intake",
+      usage?.last_mission_event_at ?? null,
+      15 * 60 * 1000,
+      24 * 60 * 60 * 1000
+    );
+    rows.push({
+      id: "coordinator",
+      title: "Coordinator (inferred)",
+      status: coord.status,
+      detail: coord.note,
+      lastActivityLabel: usage?.last_mission_event_at
+        ? new Date(usage.last_mission_event_at).toLocaleString()
+        : null,
+      evidence: "Inferred from latest mission_events — no registry row for coordinator.",
+    });
+  }
 
-  const exec = inferFromRecency(
-    "Executor",
-    usage?.last_openclaw_execution_at ?? null,
-    30 * 60 * 1000,
-    48 * 60 * 60 * 1000
-  );
-  rows.push({
-    id: "executor",
-    title: "Executor (OpenClaw)",
-    status: exec.status,
-    detail: exec.note,
-    lastActivityLabel: usage?.last_openclaw_execution_at
-      ? new Date(usage.last_openclaw_execution_at).toLocaleString()
-      : null,
-    evidence: "Inferred from latest openclaw_execution receipt (not a direct worker ping).",
-  });
+  if (!hasRegistryType(registry, "executor")) {
+    const exec = inferFromRecency(
+      "Executor",
+      usage?.last_openclaw_execution_at ?? null,
+      30 * 60 * 1000,
+      48 * 60 * 60 * 1000
+    );
+    rows.push({
+      id: "executor",
+      title: "Executor (OpenClaw) (inferred)",
+      status: exec.status,
+      detail: exec.note,
+      lastActivityLabel: usage?.last_openclaw_execution_at
+        ? new Date(usage.last_openclaw_execution_at).toLocaleString()
+        : null,
+      evidence: "Inferred from latest openclaw_execution receipt — no registry row for executor.",
+    });
+  }
 
   return rows;
 }

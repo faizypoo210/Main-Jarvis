@@ -7,3 +7,4 @@ pydantic[email]
 pydantic-settings
 python-dotenv
 redis
+httpx

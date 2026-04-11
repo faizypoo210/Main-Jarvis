@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Optional HTTP probes for GET /api/v1/system/health (defaults used when unset).
     JARVIS_HEALTH_OPENCLAW_GATEWAY_URL: str = "http://127.0.0.1:18789/health"
     JARVIS_HEALTH_OLLAMA_URL: str = "http://127.0.0.1:11434/api/tags"
+    # GitHub REST (governed create-issue workflow only). Machine-local secret; never logged.
+    JARVIS_GITHUB_TOKEN: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

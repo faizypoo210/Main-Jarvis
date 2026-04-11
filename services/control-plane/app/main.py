@@ -12,6 +12,7 @@ from sqlalchemy import text
 from app.api.routes import (
     approvals,
     commands,
+    github_integration,
     health,
     heartbeat,
     missions,
@@ -57,6 +58,11 @@ app.include_router(health.router, tags=["health"])
 api_v1_prefix = "/api/v1"
 app.include_router(commands.router, prefix=f"{api_v1_prefix}/commands", tags=["commands"])
 app.include_router(missions.router, prefix=f"{api_v1_prefix}/missions", tags=["missions"])
+app.include_router(
+    github_integration.router,
+    prefix=f"{api_v1_prefix}/missions",
+    tags=["integrations-github"],
+)
 app.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
 app.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])
 app.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])

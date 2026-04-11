@@ -19,6 +19,25 @@ function timelineEventTitle(ev: MissionEvent): string {
     const t = typeof p.title === "string" ? p.title.trim() : "";
     return t ? `Memory archived · ${t}` : "Memory archived";
   }
+  if (ev.event_type === "integration_action_requested" && p) {
+    const repo = typeof p.repo === "string" ? p.repo : "";
+    const title = typeof p.title === "string" ? p.title.trim() : "";
+    return repo
+      ? `GitHub issue requested · ${repo}${title ? ` · ${title}` : ""}`
+      : "GitHub integration requested";
+  }
+  if (ev.event_type === "integration_action_executed" && p) {
+    const repo = typeof p.repo === "string" ? p.repo : "";
+    const n = p.issue_number;
+    const url = typeof p.html_url === "string" ? p.html_url : "";
+    const num = typeof n === "number" ? `#${n}` : "";
+    return repo ? `GitHub issue created · ${repo} ${num}`.trim() + (url ? ` · ${url}` : "") : "GitHub issue created";
+  }
+  if (ev.event_type === "integration_action_failed" && p) {
+    const code = typeof p.error_code === "string" ? p.error_code : "";
+    const msg = typeof p.error_message === "string" ? p.error_message.slice(0, 160) : "";
+    return code ? `GitHub action failed · ${code}${msg ? ` — ${msg}` : ""}` : "GitHub action failed";
+  }
   if (ev.event_type === "routing_decided" && p) {
     const req = typeof p.requested_lane === "string" ? p.requested_lane : "";
     const act = typeof p.actual_lane === "string" ? p.actual_lane : "";
@@ -40,6 +59,12 @@ function timelineEventTitle(ev: MissionEvent): string {
       return "Approval resolved";
     case "receipt_recorded":
       return "Receipt recorded";
+    case "integration_action_requested":
+      return "Integration requested";
+    case "integration_action_executed":
+      return "Integration completed";
+    case "integration_action_failed":
+      return "Integration failed";
     default:
       return ev.event_type.replace(/_/g, " ");
   }
@@ -81,8 +106,16 @@ export function MissionTimeline({
       {sorted.map((ev, i) => {
         const p = ev.payload as Record<string, unknown> | null;
         const isLast = i === sorted.length - 1;
+        const rt = p && typeof p.receipt_type === "string" ? p.receipt_type : "";
+        const gh =
+          p && typeof p.github === "object" && p.github !== null
+            ? (p.github as Record<string, unknown>)
+            : null;
         const execMeta =
-          ev.event_type === "receipt_recorded" && p && p.execution_meta != null
+          ev.event_type === "receipt_recorded" &&
+          p &&
+          p.execution_meta != null &&
+          rt === "openclaw_execution"
             ? p.execution_meta
             : null;
         const summaryText =
@@ -150,9 +183,36 @@ export function MissionTimeline({
               ) : null}
               {ev.event_type === "receipt_recorded" && p ? (
                 <div className="mt-2 space-y-2">
+                  {rt === "github_issue_created" || rt === "github_issue_failed" ? (
+                    <div className="space-y-1 text-xs text-[var(--text-secondary)]">
+                      <p className="font-mono text-[10px] text-[var(--text-muted)]">
+                        {rt === "github_issue_created" ? "github_issue_created" : "github_issue_failed"}
+                      </p>
+                      {gh && typeof gh.repo === "string" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Repo:</span> {gh.repo}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.issue_number === "number" ? (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Issue:</span> #{gh.issue_number}
+                        </p>
+                      ) : null}
+                      {gh && typeof gh.html_url === "string" && gh.html_url ? (
+                        <a
+                          href={gh.html_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--accent-blue)] underline-offset-2 hover:underline"
+                        >
+                          {gh.html_url}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {summaryText ? (
                     <p className="text-sm leading-relaxed text-[var(--text-primary)]">{summaryText}</p>
-                  ) : (
+                  ) : rt.startsWith("github_") ? null : (
                     <p className="text-xs leading-relaxed text-[var(--text-muted)]">
                       {missionStatus === "failed"
                         ? operatorCopy.receiptNoSummaryFailed

@@ -175,6 +175,11 @@ class ApprovalService:
         await self._session.commit()
 
         if decision == "approved":
-            await _publish_execution_resume(str(mid), cmd_text, str(aid))
+            if updated.action_type == "github_create_issue":
+                from app.services.github_issue_workflow import execute_github_issue_after_approval
+
+                await execute_github_issue_after_approval(self._session, updated)
+            else:
+                await _publish_execution_resume(str(mid), cmd_text, str(aid))
 
         return updated

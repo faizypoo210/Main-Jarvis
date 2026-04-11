@@ -57,6 +57,17 @@ class ReceiptService:
         em = payload.get("execution_meta")
         if isinstance(em, dict):
             ev_payload["execution_meta"] = em
+        if receipt_type in ("github_issue_created", "github_issue_failed"):
+            gh = payload.get("github")
+            if isinstance(gh, dict):
+                ev_payload["github"] = {
+                    k: gh[k]
+                    for k in ("repo", "issue_number", "html_url", "title", "labels")
+                    if k in gh
+                }
+            for k in ("issue_number", "html_url", "repo", "title"):
+                if k in payload and k not in ev_payload:
+                    ev_payload[k] = payload[k]
         await MissionEventRepository.create(
             self._session,
             mission_id=mission_id,

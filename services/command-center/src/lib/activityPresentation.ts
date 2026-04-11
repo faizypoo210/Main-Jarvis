@@ -61,5 +61,6 @@ export function kindBadgeLabel(kind: string): string {
   if (kind === "receipt") return "Execution";
   if (kind === "memory") return "Memory";
   if (kind === "heartbeat") return "Heartbeat";
+  if (kind === "integration") return "Integration";
   return kind;
 }

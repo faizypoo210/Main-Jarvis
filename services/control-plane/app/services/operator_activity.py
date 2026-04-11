@@ -18,6 +18,7 @@ from app.services.heartbeat_service import finding_to_activity_meta
 _ATTENTION_SQL = """(
   (me.event_type = 'approval_resolved' AND me.payload->>'decision' = 'denied')
   OR (me.event_type = 'mission_status_changed' AND COALESCE(me.payload->>'to', '') IN ('failed', 'blocked'))
+  OR (me.event_type = 'integration_action_failed')
   OR (
     me.event_type = 'receipt_recorded'
     AND EXISTS (
@@ -26,6 +27,16 @@ _ATTENTION_SQL = """(
         AND rx.receipt_type = 'openclaw_execution'
         AND (rx.payload ? 'success')
         AND (rx.payload->>'success')::boolean = false
+        AND rx.created_at >= me.created_at - interval '3 seconds'
+        AND rx.created_at <= me.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    me.event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = me.mission_id
+        AND rx.receipt_type = 'github_issue_failed'
         AND rx.created_at >= me.created_at - interval '3 seconds'
         AND rx.created_at <= me.created_at + interval '3 seconds'
     )
@@ -51,6 +62,12 @@ def _truncate(s: str | None, n: int = 240) -> str | None:
 def _kind_and_category(event_type: str) -> tuple[str, str]:
     if event_type in ("approval_requested", "approval_resolved"):
         return "approval", "approval"
+    if event_type in (
+        "integration_action_requested",
+        "integration_action_executed",
+        "integration_action_failed",
+    ):
+        return "integration", "mission"
     if event_type == "receipt_recorded":
         return "receipt", "execution"
     if event_type == "routing_decided":
@@ -126,11 +143,32 @@ def _title_summary_status(
             parts.append("Execution deferred pending approval.")
         summary = _truncate(" ".join(parts)) or title
         return title, summary, "pending" if pending else mission_status
+    if event_type == "integration_action_requested":
+        repo = str(p.get("repo") or "")
+        title = "Integration action requested"
+        summary = f"GitHub create_issue · {repo}" if repo else "GitHub integration requested"
+        return title, summary, "pending"
+    if event_type == "integration_action_executed":
+        repo = str(p.get("repo") or "")
+        num = p.get("issue_number")
+        url = str(p.get("html_url") or "")
+        summary = f"{repo}" + (f" · issue #{num}" if num is not None else "")
+        if url:
+            summary = f"{summary} · {url}"
+        return "GitHub issue created", _truncate(summary) or "Issue created", "complete"
+    if event_type == "integration_action_failed":
+        code = str(p.get("error_code") or "")
+        summary = str(p.get("error_message") or "Integration action failed")
+        return "Integration action failed", _truncate(f"{code}: {summary}") if code else _truncate(summary) or "Failed", "failed"
     if event_type == "receipt_recorded":
         rt = str(p.get("receipt_type") or "receipt")
         src = str(p.get("source") or "")
         summ = str(p.get("summary") or "").strip()
-        if rt == "openclaw_execution":
+        if rt == "github_issue_created":
+            title = "GitHub issue created"
+        elif rt == "github_issue_failed":
+            title = "GitHub issue failed"
+        elif rt == "openclaw_execution":
             title = "Execution receipt recorded"
         else:
             title = "Receipt recorded"
@@ -139,6 +177,19 @@ def _title_summary_status(
             line = f"{line} — {_truncate(summ, 160)}"
         # Enrich success from joined receipt row when present
         rp = receipt_payload or {}
+        if rt in ("github_issue_created", "github_issue_failed"):
+            gh = rp.get("github") if isinstance(rp.get("github"), dict) else {}
+            line = f"{rt}"
+            if isinstance(gh, dict):
+                if gh.get("repo"):
+                    line = f"{line} · {gh.get('repo')}"
+                if gh.get("issue_number") is not None:
+                    line = f"{line} · #{gh.get('issue_number')}"
+                if gh.get("html_url"):
+                    line = f"{line} · {gh.get('html_url')}"
+            elif rp.get("html_url"):
+                line = f"{line} · {rp.get('html_url')}"
+            return title, _truncate(line) or title, "succeeded" if rt == "github_issue_created" else "failed"
         if "success" in rp:
             ok = rp.get("success")
             st = "succeeded" if ok is True else "failed" if ok is False else "unknown"
@@ -190,6 +241,10 @@ def _actor_label(
         return str(p.get("requested_by") or "") or None
     if event_type == "approval_resolved":
         return str(p.get("decided_by") or "") or None
+    if event_type == "integration_action_requested":
+        return "github_issue_workflow"
+    if event_type in ("integration_action_executed", "integration_action_failed"):
+        return str(p.get("actor_id") or "github_integration") or None
     if actor_id:
         return str(actor_id)
     if actor_type:
@@ -237,6 +292,14 @@ def _meta(
                 meta[k] = p.get(k)
     if event_type in ("memory_saved", "memory_promoted", "memory_archived"):
         for k in ("memory_id", "memory_type", "title", "source_kind", "source_receipt_id"):
+            if k in p:
+                meta[k] = p.get(k)
+    if event_type in (
+        "integration_action_requested",
+        "integration_action_executed",
+        "integration_action_failed",
+    ):
+        for k in ("provider", "action", "repo", "title", "issue_number", "html_url", "error_code"):
             if k in p:
                 meta[k] = p.get(k)
     if event_type == "receipt_recorded":
@@ -298,6 +361,7 @@ _ATTENTION_ME = _ATTENTION_SQL  # uses me. alias
 _ATTENTION_COUNT = """(
   (event_type = 'approval_resolved' AND payload->>'decision' = 'denied')
   OR (event_type = 'mission_status_changed' AND COALESCE(payload->>'to', '') IN ('failed', 'blocked'))
+  OR (event_type = 'integration_action_failed')
   OR (
     event_type = 'receipt_recorded'
     AND EXISTS (
@@ -306,6 +370,16 @@ _ATTENTION_COUNT = """(
         AND rx.receipt_type = 'openclaw_execution'
         AND (rx.payload ? 'success')
         AND (rx.payload->>'success')::boolean = false
+        AND rx.created_at >= mission_events.created_at - interval '3 seconds'
+        AND rx.created_at <= mission_events.created_at + interval '3 seconds'
+    )
+  )
+  OR (
+    event_type = 'receipt_recorded'
+    AND EXISTS (
+      SELECT 1 FROM receipts rx
+      WHERE rx.mission_id = mission_events.mission_id
+        AND rx.receipt_type = 'github_issue_failed'
         AND rx.created_at >= mission_events.created_at - interval '3 seconds'
         AND rx.created_at <= mission_events.created_at + interval '3 seconds'
     )
@@ -320,7 +394,8 @@ def _category_sql_me(category: str | None) -> str:
         return (
             "AND me.event_type IN ("
             "'created', 'mission_status_changed', 'routing_decided', "
-            "'memory_saved', 'memory_promoted', 'memory_archived'"
+            "'memory_saved', 'memory_promoted', 'memory_archived', "
+            "'integration_action_requested', 'integration_action_executed', 'integration_action_failed'"
             ")"
         )
     if category == "approval":
@@ -356,7 +431,6 @@ LEFT JOIN LATERAL (
   FROM receipts rx
   WHERE rx.mission_id = me.mission_id
     AND me.event_type = 'receipt_recorded'
-    AND rx.receipt_type = 'openclaw_execution'
     AND abs(extract(epoch from (rx.created_at - me.created_at))) < 3
   ORDER BY abs(extract(epoch from (rx.created_at - me.created_at)))
   LIMIT 1

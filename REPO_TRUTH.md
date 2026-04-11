@@ -16,6 +16,7 @@ Jarvis is a **layered** system: a **governed control plane** (missions, timeline
 | `jarvis.execution` → OpenClaw → receipts | `executor/` |
 | Voice STT/TTS and control-plane/Redis integration | `voice/` |
 | Workspace persona/policy **mirrors** (not mission state) | `config/workspace/` — **`governance-manifest.json`** defines the canonical file set; **`docs/OPENCLAW_WORKSPACE_FILES.md`** explains roles vs control plane |
+| **GitHub create-issue workflow** | Approval + structured contract + REST adapter in control plane | `app/services/github_issue_workflow.py`, `docs/INTEGRATIONS_GITHUB.md` | **Not** Composio/OpenClaw; requires **`JARVIS_GITHUB_TOKEN`** on the API host |
 | Deployment, smoke, golden-path, benchmark scripts | `scripts/` |
 | High-level architecture and spec narrative | `context/ARCHITECTURE.md`, `context/JARVIS_SPEC.md` |
 | Operational docs (security, sync, evals, lanes) | `docs/` |
@@ -95,11 +96,12 @@ See **`MACHINE_SETUP_STATUS.md`** for a practical checklist.
 | Heartbeat run (API key) | `POST /api/v1/heartbeat/run` with `x-api-key`; or run `python heartbeat/heartbeat.py` with `CONTROL_PLANE_URL`, `CONTROL_PLANE_API_KEY`, `HEARTBEAT_INTERVAL_SEC` |
 | Workspace pack audit | `.\scripts\11-audit-workspace-governance.ps1` from repo root |
 | Workspace sync to OpenClaw | `.\scripts\10-sync-openclaw-workspace.ps1` |
+| GitHub issue workflow | `docs/INTEGRATIONS_GITHUB.md`; API under `/api/v1/missions/.../integrations/github/create-issue` |
 | Broader deployment phases | `DEPLOYMENT_STATUS.md`, `docs/E2E_SMOKE_TEST.md` |
 
 ## Known limitations
 
-- **Command Center** exposes **Integrations**, **Workers**, **Cost & Usage**, **System Health**, and **Activity** as **API-backed** operator pages. Integrations shows **readiness and honesty signals** from `GET /api/v1/operator/integrations` (DB rows + safe machine/repo probes); it does **not** perform OAuth or store vendor tokens.
+- **Command Center** exposes **Integrations**, **Workers**, **Cost & Usage**, **System Health**, and **Activity** as **API-backed** operator pages. Integrations shows **readiness and honesty signals** from `GET /api/v1/operator/integrations` (DB rows + safe machine/repo probes); it does **not** perform OAuth or store vendor tokens. **GitHub issue creation** is a separate, governed control-plane workflow (`docs/INTEGRATIONS_GITHUB.md`), not that hub page.
 - **OpenClaw workspace markdown** (`config/workspace/`) shapes **local** model/runtime behavior after sync; it is **not** an authority layer over missions or approvals—those remain in the **control plane**.
 - **Control Plane** includes DB models for workers and cost events; **first-class REST CRUD** for those domains may still be incomplete—operator routes under `/api/v1/operator/*` and `/api/v1/system/health` are **read-only** aggregates (see `STATUS.md`).
 - **Coordinator** and **executor** require correct env and Redis stream consumers; misconfiguration surfaces as silent stalls or errors in logs, not as compile-time failures.

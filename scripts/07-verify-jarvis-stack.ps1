@@ -1,5 +1,6 @@
 #Requires -Version 5.1
-# Phase 7: Run jarvis.ps1, then verify stack with honest categories (HTTP health where available).
+# Phase 7: Run jarvis.ps1, then classify readiness (HEALTHY / LISTENING / OPTIONAL_DOWN / DOWN).
+# "READY" below means core gates passed for this script only — not supervised runtime health.
 $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

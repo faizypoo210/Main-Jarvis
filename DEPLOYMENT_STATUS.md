@@ -9,14 +9,14 @@
 - [x] Redis container running (jarvis-redis)  
 - [x] DB connection verified  
 
-## Phase 2: Legacy openclaw-mission-control (optional) ✅
+## Phase 2: Legacy openclaw-mission-control (quarantined, **not** in default bring-up) ✅
 
-_Deprecated scripts and compose template: `deprecated/mission-control/`. Not required for the canonical stack (Command Center + Control Plane). Tracked OpenClaw markdown mirrors live under `config/workspace/`; deploy to `%USERPROFILE%\.openclaw\workspace\main\` with `scripts\10-sync-openclaw-workspace.ps1`._
+_Canonical operator stack: **Command Center + Control Plane**. Legacy code is under **`deprecated/mission-control/`** (manual only). **`jarvis.ps1` does not start Mission Control.** `JARVIS_INCLUDE_MISSION_CONTROL=1` only prints a **deprecation reminder** — it does not auto-start the legacy UI._
 
-- [x] Repo cloned (`C:\projects\openclaw-mission-control`) — only if you use legacy UI  
-- [x] `.env` and `backend\.env` created (host DB/Redis via `host.docker.internal`) — if used  
-- [x] `compose.yml` JARVIS variant (no bundled db/redis); `docker compose up -d` — if used  
-- [ ] UI at http://localhost:3000 — optional  
+_Tracked OpenClaw markdown mirrors live under `config/workspace/`; deploy to `%USERPROFILE%\.openclaw\workspace\main\` with `scripts\10-sync-openclaw-workspace.ps1`._
+
+- [ ] Repo cloned / compose up — **only** if you manually follow `deprecated/mission-control/`  
+- [ ] UI at http://localhost:3000 — **not** verified by `scripts/07-verify-jarvis-stack.ps1` (removed from that script)  
 
 ## Phase 3: OpenClaw Gateway ✅
 
@@ -50,7 +50,7 @@ _Deprecated scripts and compose template: `deprecated/mission-control/`. Not req
 ## Phase 7: Phone Access + Firewall ✅
 
 - [x] `scripts/07-firewall-rules.ps1` (inbound TCP, Private profile; run **as Administrator** once)  
-- [x] `jarvis.ps1` master start; `07-verify-jarvis-stack.ps1` passes  
+- [x] `jarvis.ps1` master start; `07-verify-jarvis-stack.ps1` **READY** (categorized health gates: containers + `/health` + gateway TCP + Command Center HTTP — not a process supervisor)  
 - [x] `07-verify-phone-access.ps1` for LAN URL checks (optional)  
 
 ## Phase 8: End-to-End Testing (in progress)

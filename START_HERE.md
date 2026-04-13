@@ -1,14 +1,20 @@
-Read @context/JARVIS_SPEC.md and @context/ARCHITECTURE.md in full before doing anything.
+# Start here (human + agent)
 
-Your rules are in @.cursor/rules/ — follow them precisely.
+This file is a **pointer**, not an automated deployment runner.
 
-Execute the JARVIS deployment in order, one phase at a time:
+## Before changing behavior
 
-For each phase:
-1. Generate all scripts and config files described in the spec
-2. Execute the scripts in the terminal
-3. Run the verify script
-4. Only continue when verify passes
-5. Update @DEPLOYMENT_STATUS.md
+1. Read **`REPO_TRUTH.md`** (ownership and verification).
+2. Read **`docs/ARCHITECTURE_V3.md`** or **`context/ARCHITECTURE.md`** for system shape.
+3. Follow **`docs/BRINGUP_RUNBOOK.md`** for start order and what “healthy” vs “listening” means today.
 
-Start with Phase 1. Go.
+## Deploy / verify on a real machine
+
+- Phase checklist: **`DEPLOYMENT_STATUS.md`**
+- Bring-up: **`jarvis.ps1`** (prints **bring-up initiated** and per-surface truth — not a blanket “everything online”).
+- Stricter readiness: **`scripts/07-verify-jarvis-stack.ps1`** after bring-up (exits non-zero if core gates fail).
+- Env names: **`docs/ENV_MATRIX.md`**
+
+## Cursor agents
+
+Project rules live under **`.cursor/rules/`**. Do not treat this file as a script that “executes all phases” without reading the docs above.

@@ -21,14 +21,18 @@
 
 The repo root script **`jarvis.ps1`** automates this path (Windows). Manual bring-up should follow the **same dependency order**.
 
+**Honesty:** `jarvis.ps1` **starts** processes and **probes** some surfaces with HTTP (control plane `/health`, Command Center and voice `GET /`, gateway `/health` or `/`). It does **not** supervise processes or guarantee long-term health. It prints a **bring-up summary** (healthy vs listening vs started/unverified). **Coordinator** and **executor** are **started/unverified** in that script (no fixed port check there).
+
+**Stricter gate:** `scripts/07-verify-jarvis-stack.ps1` runs `jarvis.ps1`, then classifies rows as **HEALTHY** (HTTP OK where implemented), **LISTENING** (TCP or container only, or **gateway** TCP without HTTP), **OPTIONAL_DOWN**, or **DOWN**. It **exits non-zero** if core gates fail (containers, control plane `/health`, gateway listening, Command Center HTTP). Voice and optional services are reported but do not fail that script. See script output for the exact line items.
+
 | Step | Component | Required? | Health check |
 |------|-----------|-------------|----------------|
 | 1 | **Docker Desktop** | Yes (typical dev) | `docker ps` shows `jarvis-postgres`, `jarvis-redis` |
 | 2 | **PostgreSQL** | Yes | `pg_isready` / control plane connects via `DATABASE_URL` |
 | 3 | **Redis** | Yes for coordinator/executor/voice fan-out | `redis-cli PING` → `PONG` |
-| 4 | **OpenClaw gateway** | Required for **executor** E2E | Port **18789** listening; `GET http://127.0.0.1:18789/` |
+| 4 | **OpenClaw gateway** | Required for **executor** E2E | Port **18789** listening; HTTP may be `/health` or `/` (see verify script) |
 | 5 | **Control plane** | Yes | `GET http://localhost:8001/health` → 200 |
-| 6 | **Command Center** | Strongly recommended for ops | `http://localhost:5173` loads |
+| 6 | **Command Center** | Strongly recommended for ops | `GET http://localhost:5173/` (dev server) in addition to port |
 | 7 | **Voice server** | Optional | `http://localhost:8000` (WebSocket + HTTP) |
 | 8 | **Coordinator** | Optional until you need Redis command path | Logs show stream consumption |
 | 9 | **Executor** | Optional until you need OpenClaw runs | Consumes `jarvis.execution` |

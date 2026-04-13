@@ -37,7 +37,9 @@ Full detail: **[`docs/ARCHITECTURE_V3.md`](docs/ARCHITECTURE_V3.md)** (service m
 | **LobsterBoard** | 8080 | Supplemental operator dashboard |
 | **Ollama** | 11434 | Local fast model (`qwen3:4b` by default) |
 
-The old **openclaw-mission-control** UI (3000/3001) is **deprecated** and not started by default; use Command Center + Control Plane instead.
+Command Center includes a **shell-level quick command** (keyboard shortcut + header control) so operators can submit short commands from any route; full conversation remains on Overview. Missions are created via the same control-plane **`POST /api/v1/commands`** path as the main composer.
+
+The old **openclaw-mission-control** UI (3000/3001) is **deprecated** and **not** started by `jarvis.ps1`. Code and compose live under **`deprecated/mission-control/`** (manual / quarantined only). **`JARVIS_INCLUDE_MISSION_CONTROL=1`** only prints a **deprecation reminder** in the console — it does **not** auto-start legacy Mission Control. Current operator path: **Command Center + Control Plane**.
 
 ## Model stack
 
@@ -81,9 +83,11 @@ cd F:\Jarvis
 .\jarvis.ps1
 ```
 
-Optional: deprecated **openclaw-mission-control** (3000/3001) is **not** started by default. Set User env `JARVIS_INCLUDE_MISSION_CONTROL=1` before `jarvis.ps1` only if you still need that UI.
+**Bring-up vs readiness:** `jarvis.ps1` **initiates** bring-up and prints a **per-surface summary** (what is health-checked via HTTP, what is only listening, what is **started/unverified** — e.g. coordinator and executor have no probe in that script). It does **not** mean “the entire stack is healthy.” For a **stricter readiness gate** (containers + `GET /health` on the control plane + gateway TCP + Command Center HTTP), run **`scripts/07-verify-jarvis-stack.ps1`** after bring-up (it exits non-zero if core gates fail).
 
-Primary URLs after start:
+**Legacy Mission Control:** not started here. **`JARVIS_INCLUDE_MISSION_CONTROL=1`** only shows an extra deprecation notice; legacy UI is **manual** from `deprecated/mission-control/` if you still need it.
+
+**Primary URLs** (when services are actually up):
 
 - Command Center: http://localhost:5173  
 - Control Plane API: http://localhost:8001  
@@ -94,7 +98,7 @@ Primary URLs after start:
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Docker + PostgreSQL + Redis | Complete |
-| 2 | Legacy openclaw-mission-control (optional) | Skipped by default |
+| 2 | Legacy openclaw-mission-control | Quarantined / manual only (`deprecated/mission-control/`); not part of default bring-up |
 | 3 | OpenClaw Gateway | Complete |
 | 4 | LobsterBoard dashboard | Complete |
 | 5 | Ollama + `qwen3:4b` | Complete |
@@ -106,11 +110,18 @@ Primary URLs after start:
 
 All secrets live in **Windows User environment variables** and **`%USERPROFILE%\.openclaw\`** — never committed. **Rotation checklist:** [`docs/SECRET_ROTATION.md`](docs/SECRET_ROTATION.md). **Trust model:** [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
+### Control-plane auth (current model)
+
+- **`CONTROL_PLANE_AUTH_MODE=api_key`** (default): mutating API routes require a valid **`x-api-key`** header matching **`CONTROL_PLANE_API_KEY`** on the server. The process will not start in `api_key` mode with an empty key.
+- **`CONTROL_PLANE_AUTH_MODE=local_trusted`**: explicit **rough local dev only** — mutations do **not** enforce the API key (see server logs / `app/core/auth.py`). Not for exposed deployments.
+- **Command Center (`npm run dev`):** the Vite dev server reads **`CONTROL_PLANE_API_KEY`** in the **Node** process and **injects** `x-api-key` on proxied `/api` requests (`vite.config.ts`). The key is **not** bundled into the browser client. For serious deployments, use **same-origin** or a **reverse proxy** that attaches the header **server-side**.
+- **Voice / workers / scripts** that call the API use **`CONTROL_PLANE_API_KEY`** in the environment of that process (not a browser story).
+
 Examples (set only what your providers require; names follow OpenClaw / vendor docs):
 
 - Composio: `COMPOSIO_API_KEY`  
 - OpenClaw gateway token: set **`JARVIS_OPENCLAW_GATEWAY_TOKEN`** before `scripts/03-configure-openclaw.ps1`, or edit `%USERPROFILE%\.openclaw\openclaw.json` manually (never commit)  
-- Control plane: `CONTROL_PLANE_API_KEY` (must match `services/control-plane/.env`)  
+- Control plane: `CONTROL_PLANE_API_KEY` in `services/control-plane/.env` (and the same value in Command Center **`.env` for dev proxy** when using `api_key` mode)  
 - DashClaw (coordinator): `DASHCLAW_API_KEY`  
 - MiniMax / other cloud providers: configure via OpenClaw **`auth-profiles.json`** and env vars **per OpenClaw documentation** (not hardcoded here)
 
@@ -135,6 +146,10 @@ See [docs/WORKSPACE_SYNC.md](docs/WORKSPACE_SYNC.md) and [config/workspace/READM
 See [context/ARCHITECTURE.md](context/ARCHITECTURE.md) for service map and data flow.  
 See [docs/MODEL_LANES.md](docs/MODEL_LANES.md) for local Ollama vs OpenClaw gateway lanes and verification scripts.  
 See [context/JARVIS_SPEC.md](context/JARVIS_SPEC.md) for the broader system specification.
+
+## Automated tests
+
+Control Plane API regression tests (pytest + PostgreSQL) and how to run them locally: **[`docs/TESTING.md`](docs/TESTING.md)**. CI runs the same suite and a **Command Center** `npm run build` guardrail (`.github/workflows/ci.yml`).
 
 ## Roadmap
 

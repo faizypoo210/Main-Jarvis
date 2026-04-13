@@ -13,8 +13,8 @@ Legend: **R** = required for that surface to work as designed; **O** = optional 
 | `DATABASE_URL` | Async SQLAlchemy URL (PostgreSQL) | R | All persistence | Control plane fails to start or migrate |
 | `REDIS_URL` | Redis for realtime / hub | R | SSE, stream-related paths | Errors when Redis needed |
 | `SECRET_KEY` | Signing / internal crypto | R | FastAPI app | Misconfig / startup failure |
-| `CONTROL_PLANE_AUTH_MODE` | `api_key` (default) or `local_trusted` (explicit insecure local) | R | Mutation auth policy | Startup fails if `api_key` and key empty; `local_trusted` logs a warning |
-| `CONTROL_PLANE_API_KEY` | `x-api-key` for mutating routes (required when `api_key` mode) | R* | Commands, approvals decisions, worker POSTs, heartbeat run | 401 on protected routes |
+| `CONTROL_PLANE_AUTH_MODE` | `api_key` (**normal**) or `local_trusted` (**explicit** rough local dev only — no key enforcement on mutations) | R | Mutation auth policy | Startup fails if `api_key` and key empty; `local_trusted` logs a warning |
+| `CONTROL_PLANE_API_KEY` | Server-side secret; must match `x-api-key` on mutating requests when `api_key` mode | R* | Commands, approvals decisions, worker POSTs, heartbeat run | 401 on protected routes |
 | `ALLOWED_ORIGINS` | CORS origins | O | Browser clients (Command Center, LAN) | Browser blocks API calls |
 | `JARVIS_GITHUB_TOKEN` | GitHub REST | O | Governed GitHub workflows | Workflows fail at execute time |
 | `JARVIS_GMAIL_*` | Gmail OAuth / tokens | O | Governed Gmail workflows | Gmail paths fail |
@@ -37,10 +37,12 @@ See **`services/control-plane/.env.example`** for the full commented list.
 | Variable | Purpose | R/O | Feature | If missing |
 |----------|---------|-----|---------|------------|
 | `VITE_CONTROL_PLANE_URL` | API origin (empty = same-origin `/api` via dev proxy or reverse proxy) | O | All API calls | Defaults to same-origin when empty |
-| `CONTROL_PLANE_API_KEY` | Dev-server only: proxy injects `x-api-key` (not in JS bundle) | R* | Mutations from UI in `npm run dev` | 401 on writes if unset and server uses `api_key` mode |
+| `CONTROL_PLANE_API_KEY` | **Vite dev server only:** read by **Node** (`vite.config.ts`); injected as `x-api-key` on proxied `/api` requests — **never** bundled into the browser | R* | Mutations from UI in `npm run dev` | 401 on writes if unset and server uses `api_key` mode |
 | `VITE_VOICE_SERVER_URL` | Voice HTTP/WS base | O | Voice-related UI | Voice features unavailable |
 
-\*Set to the same value as `CONTROL_PLANE_API_KEY` in `services/control-plane/.env` for local dev.
+\*Set to the same value as `CONTROL_PLANE_API_KEY` in `services/control-plane/.env` for local dev. **Production / non-dev:** prefer same-origin or a reverse proxy that adds `x-api-key` **server-side**; do not rely on a browser-held secret.
+
+**Auth summary:** The browser does **not** normally carry the mutation secret — `api_key` mode is enforced **on the server**; the dev proxy only simulates a trusted server-side attachment for local `npm run dev`.
 
 ---
 

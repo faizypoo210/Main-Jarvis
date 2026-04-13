@@ -13,6 +13,14 @@ export const operatorCopy = {
   threadWaitingForMission: "Waiting for mission state…",
   /** After command intake when Redis dispatch fails (see `runtime_dispatch_failed` event). */
   runtimeDispatchFailed: "Runtime dispatch failed — the mission was not queued for execution.",
+  /** `runtime_dispatch_succeeded` — command reached the runtime Redis stream. */
+  runtimeDispatchAccepted: "Dispatch accepted.",
+  /** `execution_started` from executor. */
+  executionStarted: "Execution started.",
+  /** `execution_completed` when no OpenClaw receipt line already showed the outcome. */
+  executionCompleted: "Execution completed.",
+  /** `execution_failed` when not redundant with receipt bubble. */
+  executionFailed: "Execution failed.",
   bundlePartial: "Mission state updated. Detailed output unavailable.",
   receiptNoSummaryFailed:
     "Execution failed before a receipt summary was available.",

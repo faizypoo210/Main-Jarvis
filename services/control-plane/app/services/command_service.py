@@ -158,6 +158,15 @@ class CommandService:
                 ),
             )
 
+        await self._events.record_event(
+            mission_id=mission.id,
+            event_type="runtime_dispatch_succeeded",
+            actor_type="system",
+            actor_id="control_plane",
+            payload={"stream": STREAM_COMMANDS},
+        )
+        await self._session.commit()
+
         return CommandResponse(
             mission_id=mission.id,
             mission_status=mission.status,

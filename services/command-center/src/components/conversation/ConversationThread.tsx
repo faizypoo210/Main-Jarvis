@@ -213,6 +213,68 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
           continue;
         }
 
+        if (ev.event_type === "runtime_dispatch_succeeded") {
+          processedEventIdsRef.current.add(ev.id);
+          setItems((prev) => {
+            if (prev.some((x) => x.id === `dispatch-ok-${ev.id}`)) return prev;
+            return [
+              ...prev,
+              { id: `dispatch-ok-${ev.id}`, kind: "status", text: operatorCopy.runtimeDispatchAccepted },
+            ];
+          });
+          continue;
+        }
+
+        if (ev.event_type === "execution_started") {
+          processedEventIdsRef.current.add(ev.id);
+          setItems((prev) => {
+            if (prev.some((x) => x.id === `exec-start-${ev.id}`)) return prev;
+            return [
+              ...prev,
+              { id: `exec-start-${ev.id}`, kind: "status", text: operatorCopy.executionStarted },
+            ];
+          });
+          continue;
+        }
+
+        if (ev.event_type === "execution_completed") {
+          processedEventIdsRef.current.add(ev.id);
+          const evIdx = sorted.findIndex((e) => e.id === ev.id);
+          const priorOpenclaw =
+            evIdx > 0
+              ? sorted.slice(0, evIdx).some(
+                  (e) =>
+                    e.event_type === "receipt_recorded" &&
+                    (e.payload as Record<string, unknown> | null)?.receipt_type === "openclaw_execution"
+                )
+              : false;
+          if (priorOpenclaw) continue;
+          setItems((prev) => {
+            if (prev.some((x) => x.id === `exec-done-${ev.id}`)) return prev;
+            return [...prev, { id: `exec-done-${ev.id}`, kind: "status", text: operatorCopy.executionCompleted }];
+          });
+          continue;
+        }
+
+        if (ev.event_type === "execution_failed") {
+          processedEventIdsRef.current.add(ev.id);
+          const evIdx = sorted.findIndex((e) => e.id === ev.id);
+          const priorOpenclaw =
+            evIdx > 0
+              ? sorted.slice(0, evIdx).some(
+                  (e) =>
+                    e.event_type === "receipt_recorded" &&
+                    (e.payload as Record<string, unknown> | null)?.receipt_type === "openclaw_execution"
+                )
+              : false;
+          if (priorOpenclaw) continue;
+          setItems((prev) => {
+            if (prev.some((x) => x.id === `exec-fail-${ev.id}`)) return prev;
+            return [...prev, { id: `exec-fail-${ev.id}`, kind: "status", text: operatorCopy.executionFailed }];
+          });
+          continue;
+        }
+
         if (ev.event_type === "approval_requested") {
           processedEventIdsRef.current.add(ev.id);
           const fromApi = pending.find((a) => a.mission_id === missionId && a.status === "pending");

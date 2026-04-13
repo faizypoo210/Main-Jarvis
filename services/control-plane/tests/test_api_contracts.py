@@ -181,6 +181,33 @@ async def test_post_receipt_round_trip(
 
 
 @pytest.mark.asyncio
+async def test_command_intake_runtime_dispatch_succeeded_event(
+    client: AsyncClient, api_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Successful Redis publish records `runtime_dispatch_succeeded` (durable timeline)."""
+
+    from app.services import command_service as cs
+
+    async def fake_publish(*args: object, **kwargs: object) -> cs.JarvisCommandPublishResult:
+        return cs.JarvisCommandPublishResult(ok=True)
+
+    monkeypatch.setattr(cs, "_publish_jarvis_command", fake_publish)
+
+    r = await client.post(
+        "/api/v1/commands",
+        json={"text": "pytest dispatch ok", "source": "api"},
+        headers=api_headers,
+    )
+    assert r.status_code == 200, r.text
+    mid = UUID(r.json()["mission_id"])
+    er = await client.get(f"/api/v1/missions/{mid}/events")
+    assert er.status_code == 200
+    types = {e["event_type"] for e in er.json()}
+    assert "created" in types
+    assert "runtime_dispatch_succeeded" in types
+
+
+@pytest.mark.asyncio
 async def test_command_intake_dispatch_failure_is_durable_truth(
     client: AsyncClient, api_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

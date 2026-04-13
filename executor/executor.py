@@ -533,6 +533,25 @@ async def _post_control_plane(
         return False
 
 
+async def _post_mission_event(
+    session: aiohttp.ClientSession,
+    mission_id: str,
+    event_type: str,
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    """Append a mission event via control plane (API key). Returns True on HTTP 2xx."""
+    return await _post_control_plane(
+        session,
+        f"/api/v1/missions/{mission_id}/events",
+        {
+            "event_type": event_type,
+            "payload": payload or {},
+            "actor_type": "system",
+            "actor_id": "executor",
+        },
+    )
+
+
 async def _xadd_updates(
     redis: Redis,
     *,
@@ -670,6 +689,23 @@ async def handle_execution(
         await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
         return
 
+    started_ok = await _post_mission_event(
+        session,
+        mission_id,
+        "execution_started",
+        {"stream": STREAM_EXECUTION},
+    )
+    if not started_ok:
+        log.error(
+            json.dumps(
+                {
+                    "executor": "execution_started_write_failed_not_xacking",
+                    "mission_id": mission_id,
+                }
+            )
+        )
+        return
+
     reply_text, ok, oc_meta = await _call_openclaw(session, command_text, mission_id)
 
     cfg = _load_openclaw_json()
@@ -690,7 +726,7 @@ async def handle_execution(
         "final_success": oc_meta["final_success"],
     }
 
-    await _post_control_plane(
+    receipt_ok = await _post_control_plane(
         session,
         "/api/v1/receipts",
         {
@@ -703,11 +739,42 @@ async def handle_execution(
     )
 
     final_status = "complete" if ok else "failed"
-    await _post_control_plane(
+    status_ok = await _post_control_plane(
         session,
         f"/api/v1/missions/{mission_id}/status",
         {"status": final_status},
     )
+
+    if not receipt_ok or not status_ok:
+        log.error(
+            json.dumps(
+                {
+                    "executor": "normal_path_durable_write_failed_not_xacking",
+                    "mission_id": mission_id,
+                    "receipt_ok": receipt_ok,
+                    "status_ok": status_ok,
+                }
+            )
+        )
+        return
+
+    term_type = "execution_completed" if ok else "execution_failed"
+    term_ok = await _post_mission_event(
+        session,
+        mission_id,
+        term_type,
+        {"success": ok},
+    )
+    if not term_ok:
+        log.warning(
+            json.dumps(
+                {
+                    "executor": "terminal_lifecycle_event_failed",
+                    "mission_id": mission_id,
+                    "event_type": term_type,
+                }
+            )
+        )
 
     await _xadd_updates(
         redis,

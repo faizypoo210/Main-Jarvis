@@ -1,30 +1,11 @@
 import { useMemo } from "react";
 import { OperatorHealthCard } from "../components/operator/OperatorHealthCard";
-import { useControlPlaneLive } from "../hooks/useControlPlane";
-import { useOperatorHeartbeat } from "../hooks/useOperatorHeartbeat";
-import { useSystemHealth } from "../hooks/useSystemHealth";
+import { useShellHealth } from "../contexts/ShellHealthContext";
 import { formatRelativeTime } from "../lib/format";
-import type { HealthState, WorkerRegistrySummary } from "../lib/types";
-
-function workerRegistryStatus(wr: WorkerRegistrySummary): HealthState {
-  if (wr.registered_total === 0) return "unknown";
-  if (wr.stale_or_absent === 0) return "healthy";
-  if (wr.healthy_heartbeat > 0) return "degraded";
-  return "offline";
-}
-
-function sseStatus(phase: string, err: string | null): { status: HealthState; detail: string } {
-  if (phase === "live") return { status: "healthy", detail: "Stream open; receiving live mission updates." };
-  if (phase === "reconnecting") {
-    return { status: "degraded", detail: err ?? "Reconnecting to the live stream." };
-  }
-  return { status: "offline", detail: err ?? "Live stream not connected." };
-}
-
+import { sseStatus, workerRegistryStatus } from "../lib/operatorRuntimeHealth";
 export function SystemHealth() {
-  const live = useControlPlaneLive();
-  const { data, error, loading } = useSystemHealth();
-  const hb = useOperatorHeartbeat(90000);
+  const { live, systemHealth, hb } = useShellHealth();
+  const { data, error, loading } = systemHealth;
 
   const sse = useMemo(
     () => sseStatus(live.streamPhase, live.streamError),

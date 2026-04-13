@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import * as api from "../../lib/api";
-import { useControlPlaneLive, useMissions, usePendingApprovals } from "../../hooks/useControlPlane";
+import { ShellHealthProvider, useShellHealth } from "../../contexts/ShellHealthContext";
+import { useMissions, usePendingApprovals } from "../../hooks/useControlPlane";
 import { VoiceMode } from "../voice/VoiceMode";
 import { CenterPane } from "./CenterPane";
 import { LeftRail } from "./LeftRail";
@@ -28,8 +29,8 @@ export function useShellOutlet() {
   return useOutletContext<ShellOutletContext>();
 }
 
-export function AppShell() {
-  const live = useControlPlaneLive();
+function AppShellInner() {
+  const { live } = useShellHealth();
   const navigate = useNavigate();
   const location = useLocation();
   const { missions: panelMissions, loading: missionsLoading } = useMissions({ limit: 100 });
@@ -154,5 +155,13 @@ export function AppShell() {
         onSubmit={handleQuickCommandSubmit}
       />
     </div>
+  );
+}
+
+export function AppShell() {
+  return (
+    <ShellHealthProvider>
+      <AppShellInner />
+    </ShellHealthProvider>
   );
 }

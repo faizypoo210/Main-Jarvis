@@ -15,6 +15,7 @@ import {
 import { NavLink } from "react-router-dom";
 import type { StreamPhase } from "../../contexts/ControlPlaneLiveContext";
 import { LiveLinkIndicator } from "./LiveLinkIndicator";
+import { ShellRuntimeRail } from "./ShellRuntimeStatus";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
@@ -109,6 +110,8 @@ export function LeftRail({
             );
           })}
         </nav>
+
+        <ShellRuntimeRail />
       </div>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-[var(--bg-border)] p-3 lg:p-4">

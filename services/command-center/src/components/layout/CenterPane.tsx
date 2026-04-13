@@ -1,8 +1,8 @@
 import { Bell, PanelRight, Sparkles } from "lucide-react";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { checkHealth } from "../../lib/api";
 import { Avatar } from "../common/Avatar";
+import { ShellRuntimeAttentionBar, ShellRuntimeHeaderPills } from "./ShellRuntimeStatus";
 
 const titles: Record<string, string> = {
   "/": "Overview",
@@ -32,24 +32,10 @@ export function CenterPane({
 }) {
   const loc = useLocation();
   const title = titles[loc.pathname] ?? "Command Center";
-  const [reachable, setReachable] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      const ok = await checkHealth();
-      if (!cancelled) setReachable(ok);
-    };
-    void run();
-    const id = window.setInterval(() => void run(), 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col border-[var(--bg-border)] lg:border-r">
+      <ShellRuntimeAttentionBar />
       <header
         className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--bg-border)] px-3 py-3 md:px-5"
         style={{ backgroundColor: "var(--bg-void)" }}
@@ -106,15 +92,9 @@ export function CenterPane({
               <PanelRight className="h-5 w-5" />
             </button>
           ) : null}
-          <span className="flex items-center gap-1.5">
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${reachable ? "bg-[var(--status-green)]" : "bg-[var(--status-amber)]"}`}
-              title={reachable ? "Control plane online" : "Control plane offline"}
-            />
-            {!reachable ? (
-              <span className="font-mono text-[10px] text-[var(--text-muted)]">offline</span>
-            ) : null}
-          </span>
+          <div className="max-w-[min(100%,14rem)] sm:max-w-none">
+            <ShellRuntimeHeaderPills />
+          </div>
           <span className="hidden rounded-full border border-[var(--bg-border)] px-2 py-1 font-mono text-[10px] text-[var(--text-muted)] sm:inline">
             $1.48 / d
           </span>

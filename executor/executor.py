@@ -808,22 +808,40 @@ class ExecutorWorker:
         async def _executor_heartbeat_loop() -> None:
             if not os.getenv("CONTROL_PLANE_API_KEY", "").strip():
                 return
+            _gw = os.getenv("JARVIS_GATEWAY_HEALTH_URL", "").strip()
+            _oll = os.getenv("JARVIS_OLLAMA_HEALTH_URL", "").strip()
+            _exec_meta = {
+                "stream": STREAM_EXECUTION,
+                "group": GROUP_EXECUTOR,
+                "consumer": CONSUMER_NAME,
+                "pid": os.getpid(),
+                "role": "executor",
+                "machine": os.getenv("JARVIS_WORKER_MACHINE_LABEL", "").strip() or iid,
+            }
+            if _gw:
+                _exec_meta["gateway_health_url"] = _gw
+            if _oll:
+                _exec_meta["ollama_health_url"] = _oll
             await register_worker(
                 worker_type="executor",
                 name=f"Executor ({iid})",
-                meta={
-                    "stream": STREAM_EXECUTION,
-                    "group": GROUP_EXECUTOR,
-                    "consumer": CONSUMER_NAME,
-                    "pid": os.getpid(),
-                },
+                meta=_exec_meta,
                 instance_id=iid,
             )
             while True:
                 await asyncio.sleep(heartbeat_interval_sec())
+                hb_meta: dict[str, object] = {
+                    "stream": STREAM_EXECUTION,
+                    "pid": os.getpid(),
+                    "role": "executor",
+                }
+                if _gw:
+                    hb_meta["gateway_health_url"] = _gw
+                if _oll:
+                    hb_meta["ollama_health_url"] = _oll
                 await heartbeat_worker(
                     worker_type="executor",
-                    meta={"stream": STREAM_EXECUTION, "pid": os.getpid()},
+                    meta=hb_meta,
                     instance_id=iid,
                 )
 

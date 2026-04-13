@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models.integration import Integration
+from app.repositories.worker_repo import WorkerRepository
 from app.schemas.operator import IntegrationHubSummary, OperatorIntegrationRow, OperatorIntegrationsResponse
+from app.services.system_execution_health import gather_gateway_urls
 
 
 def _utc_now_iso() -> str:
@@ -181,6 +183,7 @@ def _build_catalog_row(
     workspace_readme: bool,
     gateway_ok: bool | None,
     gateway_code: int | None,
+    gateway_scope: str,
     composio_plugin: bool,
 ) -> OperatorIntegrationRow:
     """Honest row: prefer DB truth; augment with probes."""
@@ -225,27 +228,65 @@ def _build_catalog_row(
         meta["openclaw_json_present"] = oj
         meta["gateway_http_ok"] = gateway_ok
         meta["gateway_http_status"] = gateway_code
-        if gateway_ok is True:
-            st = "configured"
-            summ = "Gateway HTTP responded (probe from control plane host). This does not prove provider LLM auth."
-            nxt = "Confirm auth profiles and models under System Health / machine setup docs."
+        meta["gateway_probe_scope"] = gateway_scope
+        if gateway_scope == "no_url_configured":
+            st = "unknown"
+            src = "not_verifiable"
+            summ = (
+                "No gateway URL configured for probing (set JARVIS_HEALTH_OPENCLAW_GATEWAY_URL) "
+                "and no worker metadata gateway_health_url — execution-plane gateway state is unknown from here."
+            )
+            nxt = "Point health probes at the real gateway host or register workers with gateway_health_url in heartbeat metadata."
+        elif gateway_ok is True:
+            src = (
+                "configured_remote_probe"
+                if gateway_scope == "configured_remote"
+                else (
+                    "worker_registry_probe"
+                    if gateway_scope == "worker_registry_inference"
+                    else "control_plane_local_probe"
+                )
+            )
+            if gateway_scope == "control_plane_local":
+                st = "degraded"
+                summ = (
+                    "Gateway HTTP responded on a control-plane-local URL (localhost/127.0.0.1). "
+                    "This is not proof the execution worker host is healthy."
+                )
+            else:
+                st = "configured"
+                summ = (
+                    "Gateway HTTP responded at the probed URL (from env or worker registry). "
+                    "Provider LLM/auth is not verified here."
+                )
+            nxt = "Confirm auth profiles on the execution machine; see Workers + System Health probe_source."
         elif gateway_ok is False:
             st = "degraded"
-            summ = "Gateway HTTP probe failed or unreachable from the control plane process."
-            nxt = "Start the gateway or fix bind/port; see ARCHITECTURE.md default 18789."
+            src = (
+                "configured_remote_probe"
+                if gateway_scope == "configured_remote"
+                else (
+                    "worker_registry_probe"
+                    if gateway_scope == "worker_registry_inference"
+                    else "control_plane_local_probe"
+                )
+            )
+            summ = "Gateway HTTP probe failed or unreachable from the control-plane process (see probe scope)."
+            nxt = "Fix bind/port/firewall on the probed host, or correct JARVIS_HEALTH_OPENCLAW_GATEWAY_URL / worker metadata."
         else:
             st = "unknown"
+            src = "not_verifiable"
             summ = "Could not classify gateway reachability."
-            nxt = "Check network and gateway process locally."
+            nxt = "Check network and gateway process on the probed host."
         if oj:
-            summ += " openclaw.json is present on the server user profile."
+            summ += " openclaw.json is present on the control-plane host user profile (not the execution machine by default)."
         return OperatorIntegrationRow(
             id=cat.id,
             name=cat.name,
             kind=cat.kind,
             provider=cat.provider,
             status=st,
-            connection_source="machine_probe",
+            connection_source=src,
             last_checked_at=last_checked,
             last_activity_at=None,
             summary=summ,
@@ -278,21 +319,25 @@ def _build_catalog_row(
 
     if cat.id == "composio":
         meta["openclaw_plugin_dir_present"] = composio_plugin
+        meta["observation_plane"] = "control_plane_host_fs"
         if composio_plugin:
             st = "configured"
-            summ = "Composio OpenClaw plugin directory present under ~/.openclaw/node_modules (machine-local install)."
-            nxt = "OAuth and Composio API keys are manual per DEPLOYMENT_STATUS / vendor docs — not verified here."
+            summ = (
+                "Composio OpenClaw plugin directory present under ~/.openclaw on the control-plane host — "
+                "not verified on the execution worker machine."
+            )
+            nxt = "OAuth and Composio API keys are manual per vendor docs — not verified here."
         else:
             st = "not_configured"
-            summ = "Composio plugin path not found on the control plane host user profile."
-            nxt = "Install @composio/openclaw-plugin under ~/.openclaw if you use Composio (see scripts/06-install-composio.ps1)."
+            summ = "Composio plugin path not found on the control-plane host user profile."
+            nxt = "Install @composio/openclaw-plugin under ~/.openclaw on the execution machine if used there (see scripts/06-install-composio.ps1)."
         return OperatorIntegrationRow(
             id=cat.id,
             name=cat.name,
             kind=cat.kind,
             provider=cat.provider,
             status=st,
-            connection_source="machine_probe",
+            connection_source="control_plane_host_paths",
             last_checked_at=last_checked,
             last_activity_at=None,
             summary=summ,
@@ -378,8 +423,14 @@ async def build_integrations_report(session: AsyncSession) -> OperatorIntegratio
 
     paths = _openclaw_paths()
     settings = get_settings()
-    gw_url = settings.JARVIS_HEALTH_OPENCLAW_GATEWAY_URL.strip()
-    gw_ok, gw_code = _http_probe_ok(gw_url) if gw_url else (None, None)
+    workers = await WorkerRepository.list_all(session)
+    gw_candidates = gather_gateway_urls(settings.JARVIS_HEALTH_OPENCLAW_GATEWAY_URL, workers)
+    if gw_candidates:
+        gw_url, gw_scope = gw_candidates[0]
+        gw_ok, gw_code = _http_probe_ok(gw_url)
+    else:
+        gw_ok, gw_code = None, None
+        gw_scope = "no_url_configured"
 
     try:
         wr = (_repo_root() / "config" / "workspace" / "README.md").is_file()
@@ -401,6 +452,7 @@ async def build_integrations_report(session: AsyncSession) -> OperatorIntegratio
                 workspace_readme=wr,
                 gateway_ok=gw_ok,
                 gateway_code=gw_code,
+                gateway_scope=gw_scope,
                 composio_plugin=composio_plugin,
             )
         )
@@ -408,9 +460,11 @@ async def build_integrations_report(session: AsyncSession) -> OperatorIntegratio
     items.extend(_extra_db_rows(db_rows, snap))
 
     truth_notes = [
-        "Rows may combine control plane DB records with machine-local file/HTTP probes from the host running the API.",
+        "DB rows reflect integration state stored in the control plane database.",
+        "Paths under ~/.openclaw on this host are control-plane-host observations unless workers are co-located; they are not execution-machine truth by default.",
+        "Gateway HTTP probes run from the control-plane process. Use JARVIS_HEALTH_OPENCLAW_GATEWAY_URL for a remote URL and/or worker heartbeat metadata gateway_health_url for execution hints.",
         "Provider OAuth tokens and Composio secrets are not read or returned.",
-        "Connector apps (GitHub, Gmail, etc.) are listed for operator context; connectivity is not verified without DB rows.",
+        "Connector apps (GitHub, Gmail, etc.) are listed for context; connectivity is not verified without DB rows.",
     ]
 
     return OperatorIntegrationsResponse(

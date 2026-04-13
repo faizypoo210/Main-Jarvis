@@ -271,6 +271,8 @@ export type HealthState = "healthy" | "degraded" | "offline" | "unknown";
 export interface ComponentHealth {
   status: HealthState;
   detail: string | null;
+  /** control_plane_local | configured_remote | worker_registry_inference | unknown */
+  probe_source?: string | null;
 }
 
 export interface WorkerRegistrySummary {

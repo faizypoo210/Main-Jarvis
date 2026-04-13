@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import urllib.error
-import urllib.request
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
@@ -15,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import engine, get_db
+from app.repositories.worker_repo import WorkerRepository
 from app.schemas.system import ComponentHealth, SystemHealthResponse
+from app.services.system_execution_health import (
+    PROBE_CONTROL_PLANE_LOCAL,
+    ollama_health,
+    openclaw_gateway_health,
+)
 from app.services.worker_registry_service import build_registry_summary
 
 router = APIRouter()
@@ -45,26 +49,6 @@ async def _check_redis(url: str) -> ComponentHealth:
         await r.close()
 
 
-def _http_probe_sync(url: str, timeout: float = 2.0) -> ComponentHealth:
-    try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            code = resp.getcode()
-            if isinstance(code, int) and code < 500:
-                return ComponentHealth(status="healthy", detail=f"HTTP {code}")
-            return ComponentHealth(status="degraded", detail=f"HTTP {code}")
-    except urllib.error.HTTPError as e:
-        if e.code < 500:
-            return ComponentHealth(status="healthy", detail=f"HTTP {e.code}")
-        return ComponentHealth(status="degraded", detail=f"HTTP {e.code}")
-    except Exception as e:
-        return ComponentHealth(status="offline", detail=str(e)[:200])
-
-
-async def _probe_http(url: str) -> ComponentHealth:
-    return await asyncio.to_thread(_http_probe_sync, url)
-
-
 def _worker_stale_threshold_minutes() -> float:
     raw = os.environ.get("HEARTBEAT_WORKER_STALE_MINUTES", "").strip()
     if not raw:
@@ -73,18 +57,6 @@ def _worker_stale_threshold_minutes() -> float:
         return float(raw)
     except ValueError:
         return 15.0
-
-
-async def _probe_http_chain(urls: list[str]) -> ComponentHealth:
-    last = ComponentHealth(status="unknown", detail="no probe URLs")
-    for u in urls:
-        if not u.strip():
-            continue
-        h = await _probe_http(u.strip())
-        if h.status in ("healthy", "degraded"):
-            return h
-        last = h
-    return last
 
 
 @router.get("/system/health", response_model=SystemHealthResponse)
@@ -100,33 +72,38 @@ async def system_health(
         session, threshold_minutes=threshold
     )
 
+    workers = await WorkerRepository.list_all(session)
+
     postgres = await _check_postgres()
     redis_url = settings.REDIS_URL or "redis://localhost:6379"
     redis = await _check_redis(redis_url)
 
-    gw_urls = [
-        settings.JARVIS_HEALTH_OPENCLAW_GATEWAY_URL.strip(),
-        "http://127.0.0.1:18789/",
-    ]
-    # Dedupe while preserving order
-    seen: set[str] = set()
-    gw_urls_unique: list[str] = []
-    for u in gw_urls:
-        if u and u not in seen:
-            seen.add(u)
-            gw_urls_unique.append(u)
-    gateway = await _probe_http_chain(gw_urls_unique)
-
-    ollama = await _probe_http(settings.JARVIS_HEALTH_OLLAMA_URL.strip())
+    gateway = await openclaw_gateway_health(
+        configured_gateway_url=settings.JARVIS_HEALTH_OPENCLAW_GATEWAY_URL,
+        workers=workers,
+    )
+    ollama = await ollama_health(
+        configured_ollama_url=settings.JARVIS_HEALTH_OLLAMA_URL,
+        workers=workers,
+    )
 
     return SystemHealthResponse(
         checked_at=checked,
         control_plane=ComponentHealth(
             status="healthy",
             detail="API responding",
+            probe_source=PROBE_CONTROL_PLANE_LOCAL,
         ),
-        postgres=postgres,
-        redis=redis,
+        postgres=ComponentHealth(
+            status=postgres.status,
+            detail=postgres.detail,
+            probe_source=PROBE_CONTROL_PLANE_LOCAL,
+        ),
+        redis=ComponentHealth(
+            status=redis.status,
+            detail=redis.detail,
+            probe_source=PROBE_CONTROL_PLANE_LOCAL,
+        ),
         openclaw_gateway=gateway,
         ollama=ollama,
         worker_registry=worker_registry,

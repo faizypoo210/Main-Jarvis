@@ -11,6 +11,10 @@ from httpx import AsyncClient
 from app.api.routes import system as system_routes
 from app.schemas.system import ComponentHealth
 
+pytestmark = [
+    pytest.mark.usefixtures("_alembic_upgrade_session", "_clean_db"),
+]
+
 
 @pytest.mark.asyncio
 async def test_health_ok(client: AsyncClient) -> None:
@@ -260,16 +264,20 @@ async def test_api_v1_system_health_includes_worker_registry(
     async def _fake_redis(_url: str) -> ComponentHealth:
         return ComponentHealth(status="healthy", detail="PING ok")
 
-    async def _fake_probe_http(_url: str) -> ComponentHealth:
-        return ComponentHealth(status="healthy", detail="HTTP 200")
+    async def _fake_gw(**_kwargs: object) -> ComponentHealth:
+        return ComponentHealth(
+            status="healthy", detail="HTTP 200", probe_source="configured_remote"
+        )
 
-    async def _fake_probe_http_chain(_urls: list[str]) -> ComponentHealth:
-        return ComponentHealth(status="healthy", detail="HTTP 200")
+    async def _fake_ollama(**_kwargs: object) -> ComponentHealth:
+        return ComponentHealth(
+            status="healthy", detail="HTTP 200", probe_source="configured_remote"
+        )
 
     monkeypatch.setattr(system_routes, "_check_postgres", _fake_postgres)
     monkeypatch.setattr(system_routes, "_check_redis", _fake_redis)
-    monkeypatch.setattr(system_routes, "_probe_http", _fake_probe_http)
-    monkeypatch.setattr(system_routes, "_probe_http_chain", _fake_probe_http_chain)
+    monkeypatch.setattr(system_routes, "openclaw_gateway_health", _fake_gw)
+    monkeypatch.setattr(system_routes, "ollama_health", _fake_ollama)
 
     r = await client.get("/api/v1/system/health")
     assert r.status_code == 200, r.text

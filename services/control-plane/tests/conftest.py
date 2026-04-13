@@ -51,9 +51,9 @@ from app.core.db import engine  # noqa: E402
 from app.main import app  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def _alembic_upgrade_session() -> None:
-    """Apply migrations once per test session."""
+    """Apply migrations once per test session (opt-in via pytestmark on integration tests)."""
     env = os.environ.copy()
     env["DATABASE_URL"] = os.environ["DATABASE_URL"]
     _pp = f"{_CONTROL_PLANE_ROOT}{os.pathsep}{_REPO_ROOT}"
@@ -86,14 +86,14 @@ async def _truncate_public_data() -> None:
             )
 
 
-@pytest_asyncio.fixture(autouse=True)
+@pytest_asyncio.fixture()
 async def _clean_db() -> AsyncIterator[None]:
     await _truncate_public_data()
     yield
 
 
 @pytest_asyncio.fixture(scope="session")
-async def client() -> AsyncIterator[AsyncClient]:
+async def client(_alembic_upgrade_session: None) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport, base_url="http://test", timeout=30.0

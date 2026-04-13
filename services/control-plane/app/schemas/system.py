@@ -17,6 +17,13 @@ class ComponentHealth(BaseModel):
         default=None,
         description="Non-sensitive hint (e.g. probe URL, error class).",
     )
+    probe_source: str | None = Field(
+        default=None,
+        description=(
+            "Where this status came from: control_plane_local | configured_remote | "
+            "worker_registry_inference | unknown (execution-plane components only)."
+        ),
+    )
 
 
 class SystemHealthResponse(BaseModel):

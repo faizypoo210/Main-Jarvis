@@ -43,8 +43,9 @@ export function SystemHealth() {
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6">
         <p className="mb-4 max-w-2xl text-xs leading-relaxed text-[var(--text-muted)]">
-          Summary of services the control plane can probe from the server, plus this browser&apos;s live
-          stream. Values are for operations visibility — not a full observability stack.
+          Control-plane dependencies (API, Postgres, Redis) are probed on this host. OpenClaw/Ollama rows
+          only reflect execution truth when a URL is configured or inferred from worker metadata — not
+          implicit localhost. Plus this browser&apos;s live stream. Operations visibility only.
         </p>
         {loading && !data ? (
           <p className="text-sm text-[var(--text-muted)]">Loading health snapshot…</p>
@@ -88,9 +89,16 @@ export function SystemHealth() {
                 detail={data.openclaw_gateway.detail}
                 footer={
                   <p className="text-[10px] text-[var(--text-muted)]">
-                    HTTP GET from control plane. Override with{" "}
-                    <code className="font-mono text-[9px]">JARVIS_HEALTH_OPENCLAW_GATEWAY_URL</code> on
-                    the server if needed.
+                    {data.openclaw_gateway.probe_source ? (
+                      <>
+                        Scope:{" "}
+                        <span className="font-mono text-[9px]">{data.openclaw_gateway.probe_source}</span>
+                        .{" "}
+                      </>
+                    ) : null}
+                    HTTP GET from the control-plane process. Set{" "}
+                    <code className="font-mono text-[9px]">JARVIS_HEALTH_OPENCLAW_GATEWAY_URL</code> or
+                    worker <code className="font-mono text-[9px]">gateway_health_url</code> metadata.
                   </p>
                 }
               />
@@ -100,8 +108,15 @@ export function SystemHealth() {
                 detail={data.ollama.detail}
                 footer={
                   <p className="text-[10px] text-[var(--text-muted)]">
-                    Default probe: <code className="font-mono text-[9px]">/api/tags</code>. Override with{" "}
-                    <code className="font-mono text-[9px]">JARVIS_HEALTH_OLLAMA_URL</code>.
+                    {data.ollama.probe_source ? (
+                      <>
+                        Scope:{" "}
+                        <span className="font-mono text-[9px]">{data.ollama.probe_source}</span>.{" "}
+                      </>
+                    ) : null}
+                    Typical probe path <code className="font-mono text-[9px]">/api/tags</code> via{" "}
+                    <code className="font-mono text-[9px]">JARVIS_HEALTH_OLLAMA_URL</code> or worker{" "}
+                    <code className="font-mono text-[9px]">ollama_health_url</code>.
                   </p>
                 }
               />

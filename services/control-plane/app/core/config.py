@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     CONTROL_PLANE_API_KEY: str = ""
-    # Optional HTTP probes for GET /api/v1/system/health (defaults used when unset).
-    JARVIS_HEALTH_OPENCLAW_GATEWAY_URL: str = "http://127.0.0.1:18789/health"
-    JARVIS_HEALTH_OLLAMA_URL: str = "http://127.0.0.1:11434/api/tags"
+    # Optional HTTP probes for GET /api/v1/system/health (empty = do not assume localhost execution truth).
+    JARVIS_HEALTH_OPENCLAW_GATEWAY_URL: str = ""
+    JARVIS_HEALTH_OLLAMA_URL: str = ""
     # GitHub REST (governed create-issue workflow only). Machine-local secret; never logged.
     JARVIS_GITHUB_TOKEN: str = ""
     # Gmail API (governed create-draft only). Use access token and/or OAuth refresh — see INTEGRATIONS_GMAIL.md.

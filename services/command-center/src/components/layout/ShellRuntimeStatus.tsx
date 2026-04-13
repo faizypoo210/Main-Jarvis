@@ -88,7 +88,7 @@ export function ShellRuntimeAttentionBar() {
 
   return (
     <div
-      className={`shrink-0 border-b px-3 py-2 md:px-5 ${border}`}
+      className={`pointer-events-none shrink-0 border-b px-3 py-2 md:px-5 ${border}`}
       role="status"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -98,11 +98,17 @@ export function ShellRuntimeAttentionBar() {
           ))}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 text-[10px] font-medium">
-          <Link to="/system" className="text-[var(--accent-blue)] underline-offset-2 hover:underline">
+          <Link
+            to="/system"
+            className="pointer-events-auto text-[var(--accent-blue)] underline-offset-2 hover:underline"
+          >
             System Health
           </Link>
           {(summary.pills.hb.openCount ?? 0) > 0 ? (
-            <Link to="/activity" className="text-[var(--accent-blue)] underline-offset-2 hover:underline">
+            <Link
+              to="/activity"
+              className="pointer-events-auto text-[var(--accent-blue)] underline-offset-2 hover:underline"
+            >
               Activity
             </Link>
           ) : null}

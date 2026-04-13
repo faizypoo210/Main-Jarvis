@@ -238,10 +238,17 @@ export async function getMissionBundle(missionId: string): Promise<MissionBundle
   );
 }
 
+const COMMAND_SUBMIT_TIMEOUT_MS = 45_000;
+
 export async function createCommand(text: string, source: string): Promise<CommandResponse> {
+  const signal =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+      ? AbortSignal.timeout(COMMAND_SUBMIT_TIMEOUT_MS)
+      : undefined;
   return requestJson<CommandResponse>(`${BASE}/commands`, {
     method: "POST",
     body: JSON.stringify({ text, source }),
+    ...(signal ? { signal } : {}),
   });
 }
 

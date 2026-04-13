@@ -582,8 +582,11 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
           { id: activityId, kind: "activity", text: operatorCopy.threadWaitingForMission },
         ]);
         startMissionPipeline(mid);
-      } catch {
-        setSubmitError("Could not reach Jarvis — try again");
+      } catch (e: unknown) {
+        const aborted =
+          (e instanceof DOMException && e.name === "AbortError") ||
+          (e instanceof Error && e.name === "AbortError");
+        setSubmitError(aborted ? "Request timed out — try again" : "Could not reach Jarvis — try again");
       } finally {
         setSubmitting(false);
       }
@@ -671,7 +674,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
           })}
         </div>
       </div>
-      <div className="pb-[env(safe-area-inset-bottom,0px)]">
+      <div className="relative z-10 shrink-0 pb-[env(safe-area-inset-bottom,0px)]">
         <Composer
           onVoiceClick={onVoiceClick}
           onSubmit={handleSubmit}

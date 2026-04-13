@@ -2,7 +2,13 @@ import type { HealthState, SystemHealthResponse, WorkerRegistrySummary } from ".
 
 export function workerRegistryStatus(wr: WorkerRegistrySummary): HealthState {
   if (wr.registered_total === 0) return "unknown";
-  if (wr.stale_or_absent === 0) return "healthy";
+  const notReady = wr.readiness_not_ready ?? 0;
+  const degradedReady = wr.readiness_degraded ?? 0;
+  if (wr.stale_or_absent === 0) {
+    if (notReady > 0) return "degraded";
+    if (degradedReady > 0) return "degraded";
+    return "healthy";
+  }
   if (wr.healthy_heartbeat > 0) return "degraded";
   return "offline";
 }

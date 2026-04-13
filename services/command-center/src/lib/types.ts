@@ -280,6 +280,10 @@ export interface WorkerRegistrySummary {
   healthy_heartbeat: number;
   stale_or_absent: number;
   threshold_minutes: number;
+  /** Count of registry rows whose metadata includes ready_state (from worker). */
+  readiness_ready?: number;
+  readiness_not_ready?: number;
+  readiness_degraded?: number;
 }
 
 export interface SystemHealthResponse {

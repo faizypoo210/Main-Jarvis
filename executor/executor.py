@@ -26,6 +26,7 @@ from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
 from shared.lane_truth import MISSION_EXECUTION_PATH_OPENCLAW, build_lane_truth_block
+from shared.worker_readiness import executor_readiness_snapshot
 from shared.worker_registry_client import (
     default_instance_id,
     heartbeat_interval_sec,
@@ -808,40 +809,50 @@ class ExecutorWorker:
         async def _executor_heartbeat_loop() -> None:
             if not os.getenv("CONTROL_PLANE_API_KEY", "").strip():
                 return
+            ml = os.getenv("JARVIS_WORKER_MACHINE_LABEL", "").strip() or iid
             _gw = os.getenv("JARVIS_GATEWAY_HEALTH_URL", "").strip()
             _oll = os.getenv("JARVIS_OLLAMA_HEALTH_URL", "").strip()
-            _exec_meta = {
-                "stream": STREAM_EXECUTION,
-                "group": GROUP_EXECUTOR,
-                "consumer": CONSUMER_NAME,
-                "pid": os.getpid(),
-                "role": "executor",
-                "machine": os.getenv("JARVIS_WORKER_MACHINE_LABEL", "").strip() or iid,
-            }
-            if _gw:
-                _exec_meta["gateway_health_url"] = _gw
-            if _oll:
-                _exec_meta["ollama_health_url"] = _oll
+
+            cmd_path = Path(OPENCLAW_CMD)
+
+            async def _build_readiness_meta() -> dict[str, object]:
+                ping_ok: bool | None = None
+                try:
+                    ping_ok = bool(await r.ping())
+                except Exception:
+                    ping_ok = False
+                cfg = _load_openclaw_json()
+                lane = _lane_from_gateway_model(_default_gateway_model(cfg))
+                cmd_exists = cmd_path.is_file() or cmd_path.is_symlink()
+                return executor_readiness_snapshot(
+                    machine_label=ml,
+                    control_plane_api_key_configured=True,
+                    openclaw_cmd=OPENCLAW_CMD,
+                    openclaw_cmd_exists=cmd_exists,
+                    openclaw_json_exists=OPENCLAW_JSON.is_file(),
+                    auth_profiles_configured=_auth_profiles_appear_configured(),
+                    gateway_model_lane=lane,
+                    redis_ping_ok=ping_ok,
+                    stream=STREAM_EXECUTION,
+                    group=GROUP_EXECUTOR,
+                    consumer_name=CONSUMER_NAME,
+                    gateway_health_url=_gw or None,
+                    ollama_health_url=_oll or None,
+                )
+
+            reg = await _build_readiness_meta()
             await register_worker(
                 worker_type="executor",
                 name=f"Executor ({iid})",
-                meta=_exec_meta,
+                meta={**reg, "pid": os.getpid()},
                 instance_id=iid,
             )
             while True:
                 await asyncio.sleep(heartbeat_interval_sec())
-                hb_meta: dict[str, object] = {
-                    "stream": STREAM_EXECUTION,
-                    "pid": os.getpid(),
-                    "role": "executor",
-                }
-                if _gw:
-                    hb_meta["gateway_health_url"] = _gw
-                if _oll:
-                    hb_meta["ollama_health_url"] = _oll
+                hb_meta = await _build_readiness_meta()
                 await heartbeat_worker(
                     worker_type="executor",
-                    meta=hb_meta,
+                    meta={**hb_meta, "pid": os.getpid()},
                     instance_id=iid,
                 )
 

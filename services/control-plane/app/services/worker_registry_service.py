@@ -142,20 +142,36 @@ async def build_registry_summary(
     cutoff = now.timestamp() - threshold_minutes * 60.0
     healthy = 0
     stale = 0
+    readiness_ready = 0
+    readiness_not_ready = 0
+    readiness_degraded = 0
     for r in rows:
         lb = r.last_heartbeat_at
         if lb is None:
             stale += 1
-            continue
-        if lb.tzinfo is None:
-            lb = lb.replace(tzinfo=UTC)
-        if lb.timestamp() >= cutoff:
-            healthy += 1
         else:
-            stale += 1
+            if lb.tzinfo is None:
+                lb = lb.replace(tzinfo=UTC)
+            if lb.timestamp() >= cutoff:
+                healthy += 1
+            else:
+                stale += 1
+        meta = r.metadata_ or {}
+        rs = meta.get("ready_state")
+        if isinstance(rs, str):
+            s = rs.strip().lower()
+            if s == "ready":
+                readiness_ready += 1
+            elif s == "not_ready":
+                readiness_not_ready += 1
+            elif s == "degraded":
+                readiness_degraded += 1
     return WorkerRegistrySummary(
         registered_total=len(rows),
         healthy_heartbeat=healthy,
         stale_or_absent=stale,
         threshold_minutes=threshold_minutes,
+        readiness_ready=readiness_ready,
+        readiness_not_ready=readiness_not_ready,
+        readiness_degraded=readiness_degraded,
     )

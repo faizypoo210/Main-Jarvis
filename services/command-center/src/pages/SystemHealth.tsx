@@ -107,7 +107,7 @@ export function SystemHealth() {
                 detail={
                   data.worker_registry.registered_total === 0
                     ? "No workers registered yet (workers POST register/heartbeat with API key)."
-                    : `${data.worker_registry.healthy_heartbeat} fresh heartbeat(s), ${data.worker_registry.stale_or_absent} stale or missing within ${data.worker_registry.threshold_minutes}m threshold.`
+                    : `${data.worker_registry.healthy_heartbeat} fresh heartbeat(s), ${data.worker_registry.stale_or_absent} stale or missing within ${data.worker_registry.threshold_minutes}m threshold. Role readiness: ${data.worker_registry.readiness_ready ?? 0} ready, ${data.worker_registry.readiness_not_ready ?? 0} not ready, ${data.worker_registry.readiness_degraded ?? 0} degraded.`
                 }
                 footer={
                   <p className="text-[10px] text-[var(--text-muted)]">

@@ -287,6 +287,9 @@ async def test_api_v1_system_health_includes_worker_registry(
     assert "healthy_heartbeat" in wr
     assert "stale_or_absent" in wr
     assert "threshold_minutes" in wr
+    assert wr.get("readiness_ready", 0) >= 0
+    assert wr.get("readiness_not_ready", 0) >= 0
+    assert wr.get("readiness_degraded", 0) >= 0
     assert body["control_plane"]["status"] == "healthy"
 
 

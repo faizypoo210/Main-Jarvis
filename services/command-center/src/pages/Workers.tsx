@@ -7,6 +7,13 @@ import { formatRelativeTime } from "../lib/format";
 import { healthDotClass, healthLabel } from "../lib/operatorHealth";
 import { buildWorkerRows } from "../lib/workerOps";
 
+function readinessTagClass(tag: string): string {
+  if (tag === "Ready") return "text-emerald-500/90";
+  if (tag === "Not ready") return "text-[var(--status-amber)]";
+  if (tag === "Degraded") return "text-[var(--status-amber)]/85";
+  return "text-[var(--text-muted)]";
+}
+
 export function Workers() {
   const live = useControlPlaneLive();
   const { data: health, error: healthErr, loading: healthLoading } = useSystemHealth();
@@ -58,6 +65,19 @@ export function Workers() {
                 </span>
               </div>
               <p className="mt-1 text-[11px] leading-snug text-[var(--text-muted)]">{r.detail}</p>
+              {r.readinessTag ? (
+                <p className="mt-2 text-[10px] leading-snug text-[var(--text-secondary)]">
+                  <span className="font-medium text-[var(--text-primary)]">Readiness </span>
+                  <span className={`font-semibold ${readinessTagClass(r.readinessTag)}`}>
+                    {r.readinessTag}
+                  </span>
+                  {r.readinessDetail ? (
+                    <span className="mt-0.5 block font-normal text-[var(--text-muted)]">
+                      {r.readinessDetail}
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
               <p className="mt-2 text-[10px] leading-snug text-[var(--text-secondary)]">{r.evidence}</p>
               {r.lastActivityLabel ? (
                 <p className="mt-2 font-mono text-[10px] text-[var(--text-muted)]">

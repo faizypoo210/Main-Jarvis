@@ -99,3 +99,7 @@ class WorkerRegistrySummary(BaseModel):
     healthy_heartbeat: int = 0
     stale_or_absent: int = 0
     threshold_minutes: float = 15.0
+    # Rows whose latest metadata reports ready_state (from worker process).
+    readiness_ready: int = 0
+    readiness_not_ready: int = 0
+    readiness_degraded: int = 0

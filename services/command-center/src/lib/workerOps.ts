@@ -14,6 +14,9 @@ export type WorkerOpsRow = {
   detail: string;
   lastActivityLabel: string | null;
   evidence: string;
+  /** From worker metadata ready_state / readiness_reason when present. */
+  readinessTag?: string;
+  readinessDetail?: string | null;
 };
 
 function msSince(iso: string | null): number | null {
@@ -53,6 +56,22 @@ function mapWorkerStatus(s: string): HealthState {
   return "unknown";
 }
 
+function readinessFromMeta(meta: Record<string, unknown> | null | undefined): {
+  tag: string;
+  detail: string | null;
+} {
+  if (!meta || typeof meta !== "object") return { tag: "", detail: null };
+  const rs = meta.ready_state;
+  if (typeof rs !== "string" || !rs.trim()) return { tag: "", detail: null };
+  const raw = rs.trim().toLowerCase();
+  const reason = typeof meta.readiness_reason === "string" ? meta.readiness_reason.trim() : "";
+  const short = reason.length > 160 ? `${reason.slice(0, 157)}…` : reason;
+  if (raw === "ready") return { tag: "Ready", detail: short || "Reports ready for assigned role." };
+  if (raw === "not_ready") return { tag: "Not ready", detail: short || null };
+  if (raw === "degraded") return { tag: "Degraded", detail: short || null };
+  return { tag: raw, detail: short || null };
+}
+
 function rowFromRegistry(w: WorkerRead, staleThresholdMin: number): WorkerOpsRow {
   const st = mapWorkerStatus(w.status);
   const hb = w.last_heartbeat_at;
@@ -64,8 +83,10 @@ function rowFromRegistry(w: WorkerRead, staleThresholdMin: number): WorkerOpsRow
   } else if (ms != null && ms > thrMs / 2 && st === "healthy") {
     status = "degraded";
   }
-  const metaKeys = w.meta && typeof w.meta === "object" ? Object.keys(w.meta as object).slice(0, 6) : [];
+  const metaObj = w.meta && typeof w.meta === "object" ? (w.meta as Record<string, unknown>) : null;
+  const metaKeys = metaObj ? Object.keys(metaObj).filter((k) => k !== "readiness_reason").slice(0, 6) : [];
   const metaHint = metaKeys.length ? ` · meta: ${metaKeys.join(", ")}` : "";
+  const r = readinessFromMeta(metaObj);
   return {
     id: `reg:${w.worker_type}:${w.instance_id}`,
     title: `${w.name} (${w.worker_type})`,
@@ -73,6 +94,8 @@ function rowFromRegistry(w: WorkerRead, staleThresholdMin: number): WorkerOpsRow
     detail: `${w.status}${w.last_error ? ` — ${String(w.last_error).slice(0, 200)}` : ""}${metaHint}`,
     lastActivityLabel: hb ? new Date(hb).toLocaleString() : "No heartbeat yet",
     evidence: `Direct: GET /operator/workers · instance ${w.instance_id}`,
+    readinessTag: r.tag || undefined,
+    readinessDetail: r.detail,
   };
 }
 

@@ -29,6 +29,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 from shared.routing import decide_route  # noqa: E402
+from shared.worker_readiness import coordinator_readiness_snapshot
 from shared.worker_registry_client import (
     default_instance_id,
     heartbeat_interval_sec,
@@ -466,13 +467,29 @@ class Coordinator:
                         log.error(json.dumps({"error": f"{label}_handle", "detail": str(e)}))
 
 
-async def _coordinator_heartbeat_loop() -> None:
+async def _coordinator_heartbeat_loop(redis: Redis) -> None:
     iid = default_instance_id()
+    ml = os.getenv("JARVIS_WORKER_MACHINE_LABEL", "").strip() or iid
     while True:
         await asyncio.sleep(heartbeat_interval_sec())
+        ping_ok: bool | None = None
+        try:
+            ping_ok = bool(await redis.ping())
+        except Exception:
+            ping_ok = False
+        snap = coordinator_readiness_snapshot(
+            machine_label=ml,
+            control_plane_api_key_configured=bool(os.getenv("CONTROL_PLANE_API_KEY", "").strip()),
+            dashclaw_base_configured=bool(DASHCLAW_BASE_URL),
+            dashclaw_api_key_configured=bool(DASHCLAW_API_KEY.strip()),
+            redis_ping_ok=ping_ok,
+            streams=[STREAM_COMMANDS, STREAM_RECEIPTS],
+            groups=[GROUP_COMMANDS, GROUP_RECEIPTS],
+            consumer_name=CONSUMER_NAME,
+        )
         await heartbeat_worker(
             worker_type="coordinator",
-            meta={"consumer": CONSUMER_NAME, "pid": os.getpid()},
+            meta={**snap, "pid": os.getpid()},
             instance_id=iid,
         )
 
@@ -483,19 +500,31 @@ async def _main() -> None:
     assert c._redis is not None
     r = c._redis
     iid = default_instance_id()
+    ml = os.getenv("JARVIS_WORKER_MACHINE_LABEL", "").strip() or iid
     hb_task: asyncio.Task[None] | None = None
     if os.getenv("CONTROL_PLANE_API_KEY", "").strip():
+        ping_ok: bool | None = None
+        try:
+            ping_ok = bool(await r.ping())
+        except Exception:
+            ping_ok = False
+        reg_meta = coordinator_readiness_snapshot(
+            machine_label=ml,
+            control_plane_api_key_configured=True,
+            dashclaw_base_configured=bool(DASHCLAW_BASE_URL),
+            dashclaw_api_key_configured=bool(DASHCLAW_API_KEY.strip()),
+            redis_ping_ok=ping_ok,
+            streams=[STREAM_COMMANDS, STREAM_RECEIPTS],
+            groups=[GROUP_COMMANDS, GROUP_RECEIPTS],
+            consumer_name=CONSUMER_NAME,
+        )
         await register_worker(
             worker_type="coordinator",
             name=f"Coordinator ({iid})",
-            meta={
-                "streams": [STREAM_COMMANDS, STREAM_RECEIPTS],
-                "consumer": CONSUMER_NAME,
-                "pid": os.getpid(),
-            },
+            meta={**reg_meta, "pid": os.getpid()},
             instance_id=iid,
         )
-        hb_task = asyncio.create_task(_coordinator_heartbeat_loop())
+        hb_task = asyncio.create_task(_coordinator_heartbeat_loop(r))
     tasks = [
         c._poll_stream(r, STREAM_COMMANDS, GROUP_COMMANDS, "commands", c.handle_command),
         c._poll_stream(r, STREAM_RECEIPTS, GROUP_RECEIPTS, "receipts", c.handle_receipt),

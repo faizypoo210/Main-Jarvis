@@ -59,8 +59,9 @@ jobs:
           cache: npm
           cache-dependency-path: services/command-center/package-lock.json
 
-      - name: Install and build Command Center
+      - name: Install, test, and build Command Center
         working-directory: services/command-center
         run: |
           npm ci
+          npm run test
           npm run build

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from shared.worker_readiness import (
     coordinator_readiness_snapshot,
     executor_readiness_snapshot,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_coordinator_ready_when_config_and_redis_ok() -> None:

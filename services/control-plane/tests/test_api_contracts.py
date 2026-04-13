@@ -12,6 +12,7 @@ from app.api.routes import system as system_routes
 from app.schemas.system import ComponentHealth
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.usefixtures("_alembic_upgrade_session", "_clean_db"),
 ]
 
@@ -64,6 +65,9 @@ async def test_post_commands_creates_mission_and_created_event(
     assert br.status_code == 200
     bundle = br.json()
     assert bundle.get("mission") and bundle["mission"]["id"] == str(mid)
+    assert "events" in bundle and isinstance(bundle["events"], list)
+    assert "approvals" in bundle and isinstance(bundle["approvals"], list)
+    assert "receipts" in bundle and isinstance(bundle["receipts"], list)
 
 
 @pytest.mark.asyncio
@@ -297,4 +301,44 @@ async def test_api_v1_system_health_includes_worker_registry(
 async def test_api_v1_approvals_pending_is_list(client: AsyncClient) -> None:
     r = await client.get("/api/v1/approvals/pending")
     assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    body = r.json()
+    assert isinstance(body, list)
+    if body:
+        row = body[0]
+        assert "id" in row and "status" in row and "mission_id" in row
+
+
+@pytest.mark.asyncio
+async def test_worker_register_metadata_increments_readiness_health_summary(
+    client: AsyncClient, api_headers: dict[str, str]
+) -> None:
+    """Registry rows carry ready_state in metadata; /system/health aggregates counts."""
+    r1 = await client.post(
+        "/api/v1/workers/register",
+        json={
+            "worker_type": "coordinator",
+            "instance_id": "contract-coord",
+            "name": "c-contract",
+            "meta": {"ready_state": "ready"},
+        },
+        headers=api_headers,
+    )
+    assert r1.status_code == 200, r1.text
+    r2 = await client.post(
+        "/api/v1/workers/register",
+        json={
+            "worker_type": "executor",
+            "instance_id": "contract-exec",
+            "name": "e-contract",
+            "meta": {"ready_state": "not_ready", "readiness_reason": "OPENCLAW_CMD missing"},
+        },
+        headers=api_headers,
+    )
+    assert r2.status_code == 200, r2.text
+
+    hr = await client.get("/api/v1/system/health")
+    assert hr.status_code == 200, hr.text
+    wr = hr.json()["worker_registry"]
+    assert wr["registered_total"] >= 2
+    assert wr.get("readiness_ready", 0) >= 1
+    assert wr.get("readiness_not_ready", 0) >= 1

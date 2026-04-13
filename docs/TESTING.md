@@ -40,12 +40,45 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest tests/ -v
 ```
 
-Or use the helper (repo root):
+**Fast unit tests** (schemas + shared readiness helpers + registry summary mocks — no Alembic, no live DB for the test body):
+
+```powershell
+cd F:\Jarvis\services\control-plane
+python -m pytest -m unit -q
+```
+
+**Integration / contract tests** (HTTP + PostgreSQL + Alembic — same as CI):
+
+```powershell
+cd F:\Jarvis\services\control-plane
+python -m pytest -m integration -v
+```
+
+Or use the helper (repo root — full suite including integration):
 
 ```powershell
 cd F:\Jarvis
 .\scripts\20-run-control-plane-tests.ps1
 ```
+
+Unit-only helper:
+
+```powershell
+cd F:\Jarvis
+.\scripts\21-run-control-plane-unit-tests.ps1
+```
+
+### Command Center (frontend)
+
+From `services/command-center`:
+
+```powershell
+npm ci
+npm run test
+npm run build
+```
+
+Vitest + Testing Library cover a few high-value shell/runtime behaviors; production verification remains `npm run build`.
 
 ### Run a subset
 

@@ -9,6 +9,8 @@ import pytest
 
 from app.services.worker_registry_service import build_registry_summary
 
+pytestmark = pytest.mark.unit
+
 
 class _FakeRow:
     __slots__ = ("metadata_", "last_heartbeat_at")

@@ -3,6 +3,13 @@
 Database: PostgreSQL via asyncpg (same stack as production). Tests force DATABASE_URL
 from PYTEST_CONTROL_PLANE_DATABASE_URL or a local default — see docs/TESTING.md.
 
+Markers (see ``pytest.ini``):
+
+- ``unit``: fast helpers/schemas (``pytest -m unit``) — no Alembic, no HTTP client.
+- ``integration``: ASGI + Alembic + truncate between tests — requires a live Postgres test DB.
+
+The ``client`` async fixture is for **integration** tests only (session Alembic + per-test TRUNCATE).
+
 Import order: env vars must be set before app modules load (cached Settings + engine).
 """
 
@@ -102,6 +109,7 @@ async def _clean_db() -> AsyncIterator[None]:
 
 @pytest_asyncio.fixture(scope="session")
 async def client(_alembic_upgrade_session: None) -> AsyncIterator[AsyncClient]:
+    """httpx ASGI client — use with ``@pytest.mark.integration`` + DB fixtures."""
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport, base_url="http://test", timeout=30.0

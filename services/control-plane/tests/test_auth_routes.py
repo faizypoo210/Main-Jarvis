@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from app.core.config import clear_settings_cache
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.usefixtures("_alembic_upgrade_session", "_clean_db"),
 ]
 

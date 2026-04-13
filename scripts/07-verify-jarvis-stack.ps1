@@ -44,6 +44,17 @@ function Test-HttpGetOk([string]$Uri, [int]$TimeoutSec = 4) {
     }
 }
 
+function Test-JarvisProcessIdAlive {
+    param([int]$ProcessId)
+    if ($ProcessId -le 0) { return $false }
+    try {
+        $null = Get-Process -Id $ProcessId -ErrorAction Stop
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 function Get-GatewayProbe {
     $listen = Test-TcpListen 18789
     if (-not $listen) {
@@ -143,8 +154,52 @@ foreach ($r in $rows) {
     Write-Host $line -ForegroundColor $color
 }
 
+$launchPath = Join-Path $JarvisRoot '.jarvis-local\launch-state.json'
 Write-Host ""
-Write-Host "Executor / Coordinator: STARTED_UNVERIFIED (no fixed listen port checked here; see jarvis.ps1 windows)." -ForegroundColor DarkGray
+Write-Host "========== Background hosts (cheap PID check) ==========" -ForegroundColor Cyan
+Write-Host "  Not a supervisor - only compares last jarvis.ps1 PIDs to running processes (often powershell.exe hosting python/npm)." -ForegroundColor DarkGray
+if (-not (Test-Path -LiteralPath $launchPath)) {
+    Write-Host "  No launch-state.json - run repo-root jarvis.ps1 once to record host PIDs under .jarvis-local\" -ForegroundColor DarkGray
+} else {
+    try {
+        $ls = Get-Content -LiteralPath $launchPath -Raw | ConvertFrom-Json
+        if ($ls.repoRoot -and ($ls.repoRoot.TrimEnd('\') -ne $JarvisRoot.TrimEnd('\'))) {
+            Write-Host "  [NOTE] launch-state repoRoot differs from this verify script - record may be stale." -ForegroundColor DarkYellow
+        }
+        $ageNote = ''
+        try {
+            $gen = [DateTimeOffset]::Parse($ls.generatedAt)
+            $ageNote = " recorded $($gen.LocalDateTime.ToString('yyyy-MM-dd HH:mm'))"
+        } catch { }
+        Write-Host "  Source: $launchPath$ageNote" -ForegroundColor DarkGray
+        $launches = @($ls.launches)
+        foreach ($l in $launches) {
+            $nm = [string]$l.name
+            $pid = 0
+            try { $pid = [int]$l.pid } catch { $pid = 0 }
+            $kind = [string]$l.hostKind
+            if ($pid -le 0) {
+                Write-Host ("{0,-26} {1,-20} {2}" -f $nm, 'UNKNOWN', 'No PID in record') -ForegroundColor Yellow
+                continue
+            }
+            $alive = Test-JarvisProcessIdAlive -ProcessId $pid
+            if ($alive) {
+                $st = 'PROCESS_PRESENT'
+                $detail = "PID $pid still running ($kind - identity is generic; child workload not verified)"
+                $color = 'Gray'
+            } else {
+                $st = 'PROCESS_GONE'
+                $detail = "PID $pid not found (exited, rebooted, or stale record)"
+                $color = 'Yellow'
+            }
+            Write-Host ("{0,-26} {1,-20} {2}" -f $nm, $st, $detail) -ForegroundColor $color
+        }
+    } catch {
+        Write-Host "  [WARN] Could not read launch-state.json: $_" -ForegroundColor Yellow
+    }
+}
+
+Write-Host ""
 Write-Host "Legacy Mission Control (3000/3001): not part of this stack - removed from verification." -ForegroundColor DarkGray
 
 if ($gw.State -eq 'LISTENING') {

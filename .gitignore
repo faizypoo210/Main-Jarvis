@@ -33,3 +33,6 @@ coordinator/missions.db
 
 # Cursor cache
 .cursor/cache/
+
+# Local jarvis.ps1 launch breadcrumbs (PIDs — not committed)
+.jarvis-local/

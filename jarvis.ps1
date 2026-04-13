@@ -37,12 +37,88 @@ function Test-HttpGetOk([string]$Uri, [int]$TimeoutSec = 3) {
     }
 }
 
+function Write-JarvisLaunchStateFile {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)]$LaunchRecords
+    )
+    $dir = Join-Path $RepoRoot '.jarvis-local'
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $items = @()
+    foreach ($r in $LaunchRecords) {
+        if ($null -eq $r) { continue }
+        $items += @{
+            name      = $r.Name
+            pid       = $r.Pid
+            hostAlive = [bool]$r.HostAlive
+            hostKind  = $r.HostKind
+        }
+    }
+    $payload = @{
+        generatedAt = (Get-Date).ToUniversalTime().ToString('o')
+        schema      = 1
+        repoRoot    = $RepoRoot
+        launches    = $items
+    }
+    $path = Join-Path $dir 'launch-state.json'
+    try {
+        ($payload | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath $path -Encoding UTF8
+        Write-Host "Recorded launch PIDs -> $path" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "[WARN] Could not write launch-state.json: $_" -ForegroundColor Yellow
+    }
+}
+
+function Start-JarvisTrackedProcess {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(Mandatory)]$ArgumentList,
+        [string]$WorkingDirectory = $null,
+        [System.Diagnostics.ProcessWindowStyle]$WindowStyle = 'Minimized',
+        [int]$SettleMs = 600,
+        [ValidateSet('powershell-host', 'pythonw', 'other')][string]$HostKind = 'powershell-host'
+    )
+    $proc = $null
+    try {
+        $sp = @{
+            FilePath     = $FilePath
+            ArgumentList = $ArgumentList
+            PassThru     = $true
+            WindowStyle  = $WindowStyle
+        }
+        if ($WorkingDirectory) { $sp['WorkingDirectory'] = $WorkingDirectory }
+        $proc = Start-Process @sp
+    } catch {
+        Write-Host "[$Name] Launch FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        return [pscustomobject]@{ Name = $Name; Pid = $null; HostAlive = $false; HostKind = $HostKind; Error = $_.Exception.Message }
+    }
+    if ($null -eq $proc) {
+        Write-Host "[$Name] Launch FAILED: Start-Process returned null" -ForegroundColor Red
+        return [pscustomobject]@{ Name = $Name; Pid = $null; HostAlive = $false; HostKind = $HostKind; Error = 'null process' }
+    }
+    Start-Sleep -Milliseconds $SettleMs
+    $hostAlive = $false
+    try {
+        $null = Get-Process -Id $proc.Id -ErrorAction Stop
+        $hostAlive = $true
+    } catch {
+        $hostAlive = $false
+    }
+    $statusTxt = if ($hostAlive) { 'host process running' } else { 'HOST EXITED IMMEDIATELY (or not visible)' }
+    Write-Host ("[{0}] PID={1} - {2}" -f $Name, $proc.Id, $statusTxt) -ForegroundColor $(if ($hostAlive) { 'DarkGray' } else { 'Yellow' })
+    return [pscustomobject]@{ Name = $Name; Pid = $proc.Id; HostAlive = $hostAlive; HostKind = $HostKind; Error = $null }
+}
+
 function Invoke-Step([string]$Message) {
     Write-Host ""
     Write-Host "=== $Message ===" -ForegroundColor Cyan
 }
 
 Write-Host "JARVIS master start (repo: $JarvisRoot)" -ForegroundColor Green
+$JarvisLaunchRecords = New-Object System.Collections.ArrayList
 
 # --- 1-2) Docker data plane ---
 Invoke-Step "PostgreSQL (jarvis-postgres)"
@@ -88,7 +164,9 @@ if (Test-Path -LiteralPath $laneVerify) {
 Write-Host ""
 Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
 $controlPlaneDir = Join-Path $JarvisRoot 'services\control-plane'
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001" -WindowStyle Normal
+$cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001"
+$cpLaunch = Start-JarvisTrackedProcess -Name 'control-plane' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $cpCmd) -WindowStyle Normal
+[void]$JarvisLaunchRecords.Add($cpLaunch)
 
 Write-Host "Waiting for control plane to be ready..." -ForegroundColor Cyan
 $cpReady = $false
@@ -108,7 +186,9 @@ if (-not $cpReady) {
 # --- 5) Command Center (primary operator UI) ---
 Write-Host "Starting Jarvis Command Center..." -ForegroundColor Cyan
 $commandCenterDir = Join-Path $JarvisRoot 'services\command-center'
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$commandCenterDir`"; npm run dev" -WindowStyle Minimized
+$ccCmd = "cd `"$commandCenterDir`"; npm run dev"
+$ccLaunch = Start-JarvisTrackedProcess -Name 'command-center' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $ccCmd) -WindowStyle Minimized
+[void]$JarvisLaunchRecords.Add($ccLaunch)
 Start-Sleep -Seconds 2
 $ccHttpOk = $false
 for ($i = 0; $i -lt 12; $i++) {
@@ -126,7 +206,9 @@ if ($ccHttpOk) {
 # --- 6) Voice Server ---
 Write-Host "Starting Jarvis Voice Server..." -ForegroundColor Cyan
 $voiceDir = Join-Path $JarvisRoot 'voice'
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$voiceDir`"; .\.venv\Scripts\Activate.ps1; uvicorn server:app --host 0.0.0.0 --port 8000" -WindowStyle Minimized
+$voiceCmd = "cd `"$voiceDir`"; .\.venv\Scripts\Activate.ps1; uvicorn server:app --host 0.0.0.0 --port 8000"
+$voiceLaunch = Start-JarvisTrackedProcess -Name 'voice' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $voiceCmd) -WindowStyle Minimized
+[void]$JarvisLaunchRecords.Add($voiceLaunch)
 Start-Sleep -Seconds 2
 $voiceHttpOk = $false
 for ($i = 0; $i -lt 10; $i++) {
@@ -144,15 +226,19 @@ if ($voiceHttpOk) {
 # --- 7) Coordinator (Redis guard routing) ---
 Write-Host "Starting Jarvis Coordinator..." -ForegroundColor Cyan
 $coordDir = Join-Path $JarvisRoot 'coordinator'
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$coordDir`"; .\.venv\Scripts\Activate.ps1; python coordinator.py" -WindowStyle Minimized
+$coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\Activate.ps1; python coordinator.py"
+$coordLaunch = Start-JarvisTrackedProcess -Name 'coordinator' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $coordCmd) -WindowStyle Minimized
+[void]$JarvisLaunchRecords.Add($coordLaunch)
 Start-Sleep -Seconds 1
 
 # --- 8) Executor (OpenClaw CLI worker) ---
 Write-Host "Starting Jarvis Executor..." -ForegroundColor Cyan
 $executorDir = Join-Path $JarvisRoot 'executor'
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u executor.py" -WindowStyle Minimized
+$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u executor.py"
+$execLaunch = Start-JarvisTrackedProcess -Name 'executor' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $execCmd) -WindowStyle Minimized
+[void]$JarvisLaunchRecords.Add($execLaunch)
 Start-Sleep -Seconds 2
-Write-Host "Coordinator + Executor: background processes started (no listener/health check in this script)." -ForegroundColor DarkGray
+Write-Host "Coordinator + Executor: PowerShell host windows launched (child python health not probed here)." -ForegroundColor DarkGray
 
 # --- 9+) Supplemental only after core stack ---
 Invoke-Step "LobsterBoard (supplemental dashboard)"
@@ -202,18 +288,40 @@ if ($gwListen -and $gwHttpOk) {
     Write-Host "OpenClaw Gateway: not listening on 18789." -ForegroundColor Yellow
 }
 
+# --- System tray (tracked; before summary so launch-state.json includes it) ---
+$TrayDir = Join-Path $JarvisRoot 'tray'
+$TrayPythonw = Join-Path $TrayDir '.venv\Scripts\pythonw.exe'
+$TrayPyw = Join-Path $TrayDir 'tray.pyw'
+if ((Test-Path -LiteralPath $TrayPythonw) -and (Test-Path -LiteralPath $TrayPyw)) {
+    $trayLaunch = Start-JarvisTrackedProcess -Name 'tray' -FilePath $TrayPythonw -ArgumentList "`"$TrayPyw`"" -WorkingDirectory $TrayDir -WindowStyle Hidden -SettleMs 400 -HostKind 'pythonw'
+    [void]$JarvisLaunchRecords.Add($trayLaunch)
+} else {
+    Write-Host "Tray: skipped (pythonw or tray.pyw missing) - $TrayDir" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "=== Bring-up summary ===" -ForegroundColor Cyan
 Write-Host "  Data plane:    PostgreSQL/Redis containers started (not HTTP-health-checked; use docker + ports)." -ForegroundColor Gray
-Write-Host ("  Control plane: {0}" -f ($(if ($cpReady) { 'HEALTHY - GET /health OK' } else { 'NOT HEALTH-VERIFIED - fix before trusting authority API' }))) -ForegroundColor $(if ($cpReady) { 'Green' } else { 'Yellow' })
+Write-Host ("  Control plane: {0}" -f ($(if ($cpReady) { "HEALTHY - GET /health OK (host PID $($cpLaunch.Pid))" } else { "NOT HEALTH-VERIFIED - fix before trusting authority API (host PID $($cpLaunch.Pid))" }))) -ForegroundColor $(if ($cpReady) { 'Green' } else { 'Yellow' })
 Write-Host ("  Gateway:       {0}" -f ($(if ($gwListen -and $gwHttpOk) { 'HEALTHY - HTTP OK' } elseif ($gwListen) { 'LISTENING - TCP only, HTTP unverified' } else { 'DOWN or not listening' }))) -ForegroundColor $(if ($gwListen -and $gwHttpOk) { 'Green' } elseif ($gwListen) { 'Yellow' } else { 'Yellow' })
-Write-Host ("  Command Center:{0}" -f ($(if ($ccHttpOk) { " HTTP responds (dev UI)" } elseif (Test-TcpListen 5173) { " LISTENING only" } else { " STARTED_UNVERIFIED / not listening" }))) -ForegroundColor $(if ($ccHttpOk) { 'Green' } elseif (Test-TcpListen 5173) { 'Yellow' } else { 'Yellow' })
-Write-Host ("  Voice:         {0}" -f ($(if ($voiceHttpOk) { "HTTP responds on /" } elseif (Test-TcpListen 8000) { "LISTENING only" } else { "STARTED_UNVERIFIED / not listening" }))) -ForegroundColor $(if ($voiceHttpOk) { 'Green' } elseif (Test-TcpListen 8000) { 'Yellow' } else { 'Yellow' })
-Write-Host "  Coordinator:   STARTED_UNVERIFIED (background)" -ForegroundColor DarkGray
-Write-Host "  Executor:      STARTED_UNVERIFIED (background)" -ForegroundColor DarkGray
+Write-Host ("  Command Center:{0}" -f ($(if ($ccHttpOk) { " HTTP responds (dev UI); host PID $($ccLaunch.Pid)" } elseif (Test-TcpListen 5173) { " LISTENING only; host PID $($ccLaunch.Pid)" } else { " NOT LISTENING / HTTP unverified; host PID $($ccLaunch.Pid)" }))) -ForegroundColor $(if ($ccHttpOk) { 'Green' } elseif (Test-TcpListen 5173) { 'Yellow' } else { 'Yellow' })
+Write-Host ("  Voice:         {0}" -f ($(if ($voiceHttpOk) { "HTTP responds on /; host PID $($voiceLaunch.Pid)" } elseif (Test-TcpListen 8000) { "LISTENING only; host PID $($voiceLaunch.Pid)" } else { "NOT LISTENING; host PID $($voiceLaunch.Pid)" }))) -ForegroundColor $(if ($voiceHttpOk) { 'Green' } elseif (Test-TcpListen 8000) { 'Yellow' } else { 'Yellow' })
+Write-Host ("  Coordinator:   {0}" -f ($(if ($coordLaunch.HostAlive) { "Powershell host PID $($coordLaunch.Pid) (running - child python not probed here)" } else { "LAUNCH HOST MISSING - see [coordinator] line above" }))) -ForegroundColor $(if ($coordLaunch.HostAlive) { 'DarkGray' } else { 'Yellow' })
+Write-Host ("  Executor:      {0}" -f ($(if ($execLaunch.HostAlive) { "Powershell host PID $($execLaunch.Pid) (running - child python not probed here)" } else { "LAUNCH HOST MISSING - see [executor] line above" }))) -ForegroundColor $(if ($execLaunch.HostAlive) { 'DarkGray' } else { 'Yellow' })
 Write-Host ("  LobsterBoard:  {0}" -f ($(if ($lbListen) { "LISTENING (supplemental)" } else { "not listening on 8080" }))) -ForegroundColor $(if ($lbListen) { 'Gray' } else { 'Yellow' })
 Write-Host ("  Ollama:        {0}" -f ($(if ($ollamaListen) { "LISTENING (optional local model)" } else { "OPTIONAL_DOWN / not on 11434" }))) -ForegroundColor $(if ($ollamaListen) { 'Gray' } else { 'Yellow' })
 Write-Host "Core surfaces are not guaranteed healthy until verification passes; run scripts\07-verify-jarvis-stack.ps1 for a categorized check." -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "=== Process launch (this run) ===" -ForegroundColor Cyan
+Write-Host "  PowerShell hosts wrap services; uvicorn/npm/python are children - use ports/GET above for real health." -ForegroundColor DarkGray
+foreach ($rec in $JarvisLaunchRecords) {
+    if ($null -eq $rec) { continue }
+    $pidStr = if ($rec.Pid) { "$($rec.Pid)" } else { '-' }
+    $kind = $rec.HostKind
+    $alive = if ($rec.HostAlive) { 'host present' } else { 'host missing / exited early' }
+    $err = if ($rec.Error) { " err=$($rec.Error)" } else { '' }
+    Write-Host ("  {0,-16} PID={1,-8} {2} ({3}){4}" -f $rec.Name, $pidStr, $alive, $kind, $err) -ForegroundColor $(if ($rec.HostAlive) { 'Gray' } else { 'Yellow' })
+}
 Write-Host ""
 Write-Host "Bring-up initiated - see lines above for what is health-verified vs listening-only vs unverified." -ForegroundColor Green
 Write-Host ""
@@ -222,8 +330,8 @@ Write-Host "  Command Center (primary UI): http://localhost:5173"
 Write-Host "  Control Plane (authority):   http://localhost:8001"
 Write-Host "  Voice Server:                http://localhost:8000"
 Write-Host "  OpenClaw Gateway:            http://localhost:18789"
-Write-Host "  Executor:                    background (unverified here)"
-Write-Host "  Coordinator:                 background (unverified here)"
+Write-Host "  Executor:                    PowerShell host PID $($execLaunch.Pid) (see ports/registry for work)"
+Write-Host "  Coordinator:                 PowerShell host PID $($coordLaunch.Pid) (see Redis streams for work)"
 Write-Host ""
 Write-Host "Local URLs (supplemental):" -ForegroundColor Cyan
 Write-Host "  LobsterBoard:                http://localhost:8080"
@@ -236,12 +344,8 @@ Write-Host "  Voice Server:     http://${LanIp}:8000"
 Write-Host "  OpenClaw Gateway: http://${LanIp}:18789"
 Write-Host "  LobsterBoard:     http://${LanIp}:8080"
 Write-Host "  Ollama:           http://${LanIp}:11434"
-Write-Host "  Executor/Coord:   background (unverified here)"
+Write-Host "  Executor/Coord:   see PowerShell host PIDs in summary (not auto-supervised)"
 
-# System tray
-$TrayDir = Join-Path $JarvisRoot 'tray'
-$TrayPythonw = Join-Path $TrayDir '.venv\Scripts\pythonw.exe'
-$TrayPyw = Join-Path $TrayDir 'tray.pyw'
-Start-Process -FilePath $TrayPythonw -ArgumentList "`"$TrayPyw`"" -WorkingDirectory $TrayDir -WindowStyle Hidden
+Write-JarvisLaunchStateFile -RepoRoot $JarvisRoot -LaunchRecords $JarvisLaunchRecords
 
 exit 0

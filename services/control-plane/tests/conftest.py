@@ -35,6 +35,7 @@ os.environ["CONTROL_PLANE_API_KEY"] = os.environ.get(
     "PYTEST_CONTROL_PLANE_API_KEY",
     "pytest-control-plane-api-key",
 )
+os.environ.setdefault("CONTROL_PLANE_AUTH_MODE", "api_key")
 # Avoid accidental SMS / reminders side effects
 os.environ.setdefault("JARVIS_SMS_APPROVALS_ENABLED", "false")
 os.environ.setdefault("APPROVAL_REMINDERS_ENABLED", "false")
@@ -47,8 +48,15 @@ if _sr not in sys.path:
     sys.path.insert(0, _sr)
 
 # After env: import app (binds engine + settings cache to test DATABASE_URL)
+from app.core.config import clear_settings_cache  # noqa: E402
 from app.core.db import engine  # noqa: E402
 from app.main import app  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings_cache_after_each_test() -> None:
+    yield
+    clear_settings_cache()
 
 
 @pytest.fixture(scope="session")

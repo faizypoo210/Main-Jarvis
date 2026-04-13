@@ -34,7 +34,7 @@ Use this when **any** credential may have been exposed (git history, logs, scree
 | --- | --- |
 | **Purpose** | `x-api-key` on control plane HTTP + SSE (`/api/v1/...`, `/api/v1/updates/stream`). |
 | **Where it lives** | `services/control-plane/.env` as `CONTROL_PLANE_API_KEY`; clients use User env **`CONTROL_PLANE_API_KEY`** or session env. Smoke/benchmark aliases: `JARVIS_SMOKE_API_KEY`. |
-| **Used by** | Command Center (`VITE_CONTROL_PLANE_API_KEY` at build/dev time), coordinator, executor, voice server, all `scripts/*` that call the API. |
+| **Used by** | Command Center Vite **dev proxy** (`CONTROL_PLANE_API_KEY` in `services/command-center/.env`, not bundled), coordinator, executor, voice server, all `scripts/*` that call the API. |
 | **References** | `services/control-plane/.env.example`, `services/command-center/src/lib/api.ts`, `README.md`. |
 | **After rotation** | Update control plane `.env` → restart uvicorn → set same value in User env for scripts → rebuild or set Vite env for Command Center → re-run operator benchmarks if you track baselines. |
 

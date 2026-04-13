@@ -18,25 +18,30 @@ import type {
   MissionBundle,
   MissionEvent,
   OperatorActivityResponse,
-  OperatorInboxResponse,
-  OperatorIntegrationsResponse,
   OperatorCostEventsResponse,
   OperatorCostGuardrailsResponse,
+  OperatorInboxResponse,
+  OperatorIntegrationsResponse,
   OperatorUsageResponse,
-  OperatorWorkersResponse,
   OperatorValueEvalsResponse,
+  OperatorWorkersResponse,
   Receipt,
   SystemHealthResponse,
 } from "./types";
 
-const CP = import.meta.env.VITE_CONTROL_PLANE_URL;
-if (!CP) throw new Error("VITE_CONTROL_PLANE_URL is not set. Check your .env file.");
-const BASE = `${CP}/api/v1`;
-const ORIGIN = CP;
+/**
+ * Empty VITE_CONTROL_PLANE_URL → same-origin /api/v1 (Vite dev proxy injects x-api-key; production: use nginx or similar).
+ * Non-empty → absolute API origin (cross-origin: no browser secret; server must use local_trusted or an edge proxy).
+ */
+const cpEnv = (import.meta.env.VITE_CONTROL_PLANE_URL ?? "").trim();
+const CP = cpEnv === "" ? "" : cpEnv;
+const BASE = CP ? `${CP.replace(/\/$/, "")}/api/v1` : "/api/v1";
+const ORIGIN = CP ? CP.replace(/\/$/, "") : "";
 
-/** Public for SSE client and health checks. */
-export const CONTROL_PLANE_ORIGIN = ORIGIN;
+/** Public for hooks that need the stream path segment. */
 export const CONTROL_PLANE_API_V1 = BASE;
+/** Origin for health checks (relative in dev). */
+export const CONTROL_PLANE_ORIGIN = ORIGIN;
 
 export type LiveStreamMessage =
   | { type: "mission_event"; event: MissionEvent }
@@ -50,7 +55,7 @@ export type StreamConnectOptions = {
 };
 
 /**
- * Fetch-based SSE reader (supports `x-api-key`; EventSource cannot set headers in browsers).
+ * Fetch-based SSE reader (dev proxy injects x-api-key; production should use same-origin + edge auth).
  */
 export function connectControlPlaneStream(
   onMessage: (msg: LiveStreamMessage) => void,
@@ -65,7 +70,6 @@ export function connectControlPlaneStream(
         method: "GET",
         headers: {
           Accept: "text/event-stream",
-          "x-api-key": import.meta.env.VITE_CONTROL_PLANE_API_KEY ?? "",
         },
         signal,
       });
@@ -142,7 +146,6 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        "x-api-key": import.meta.env.VITE_CONTROL_PLANE_API_KEY ?? "",
         ...init?.headers,
       },
     });
@@ -259,11 +262,11 @@ export async function getReceipt(id: string): Promise<Receipt> {
 
 export async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${ORIGIN}/health`, {
+    const healthUrl = CP ? `${ORIGIN}/health` : "/health";
+    const res = await fetch(healthUrl, {
       method: "GET",
       headers: {
         Accept: "application/json",
-        "x-api-key": import.meta.env.VITE_CONTROL_PLANE_API_KEY ?? "",
       },
     });
     return res.ok;

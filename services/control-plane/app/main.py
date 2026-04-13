@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -25,7 +26,8 @@ from app.api.routes import (
     updates,
     workers,
 )
-from app.core.config import get_settings
+from app.core.auth import assert_auth_config_for_startup
+from app.core.config import ControlPlaneAuthMode, get_settings
 from app.core.db import engine
 from app.core.logging import configure_logging, get_logger
 
@@ -42,41 +44,60 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         "database connectivity verified service=%s",
         settings.SERVICE_NAME,
     )
+    testing = os.environ.get("CONTROL_PLANE_TESTING") == "1"
+    assert_auth_config_for_startup(get_settings(), testing=testing)
+    if not testing and settings.CONTROL_PLANE_AUTH_MODE == ControlPlaneAuthMode.LOCAL_TRUSTED:
+        log.warning(
+            "SECURITY: CONTROL_PLANE_AUTH_MODE=local_trusted — API key is not enforced for mutations; "
+            "use only on trusted localhost networks."
+        )
     yield
-    await engine.dispose()
+    # Pytest drives repeated ASGI lifespans in-process; disposing the global engine
+    # breaks later tests. Production (uvicorn) still shuts down cleanly without this flag.
+    if os.environ.get("CONTROL_PLANE_TESTING") != "1":
+        await engine.dispose()
 
 
-app = FastAPI(title="Jarvis Control Plane", lifespan=lifespan)
+def create_app() -> FastAPI:
+    """Application factory — used by uvicorn and by the pytest ASGI client."""
+    application = FastAPI(title="Jarvis Control Plane", lifespan=lifespan)
+    _register_routes(application)
+    return application
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-app.include_router(health.router, tags=["health"])
+def _register_routes(application: FastAPI) -> None:
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-api_v1_prefix = "/api/v1"
-app.include_router(commands.router, prefix=f"{api_v1_prefix}/commands", tags=["commands"])
-app.include_router(missions.router, prefix=f"{api_v1_prefix}/missions", tags=["missions"])
-app.include_router(
-    github_integration.router,
-    prefix=f"{api_v1_prefix}/missions",
-    tags=["integrations-github"],
-)
-app.include_router(
-    gmail_integration.router,
-    prefix=f"{api_v1_prefix}/missions",
-    tags=["integrations-gmail"],
-)
-app.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
-app.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])
-app.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])
-app.include_router(workers.router, prefix=api_v1_prefix, tags=["workers"])
-app.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
-app.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])
-app.include_router(operator_memory.router, prefix=api_v1_prefix, tags=["operator-memory"])
-app.include_router(heartbeat.router, prefix=api_v1_prefix, tags=["heartbeat"])
-app.include_router(sms_integration.router, prefix=api_v1_prefix, tags=["integrations-sms"])
+    application.include_router(health.router, tags=["health"])
+
+    api_v1_prefix = "/api/v1"
+    application.include_router(commands.router, prefix=f"{api_v1_prefix}/commands", tags=["commands"])
+    application.include_router(missions.router, prefix=f"{api_v1_prefix}/missions", tags=["missions"])
+    application.include_router(
+        github_integration.router,
+        prefix=f"{api_v1_prefix}/missions",
+        tags=["integrations-github"],
+    )
+    application.include_router(
+        gmail_integration.router,
+        prefix=f"{api_v1_prefix}/missions",
+        tags=["integrations-gmail"],
+    )
+    application.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
+    application.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])
+    application.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])
+    application.include_router(workers.router, prefix=api_v1_prefix, tags=["workers"])
+    application.include_router(system.router, prefix=api_v1_prefix, tags=["system"])
+    application.include_router(operator.router, prefix=api_v1_prefix, tags=["operator"])
+    application.include_router(operator_memory.router, prefix=api_v1_prefix, tags=["operator-memory"])
+    application.include_router(heartbeat.router, prefix=api_v1_prefix, tags=["heartbeat"])
+    application.include_router(sms_integration.router, prefix=api_v1_prefix, tags=["integrations-sms"])
+
+
+app = create_app()

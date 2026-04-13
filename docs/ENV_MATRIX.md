@@ -13,7 +13,8 @@ Legend: **R** = required for that surface to work as designed; **O** = optional 
 | `DATABASE_URL` | Async SQLAlchemy URL (PostgreSQL) | R | All persistence | Control plane fails to start or migrate |
 | `REDIS_URL` | Redis for realtime / hub | R | SSE, stream-related paths | Errors when Redis needed |
 | `SECRET_KEY` | Signing / internal crypto | R | FastAPI app | Misconfig / startup failure |
-| `CONTROL_PLANE_API_KEY` | `x-api-key` for mutating routes | R | Commands, approvals decisions, worker POSTs, heartbeat run | 401 on protected routes |
+| `CONTROL_PLANE_AUTH_MODE` | `api_key` (default) or `local_trusted` (explicit insecure local) | R | Mutation auth policy | Startup fails if `api_key` and key empty; `local_trusted` logs a warning |
+| `CONTROL_PLANE_API_KEY` | `x-api-key` for mutating routes (required when `api_key` mode) | R* | Commands, approvals decisions, worker POSTs, heartbeat run | 401 on protected routes |
 | `ALLOWED_ORIGINS` | CORS origins | O | Browser clients (Command Center, LAN) | Browser blocks API calls |
 | `JARVIS_GITHUB_TOKEN` | GitHub REST | O | Governed GitHub workflows | Workflows fail at execute time |
 | `JARVIS_GMAIL_*` | Gmail OAuth / tokens | O | Governed Gmail workflows | Gmail paths fail |
@@ -25,6 +26,8 @@ Legend: **R** = required for that surface to work as designed; **O** = optional 
 | `HEARTBEAT_*` | Stale mission, worker, cost thresholds | O | `POST /heartbeat/run` findings | Fewer / no supervision findings |
 | `JARVIS_HEALTH_*` | URLs for system health probes | O | Integrations/system health page | Probes show unknown / warn |
 
+\*When `CONTROL_PLANE_AUTH_MODE=api_key`, `CONTROL_PLANE_API_KEY` must be non-empty or the process will not start.
+
 See **`services/control-plane/.env.example`** for the full commented list.
 
 ---
@@ -33,11 +36,11 @@ See **`services/control-plane/.env.example`** for the full commented list.
 
 | Variable | Purpose | R/O | Feature | If missing |
 |----------|---------|-----|---------|------------|
-| `VITE_CONTROL_PLANE_URL` | API base | R | All API calls | UI cannot reach backend |
-| `VITE_CONTROL_PLANE_API_KEY` | Browser `x-api-key` | R* | Mutating routes from UI | Read-only or failures on write |
+| `VITE_CONTROL_PLANE_URL` | API origin (empty = same-origin `/api` via dev proxy or reverse proxy) | O | All API calls | Defaults to same-origin when empty |
+| `CONTROL_PLANE_API_KEY` | Dev-server only: proxy injects `x-api-key` (not in JS bundle) | R* | Mutations from UI in `npm run dev` | 401 on writes if unset and server uses `api_key` mode |
 | `VITE_VOICE_SERVER_URL` | Voice HTTP/WS base | O | Voice-related UI | Voice features unavailable |
 
-\*Required for normal operator actions (approvals, commands, etc.).
+\*Set to the same value as `CONTROL_PLANE_API_KEY` in `services/control-plane/.env` for local dev.
 
 ---
 

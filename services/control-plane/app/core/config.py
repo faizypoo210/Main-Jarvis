@@ -1,14 +1,22 @@
 """Application settings from environment variables.
 
 TRUTH_SOURCE: .env keys documented in services/control-plane/.env.example; required for boot.
-MACHINE_CONFIG_REQUIRED: DATABASE_URL, SECRET_KEY, and optional CONTROL_PLANE_API_KEY on the host.
+MACHINE_CONFIG_REQUIRED: DATABASE_URL, SECRET_KEY, CONTROL_PLANE_AUTH_MODE, and (for api_key mode) CONTROL_PLANE_API_KEY.
 """
 
 from __future__ import annotations
 
+from enum import StrEnum
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ControlPlaneAuthMode(StrEnum):
+    """How protected routes enforce write access."""
+
+    API_KEY = "api_key"
+    LOCAL_TRUSTED = "local_trusted"
 
 
 class Settings(BaseSettings):
@@ -20,6 +28,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     LOG_LEVEL: str = "INFO"
     ALLOWED_ORIGINS: str = "http://localhost:3000"
+    # api_key: require CONTROL_PLANE_API_KEY; local_trusted: explicit insecure local dev (no key enforcement).
+    CONTROL_PLANE_AUTH_MODE: ControlPlaneAuthMode = ControlPlaneAuthMode.API_KEY
     CONTROL_PLANE_API_KEY: str = ""
     # Optional HTTP probes for GET /api/v1/system/health (empty = do not assume localhost execution truth).
     JARVIS_HEALTH_OPENCLAW_GATEWAY_URL: str = ""

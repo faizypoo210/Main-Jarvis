@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import tempfile
+from uuid import UUID
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -44,6 +45,7 @@ from governed_action_voice import (
     note_voice_command_mission,
     try_handle_governed_action_voice,
 )
+from voice_routing import MissionSubscriptionIndex
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
@@ -132,20 +134,35 @@ def _transcribe_file(path: str) -> str:
     return "".join(s.text for s in segments).strip()
 
 
-async def post_command_to_control_plane(text: str) -> str | None:
+def _short_sid(s: str | None) -> str:
+    if not s:
+        return "none"
+    s = s.strip()
+    if len(s) <= 12:
+        return s
+    return f"{s[:8]}…"
+
+
+async def post_command_to_control_plane(
+    text: str, *, surface_session_id: str | None = None
+) -> str | None:
     """POST command to the Jarvis control plane; return mission_id or None on failure."""
     url = f"{CONTROL_PLANE_URL}/api/v1/commands"
+    body: dict[str, object] = {"text": text, "source": "voice"}
+    if surface_session_id:
+        try:
+            body["surface_session_id"] = str(UUID(surface_session_id.strip()))
+        except ValueError:
+            log.warning("voice command: invalid surface_session_id; omitting")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
-            r = await client.post(
-                url, json={"text": text, "source": "voice"}, headers=headers
-            )
+            r = await client.post(url, json=body, headers=headers)
             r.raise_for_status()
-            body = r.json()
-            mid = body.get("mission_id")
+            resp = r.json()
+            mid = resp.get("mission_id")
             if mid is None:
-                log.warning("control plane response missing mission_id: %s", body)
+                log.warning("control plane response missing mission_id: %s", resp)
                 return None
             return str(mid)
     except Exception as e:
@@ -153,49 +170,101 @@ async def post_command_to_control_plane(text: str) -> str | None:
         return None
 
 
-class ConnectionManager:
+class VoiceConnectionManager:
+    """WebSocket registry + per-connection mission subscriptions for routed updates/TTS."""
+
     def __init__(self) -> None:
-        self._clients: set[WebSocket] = set()
+        self._index = MissionSubscriptionIndex()
+        self._sockets: dict[int, WebSocket] = {}
+        self._surface_session: dict[int, str | None] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket) -> None:
+    async def connect(
+        self,
+        ws: WebSocket,
+        *,
+        surface_session_id: str | None,
+        thread_mission_id: str | None,
+    ) -> int:
         await ws.accept()
+        k = id(ws)
+        initial: set[str] = set()
+        if thread_mission_id and str(thread_mission_id).strip():
+            initial.add(str(thread_mission_id).strip())
         async with self._lock:
-            self._clients.add(ws)
+            self._sockets[k] = ws
+            self._surface_session[k] = surface_session_id.strip() if surface_session_id else None
+            self._index.add_connection(k, initial)
+        log.info(
+            "voice_ws_registered key=%s surface_session=%s initial_mission_subs=%s",
+            k,
+            _short_sid(self._surface_session.get(k)),
+            len(initial),
+        )
+        return k
+
+    def surface_session_for(self, ws_key: int) -> str | None:
+        return self._surface_session.get(ws_key)
+
+    async def subscribe_mission(self, ws_key: int, mission_id: str) -> None:
+        mid = str(mission_id).strip()
+        if not mid:
+            return
+        async with self._lock:
+            self._index.add_mission(ws_key, mid)
+        log.info(
+            "voice_mission_subscribed key=%s mission_id=%s total_subs=%s",
+            ws_key,
+            mid[:8] + "…" if len(mid) > 8 else mid,
+            self._index.snapshot_mission_count(ws_key),
+        )
 
     async def disconnect(self, ws: WebSocket) -> None:
+        k = id(ws)
         async with self._lock:
-            self._clients.discard(ws)
+            self._sockets.pop(k, None)
+            self._surface_session.pop(k, None)
+            self._index.remove_connection(k)
+        log.info("voice_ws_disconnected key=%s", k)
 
     async def send_json(self, ws: WebSocket, data: dict) -> None:
         await ws.send_json(data)
 
-    async def broadcast_json(self, data: dict) -> None:
+    async def websocket_targets_for_mission(self, mission_id: str) -> list[WebSocket]:
+        mid = str(mission_id).strip()
+        if not mid:
+            return []
         async with self._lock:
-            dead: list[WebSocket] = []
-            for ws in self._clients:
-                try:
-                    await ws.send_json(data)
-                except Exception:
-                    dead.append(ws)
-            for ws in dead:
-                self._clients.discard(ws)
+            keys = self._index.connection_keys_for_mission(mid)
+            out: list[WebSocket] = []
+            for k in keys:
+                ws = self._sockets.get(k)
+                if ws is not None:
+                    out.append(ws)
+            return out
 
     async def count_clients(self) -> int:
         async with self._lock:
-            return len(self._clients)
+            return len(self._sockets)
 
 
-async def _tts_and_broadcast(manager: ConnectionManager, text: str, *, kind: str) -> None:
-    if not text.strip():
+async def _tts_to_websockets(
+    _manager: VoiceConnectionManager, websockets: list[WebSocket], text: str, *, kind: str
+) -> None:
+    if not text.strip() or not websockets:
         return
     loop = asyncio.get_event_loop()
     wav = await loop.run_in_executor(None, _tts_wav_bytes, text)
     b64 = base64.b64encode(wav).decode("ascii")
-    await manager.broadcast_json({"type": "tts", "kind": kind, "text": text, "audio_b64": b64})
+    msg = {"type": "tts", "kind": kind, "text": text, "audio_b64": b64}
+    for ws in websockets:
+        try:
+            await ws.send_json(msg)
+        except Exception as e:
+            log.warning("voice_tts_send_failed: %s", e)
 
 
-async def _redis_updates_loop(manager: ConnectionManager) -> None:
+async def _redis_updates_loop(manager: VoiceConnectionManager) -> None:
     assert _redis is not None
     last_id = "$"
     while True:
@@ -226,14 +295,33 @@ async def _redis_updates_loop(manager: ConnectionManager) -> None:
                     payload = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                text = (
+                mid = str(payload.get("mission_id") or "").strip()
+                if not mid:
+                    log.warning(
+                        "voice_redis_update_no_mission_id keys=%s",
+                        list(payload.keys())[:20],
+                    )
+                    continue
+                targets = await manager.websocket_targets_for_mission(mid)
+                if not targets:
+                    log.info(
+                        "voice_redis_no_subscribers mission_id=%s",
+                        (mid[:8] + "…") if len(mid) > 8 else mid,
+                    )
+                    continue
+                tts_text = str(
                     payload.get("summary")
                     or payload.get("message")
                     or payload.get("command")
                     or json.dumps(payload, default=str)[:500]
                 )
-                await manager.broadcast_json({"type": "coordinator_update", "payload": payload})
-                await _tts_and_broadcast(manager, str(text), kind="update")
+                upd = {"type": "coordinator_update", "payload": payload}
+                for ws in targets:
+                    try:
+                        await manager.send_json(ws, upd)
+                    except Exception as e:
+                        log.warning("voice_coordinator_update_send_failed: %s", e)
+                await _tts_to_websockets(manager, targets, tts_text, kind="update")
 
 
 async def _voice_worker_heartbeat_loop() -> None:
@@ -268,7 +356,7 @@ async def _voice_worker_heartbeat_loop() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _redis, _manager, _updates_task, _worker_hb_task
     _redis = Redis.from_url(REDIS_URL, decode_responses=False)
-    _manager = ConnectionManager()
+    _manager = VoiceConnectionManager()
     _updates_task = asyncio.create_task(_redis_updates_loop(_manager))
     if os.getenv("CONTROL_PLANE_API_KEY", "").strip():
         _worker_hb_task = asyncio.create_task(_voice_worker_heartbeat_loop())
@@ -301,9 +389,17 @@ async def index() -> FileResponse:
 async def websocket_endpoint(websocket: WebSocket) -> None:
     assert _manager is not None
     assert _redis is not None
-    await _manager.connect(websocket)
+    qp = websocket.query_params
+    surface_sid = (qp.get("surface_session_id") or "").strip() or None
+    thread_mid = (qp.get("thread_mission_id") or "").strip() or None
+    ws_key: int | None = None
     loop = asyncio.get_event_loop()
     try:
+        ws_key = await _manager.connect(
+            websocket,
+            surface_session_id=surface_sid,
+            thread_mission_id=thread_mid,
+        )
         while True:
             msg = await websocket.receive()
             if msg.get("type") == "websocket.disconnect":
@@ -349,7 +445,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             await _manager.send_json(websocket, {"type": "heard", "text": text})
 
-            ws_key = id(websocket)
             tnorm = _norm_for_intent(text)
 
             async def _speak_local(reply: str, *, kind: str) -> None:
@@ -422,9 +517,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _speak_local(approval_reply, kind="approval")
                 continue
 
-            mission_id = await post_command_to_control_plane(text)
+            surface = _manager.surface_session_for(ws_key)
+            mission_id = await post_command_to_control_plane(
+                text, surface_session_id=surface
+            )
             if mission_id is not None:
                 note_voice_command_mission(ws_key, mission_id)
+                await _manager.subscribe_mission(ws_key, mission_id)
                 user_ollama = (
                     f"The user said: '{text}'. Mission ID {mission_id} has been created."
                 )
@@ -459,7 +558,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             await _manager.send_json(websocket, {"type": "reply", "text": reply})
-            _last_voice_reply[id(websocket)] = reply
+            _last_voice_reply[ws_key] = reply
             await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
             try:
                 wav = await loop.run_in_executor(None, _tts_wav_bytes, reply)
@@ -476,7 +575,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except Exception as e:
         log.exception("websocket error: %s", e)
     finally:
-        _forget_voice_session(id(websocket))
+        if ws_key is not None:
+            _forget_voice_session(ws_key)
         await _manager.disconnect(websocket)
 
 

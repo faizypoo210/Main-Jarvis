@@ -181,9 +181,16 @@ export function VoiceMode({
     setWsState("connecting");
     setServerOrb("idle");
 
-    const url = getVoiceWsUrl();
+    const surfaceSessionId = crypto.randomUUID();
+    const base = getVoiceWsUrl();
+    const u = new URL(base);
+    u.searchParams.set("surface_session_id", surfaceSessionId);
+    const tm = threadMissionId?.trim();
+    if (tm) {
+      u.searchParams.set("thread_mission_id", tm);
+    }
     let cancelled = false;
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(u.toString());
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
@@ -290,7 +297,7 @@ export function VoiceMode({
       }
       wsRef.current = null;
     };
-  }, [open, clearResolveError]);
+  }, [open, clearResolveError, threadMissionId]);
 
   const startRecording = useCallback(async () => {
     if (wsRef.current?.readyState !== WebSocket.OPEN) {

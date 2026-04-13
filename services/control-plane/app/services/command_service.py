@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from redis.asyncio import Redis
@@ -20,6 +21,20 @@ STREAM_COMMANDS = "jarvis.commands"
 log = get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class JarvisCommandPublishResult:
+    ok: bool
+    error_detail: str | None = None
+    error_class: str | None = None
+
+
+def _truncate_publish_detail(text: str, max_len: int = 400) -> str:
+    s = (text or "").strip()
+    if len(s) <= max_len:
+        return s
+    return s[: max_len - 3] + "..."
+
+
 def _should_skip_runtime_publish(context: dict[str, Any] | None) -> bool:
     """Narrow opt-in: synthetic API rehearsals skip Redis so they do not collide with coordinator/executor."""
     if not context:
@@ -35,7 +50,7 @@ async def _publish_jarvis_command(
     text: str,
     created_by: str,
     context: dict[str, Any] | None = None,
-) -> None:
+) -> JarvisCommandPublishResult:
     settings = get_settings()
     url = settings.REDIS_URL or "redis://localhost:6379"
     payload: dict[str, Any] = {
@@ -49,8 +64,14 @@ async def _publish_jarvis_command(
     try:
         r = Redis.from_url(url, decode_responses=False)
         await r.xadd(STREAM_COMMANDS, {"data": json.dumps(payload)})
+        return JarvisCommandPublishResult(ok=True)
     except Exception as e:
         log.warning("redis jarvis.commands publish failed: %s", e)
+        return JarvisCommandPublishResult(
+            ok=False,
+            error_detail=_truncate_publish_detail(str(e)),
+            error_class=type(e).__name__,
+        )
     finally:
         if r is not None:
             await r.close()
@@ -97,21 +118,48 @@ class CommandService:
 
         await self._session.commit()
 
-        if not _should_skip_runtime_publish(data.context):
-            await _publish_jarvis_command(
-                str(mission.id),
-                data.text,
-                data.source,
-                data.context,
-            )
-        else:
+        if _should_skip_runtime_publish(data.context):
             log.info(
                 "skipping jarvis.commands publish (synthetic rehearsal; mission_id=%s)",
                 mission.id,
+            )
+            return CommandResponse(
+                mission_id=mission.id,
+                mission_status=mission.status,
+                message="Mission created and recorded.",
+            )
+
+        publish = await _publish_jarvis_command(
+            str(mission.id),
+            data.text,
+            data.source,
+            data.context,
+        )
+        if not publish.ok:
+            await self._events.record_event(
+                mission_id=mission.id,
+                event_type="runtime_dispatch_failed",
+                actor_type="system",
+                actor_id="control_plane",
+                payload={
+                    "stream": STREAM_COMMANDS,
+                    "error_class": publish.error_class or "Exception",
+                    "detail": publish.error_detail or "unknown",
+                },
+            )
+            updated = await self._missions.update_status(mission.id, "failed")
+            await self._session.commit()
+            return CommandResponse(
+                mission_id=mission.id,
+                mission_status=updated.status if updated else "failed",
+                message=(
+                    "Mission recorded, but dispatch to the runtime queue failed. "
+                    "Status set to failed; see mission events for detail."
+                ),
             )
 
         return CommandResponse(
             mission_id=mission.id,
             mission_status=mission.status,
-            message="Mission created and recorded.",
+            message="Mission created, recorded, and dispatched.",
         )

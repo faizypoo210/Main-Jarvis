@@ -9,6 +9,10 @@ export const operatorCopy = {
   },
   liveReconnecting: "Live updates reconnecting.",
   liveOfflinePolling: "Live stream offline — using periodic sync.",
+  /** Conversation thread — brief activity before mission events arrive (not a Jarvis reply). */
+  threadWaitingForMission: "Waiting for mission state…",
+  /** After command intake when Redis dispatch fails (see `runtime_dispatch_failed` event). */
+  runtimeDispatchFailed: "Runtime dispatch failed — the mission was not queued for execution.",
   bundlePartial: "Mission state updated. Detailed output unavailable.",
   receiptNoSummaryFailed:
     "Execution failed before a receipt summary was available.",

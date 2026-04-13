@@ -181,6 +181,47 @@ async def test_post_receipt_round_trip(
 
 
 @pytest.mark.asyncio
+async def test_command_intake_dispatch_failure_is_durable_truth(
+    client: AsyncClient, api_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Redis publish failure must not look like a healthy pending runtime mission."""
+
+    from app.services import command_service as cs
+
+    async def fake_publish(*args: object, **kwargs: object) -> cs.JarvisCommandPublishResult:
+        return cs.JarvisCommandPublishResult(
+            ok=False,
+            error_detail="connection refused",
+            error_class="ConnectionError",
+        )
+
+    monkeypatch.setattr(cs, "_publish_jarvis_command", fake_publish)
+
+    r = await client.post(
+        "/api/v1/commands",
+        json={"text": "pytest dispatch failure", "source": "api"},
+        headers=api_headers,
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mission_status"] == "failed"
+    assert "dispatch" in data["message"].lower()
+    mid = UUID(data["mission_id"])
+
+    er = await client.get(f"/api/v1/missions/{mid}/events")
+    assert er.status_code == 200
+    events: list[dict[str, Any]] = er.json()
+    types = {e["event_type"] for e in events}
+    assert "created" in types
+    assert "runtime_dispatch_failed" in types
+    assert "mission_status_changed" in types
+
+    mr = await client.get(f"/api/v1/missions/{mid}")
+    assert mr.status_code == 200
+    assert mr.json()["status"] == "failed"
+
+
+@pytest.mark.asyncio
 async def test_api_v1_system_health_includes_worker_registry(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

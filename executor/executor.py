@@ -504,7 +504,8 @@ async def _post_control_plane(
     session: aiohttp.ClientSession,
     path: str,
     payload: dict[str, Any],
-) -> None:
+) -> bool:
+    """POST JSON to control plane. Returns True only on HTTP 2xx."""
     url = f"{CONTROL_PLANE_URL}{path if path.startswith('/') else '/' + path}"
     headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
     try:
@@ -521,12 +522,15 @@ async def _post_control_plane(
                         }
                     )
                 )
+                return False
+            return True
     except Exception as e:
         log.warning(
             json.dumps(
                 {"control_plane": "fail", "path": path, "detail": str(e)}
             )
         )
+        return False
 
 
 async def _xadd_updates(
@@ -546,6 +550,105 @@ async def _xadd_updates(
         await redis.xadd(STREAM_UPDATES, {"data": json.dumps(payload)})
     except Exception as e:
         log.warning(json.dumps({"redis_updates": "fail", "detail": str(e)}))
+
+
+async def _finish_unexpected_execution_failure(
+    session: aiohttp.ClientSession,
+    redis: Redis,
+    msg_id: bytes,
+    raw_fields: dict[Any, Any],
+    exc: BaseException,
+) -> None:
+    """Durable failure path for unexpected errors in handle_execution.
+
+    XACK only after control plane acknowledges receipt + status, or when the message
+    is poison (no mission_id) and we intentionally drop it to avoid a stuck loop.
+    """
+    f = _decode_fields(raw_fields)
+    data = _parse_data(f)
+    mission_id = str(data.get("mission_id") or "").strip()
+    err_type = type(exc).__name__
+    detail = _sanitize_error_excerpt(str(exc))
+
+    if not mission_id:
+        log.warning(
+            json.dumps(
+                {
+                    "executor": "unexpected_failure_poison_message",
+                    "error_type": err_type,
+                    "detail": detail,
+                    "action": "xack_no_mission_id",
+                }
+            )
+        )
+        try:
+            await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+        except Exception as ack_e:
+            log.warning(
+                json.dumps({"error": "xack_poison_fail", "detail": str(ack_e)})
+            )
+        return
+
+    log.error(
+        json.dumps(
+            {
+                "executor": "unexpected_failure",
+                "mission_id": mission_id,
+                "error_type": err_type,
+                "detail": detail,
+            }
+        )
+    )
+
+    receipt_payload: dict[str, Any] = {
+        "success": False,
+        "error_class": "executor_internal_error",
+        "error_type": err_type,
+        "detail": detail,
+    }
+
+    receipt_ok = await _post_control_plane(
+        session,
+        "/api/v1/receipts",
+        {
+            "mission_id": mission_id,
+            "receipt_type": "executor_internal_failure",
+            "source": "executor",
+            "payload": receipt_payload,
+            "summary": "Executor stopped unexpectedly before recording a normal receipt.",
+        },
+    )
+    status_ok = await _post_control_plane(
+        session,
+        f"/api/v1/missions/{mission_id}/status",
+        {"status": "failed"},
+    )
+
+    if receipt_ok and status_ok:
+        await _xadd_updates(
+            redis,
+            mission_id=mission_id,
+            message="Executor encountered an internal error before completing.",
+            status="failed",
+        )
+        try:
+            await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+        except Exception as ack_e:
+            log.warning(
+                json.dumps({"error": "xack_after_durable_fail", "detail": str(ack_e)})
+            )
+        return
+
+    log.error(
+        json.dumps(
+            {
+                "executor": "durable_failure_not_recorded_not_xacking",
+                "mission_id": mission_id,
+                "receipt_ok": receipt_ok,
+                "status_ok": status_ok,
+            }
+        )
+    )
 
 
 async def handle_execution(
@@ -686,14 +789,9 @@ class ExecutorWorker:
                                         {"error": "handle_execution", "detail": str(e)}
                                     )
                                 )
-                                try:
-                                    await r.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
-                                except Exception as ack_e:
-                                    log.warning(
-                                        json.dumps(
-                                            {"error": "xack_after_fail", "detail": str(ack_e)}
-                                        )
-                                    )
+                                await _finish_unexpected_execution_failure(
+                                    http, r, msg_id, raw_fields, e
+                                )
 
         tasks: list[asyncio.Task[None]] = [
             asyncio.create_task(_read_loop()),

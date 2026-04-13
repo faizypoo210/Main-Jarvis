@@ -88,17 +88,12 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
   const { resolve, resolvingApprovalId, resolveErrorApprovalId, recentlyResolvedDecisionFor } =
     useResolveApprovalAction();
 
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchedMissionIdsRef = useRef<Set<string>>(new Set());
+  /** Clears transient "waiting…" activity once `processMissionTick` runs for that mission. */
+  const pendingActivityByMissionRef = useRef<Map<string, string>>(new Map());
   const processedEventIdsRef = useRef<Set<string>>(new Set());
   const terminalShownRef = useRef<Map<string, Set<string>>>(new Map());
   const tickCountsRef = useRef<Record<string, number>>({});
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
 
   const stopPoll = useCallback((missionId: string) => {
     delete tickCountsRef.current[missionId];
@@ -134,6 +129,12 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
 
   const processMissionTick = useCallback(
     async (missionId: string) => {
+      const pendingAid = pendingActivityByMissionRef.current.get(missionId);
+      if (pendingAid) {
+        pendingActivityByMissionRef.current.delete(missionId);
+        setItems((prev) => prev.filter((i) => i.id !== pendingAid));
+      }
+
       tickCountsRef.current[missionId] = (tickCountsRef.current[missionId] ?? 0) + 1;
       if ((tickCountsRef.current[missionId] ?? 0) > MAX_TICKS) {
         stopPoll(missionId);
@@ -193,6 +194,22 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
               },
             ];
           });
+          continue;
+        }
+
+        if (ev.event_type === "runtime_dispatch_failed") {
+          processedEventIdsRef.current.add(ev.id);
+          const payload = ev.payload as Record<string, unknown> | null;
+          const detail = typeof payload?.detail === "string" ? payload.detail.trim() : "";
+          const line =
+            detail.length > 0
+              ? `${operatorCopy.runtimeDispatchFailed} (${detail})`.slice(0, 280)
+              : operatorCopy.runtimeDispatchFailed;
+          setItems((prev) => {
+            if (prev.some((x) => x.id === `dispatch-fail-${ev.id}`)) return prev;
+            return [...prev, { id: `dispatch-fail-${ev.id}`, kind: "status", text: line }];
+          });
+          shouldStop = true;
           continue;
         }
 
@@ -454,34 +471,15 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
       try {
         const res = await api.createCommand(text, "command_center");
         const uid = crypto.randomUUID();
-        const activityId = `activity-${uid}`;
+        const mid = res.mission_id;
+        const activityId = `activity-${mid}`;
+        pendingActivityByMissionRef.current.set(mid, activityId);
         setItems((prev) => [
           ...prev,
           { id: `u-${uid}`, kind: "user", body: text },
-          { id: activityId, kind: "activity", text: "Processing your request..." },
+          { id: activityId, kind: "activity", text: operatorCopy.threadWaitingForMission },
         ]);
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(() => {
-          timeoutRef.current = null;
-          const mid = res.mission_id;
-          setItems((prev) => {
-            const without = prev.filter((x) => x.id !== activityId);
-            return [
-              ...without,
-              {
-                id: `j-${uid}`,
-                kind: "jarvis",
-                body: "Understood. I'm on it — I'll keep this thread updated.",
-                time: new Date().toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
-                missionIdTag: mid,
-              },
-            ];
-          });
-          startMissionPipeline(mid);
-        }, 1200);
+        startMissionPipeline(mid);
       } catch {
         setSubmitError("Could not reach Jarvis — try again");
       } finally {

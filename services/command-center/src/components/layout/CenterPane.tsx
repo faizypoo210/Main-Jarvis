@@ -1,4 +1,4 @@
-import { Bell, PanelRight } from "lucide-react";
+import { Bell, PanelRight, Sparkles } from "lucide-react";
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { checkHealth } from "../../lib/api";
@@ -19,10 +19,16 @@ export function CenterPane({
   children,
   onToggleRightPanel,
   showRightToggle,
+  onOpenQuickCommand,
+  quickCommandShortcutLabel,
 }: {
   children: ReactNode;
   onToggleRightPanel?: () => void;
   showRightToggle?: boolean;
+  /** Opens the shell quick command palette (global mission intake). */
+  onOpenQuickCommand?: () => void;
+  /** e.g. ⌘K / Ctrl+K — shown next to the button on sm+ */
+  quickCommandShortcutLabel?: string;
 }) {
   const loc = useLocation();
   const title = titles[loc.pathname] ?? "Command Center";
@@ -69,6 +75,27 @@ export function CenterPane({
           </div>
         </div>
         <div className="flex items-center gap-2 md:gap-3">
+          {onOpenQuickCommand ? (
+            <button
+              type="button"
+              onClick={onOpenQuickCommand}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--bg-border)] bg-[var(--bg-elevated)]/40 px-2 py-1.5 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/70"
+              aria-label="Quick command"
+              title={
+                quickCommandShortcutLabel
+                  ? `${quickCommandShortcutLabel} or / to open`
+                  : "Open quick command"
+              }
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+              <span className="hidden sm:inline">Quick</span>
+              {quickCommandShortcutLabel ? (
+                <kbd className="hidden rounded border border-[var(--bg-border)] bg-[var(--bg-void)] px-1 py-0.5 font-mono text-[9px] font-normal text-[var(--text-muted)] sm:inline">
+                  {quickCommandShortcutLabel}
+                </kbd>
+              ) : null}
+            </button>
+          ) : null}
           {showRightToggle ? (
             <button
               type="button"

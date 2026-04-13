@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
-import { Outlet, useOutletContext } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
+import * as api from "../../lib/api";
 import { useControlPlaneLive, useMissions, usePendingApprovals } from "../../hooks/useControlPlane";
 import { VoiceMode } from "../voice/VoiceMode";
 import { CenterPane } from "./CenterPane";
 import { LeftRail } from "./LeftRail";
 import { MobileBottomNav } from "./MobileBottomNav";
+import { QuickCommandPalette, useQuickCommandShortcuts } from "./QuickCommandPalette";
 import { RightPanel } from "./RightPanel";
 
 export type ShellOutletContext = {
@@ -23,6 +25,8 @@ export function useShellOutlet() {
 
 export function AppShell() {
   const live = useControlPlaneLive();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { missions: panelMissions, loading: missionsLoading } = useMissions({ limit: 100 });
   const { missions: activeMissions } = useMissions({ status: "active", limit: 500 });
   const { approvals } = usePendingApprovals();
@@ -33,6 +37,33 @@ export function AppShell() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
   const [threadMissionId, setThreadMissionId] = useState<string | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+
+  const openQuickCommand = useCallback(() => setQuickOpen(true), []);
+  const closeQuickCommand = useCallback(() => setQuickOpen(false), []);
+  useQuickCommandShortcuts(quickOpen, openQuickCommand, closeQuickCommand);
+
+  const quickShortcutLabel = useMemo(
+    () =>
+      typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent)
+        ? "⌘K"
+        : "Ctrl+K",
+    []
+  );
+
+  const handleQuickCommandSubmit = useCallback(
+    async (text: string) => {
+      const res = await api.createCommand(text, "command_center");
+      const mid = String(res.mission_id);
+      setThreadMissionId(mid);
+      await live.bootstrapMission(mid);
+      setQuickOpen(false);
+      if (location.pathname !== "/") {
+        navigate("/");
+      }
+    },
+    [live, location.pathname, navigate]
+  );
 
   const outletCtx: ShellOutletContext = {
     openVoiceMode: () => setVoiceOpen(true),
@@ -52,6 +83,8 @@ export function AppShell() {
         <CenterPane
           onToggleRightPanel={() => setRightSheetOpen((o) => !o)}
           showRightToggle
+          onOpenQuickCommand={openQuickCommand}
+          quickCommandShortcutLabel={quickShortcutLabel}
         >
           <Outlet context={outletCtx} />
         </CenterPane>
@@ -98,6 +131,12 @@ export function AppShell() {
         activeMissionCount={missionActiveCount}
         liveStreamError={live.streamError}
         streamPhase={live.streamPhase}
+      />
+
+      <QuickCommandPalette
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        onSubmit={handleQuickCommandSubmit}
       />
     </div>
   );

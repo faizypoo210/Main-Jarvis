@@ -13,6 +13,7 @@ from sqlalchemy import text
 from app.api.routes import (
     approvals,
     commands,
+    intake,
     github_integration,
     gmail_integration,
     health,
@@ -80,6 +81,7 @@ def _register_routes(application: FastAPI) -> None:
 
     api_v1_prefix = "/api/v1"
     application.include_router(commands.router, prefix=f"{api_v1_prefix}/commands", tags=["commands"])
+    application.include_router(intake.router, prefix=f"{api_v1_prefix}/intake", tags=["intake"])
     application.include_router(missions.router, prefix=f"{api_v1_prefix}/missions", tags=["missions"])
     application.include_router(
         github_integration.router,

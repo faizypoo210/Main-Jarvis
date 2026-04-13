@@ -1,4 +1,9 @@
-"""Command intake."""
+"""Command intake (primitive).
+
+``POST /api/v1/commands`` always creates a mission and dispatches to the runtime queue
+(subject to context rehearsal flags). For **interpreted** natural language with routing
+and a single reply bundle, prefer ``POST /api/v1/intake`` — see ``app/api/routes/intake.py``.
+"""
 
 from __future__ import annotations
 

@@ -32,7 +32,8 @@ Authoritative backend for missions, timeline events, approvals, receipts, worker
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Liveness |
-| POST | `/api/v1/commands` | Intake command → mission + `mission_events` row |
+| POST | `/api/v1/intake` | **Unified intake** — interpret text, then mission / approval / inbox / status / reply-only (see `app/schemas/intake.py`) |
+| POST | `/api/v1/commands` | **Primitive** command → mission + `mission_events` row (no interpretation; use when callers already classified intent) |
 | GET | `/api/v1/missions` | List missions (filters: `status`, `created_by`, `limit`, `offset`) |
 | GET | `/api/v1/missions/{id}` | Single mission |
 | — | `/api/v1/missions/{id}/events`, `/approvals`, `/receipts`, `/bundle` | Mission-scoped reads |
@@ -43,5 +44,6 @@ Authoritative backend for missions, timeline events, approvals, receipts, worker
 
 ## Rules
 
-- Every command intake creates a **mission** and a **mission_event** (`event_type=created`). No exceptions.
+- **`POST /api/v1/commands`**: every call creates a **mission** and a **mission_event** (`event_type=created`). No exceptions.
+- **`POST /api/v1/intake`**: interpretation first; only **mission_request** / **mission_followup** outcomes create missions (same `CommandService` path as `/commands` when they do).
 - Use **async** SQLAlchemy sessions and async route handlers throughout.

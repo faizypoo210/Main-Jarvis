@@ -1,6 +1,9 @@
 """Command intake schemas.
 
 TRUTH_SOURCE: POST /api/v1/commands body and response; rehearsal scripts may set context.* for Redis isolation.
+
+``POST /api/v1/commands`` is the **low-level** mission factory. Unified interpretation and
+reply shaping live under ``POST /api/v1/intake`` (see ``app/schemas/intake.py``).
 """
 
 from __future__ import annotations

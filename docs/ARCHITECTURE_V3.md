@@ -14,7 +14,7 @@
 |--------|------|---------------------------|
 | **Control plane** | Authoritative HTTP API + Alembic/PostgreSQL: missions, timeline events, approvals, receipts, operator routes, integrations, heartbeat run, SMS inbound webhook | **8001** |
 | **Command Center** | React/Vite operator UI: missions, approvals (incl. review **bundle**), inbox, activity, workers, cost, integrations (readiness), evals | **5173** (dev) |
-| **Voice server** | FastAPI + WebSocket: STT/TTS; **read-only** briefings; inbox triage; approval readout/decision; governed-action **request** drafts; **`POST /commands`** for new missions | **8000** |
+| **Voice server** | FastAPI + WebSocket: STT/TTS; **read-only** briefings; inbox triage; approval readout/decision; governed-action **request** drafts; **`POST /commands`** for new missions (planned: **`POST /api/v1/intake`** on control plane as the single interpreted path) | **8000** |
 | **Coordinator** | Stateless consumer: Redis streams ↔ control plane ↔ optional **DashClaw**; publishes execution/updates streams | Env → Redis, HTTP |
 | **Executor** | Consumes **`jarvis.execution`**, invokes **OpenClaw CLI**, **`POST /api/v1/receipts`** | Redis consumer |
 | **Heartbeat worker** | Calls **`POST /api/v1/heartbeat/run`** (and related) on a schedule; drives supervision + **approval reminders** when configured | Python process + env |
@@ -74,6 +74,8 @@ Schema evolution: **Alembic** under `services/control-plane/`.
 | **Web (Command Center)** | REST + SSE (`/api/v1/updates/stream`) | Approvals, inbox triage, governed launchers → same integration POSTs as API |
 | **Voice** | WebSocket + HTTP to control plane | **`decided_via: voice`**; governed actions **`requested_via: voice`**; commands → **`POST /api/v1/commands`** |
 | **SMS** | Twilio webhook | **`decided_via: sms`**; **explicit** `APPROVE|DENY|READ` + code only |
+
+**Unified intake (v1)** — `POST /api/v1/intake` applies deterministic interpretation (`app/services/intake_interpretation.py`), returns structured `InterpretationResult` + `IntakeReplyBundle`, and routes to existing control-plane services: **`CommandService`** for mission-creating intents, **`ApprovalService.resolve_approval`** when an approval id and decision are resolvable, **operator inbox** state updates for explicit triage, and read-only **mission list** snapshots for status-style queries. **`POST /api/v1/commands`** stays the lower-level primitive that always creates a mission (surfaces that already classified intent can keep using it).
 
 ---
 

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.core.auth import require_api_key
 from app.realtime.hub import get_hub
+from app.realtime.sse_stream import sse_mission_updates_stream
 from app.schemas.updates import UpdatesStatus
 
 router = APIRouter()
@@ -21,16 +20,14 @@ async def updates_status() -> UpdatesStatus:
 
 @router.get("/stream")
 async def stream_updates(_: None = Depends(require_api_key)) -> StreamingResponse:
-    """SSE: each `data` line is a JSON object: `{type: mission_event|mission, ...}`."""
+    """SSE: each `data` line is a JSON object: `{type: mission_event|mission, ...}`.
 
-    async def event_generator():
-        hub = get_hub()
-        yield "retry: 5000\n\n"
-        async for msg in hub.subscribe():
-            yield f"data: {json.dumps(msg)}\n\n"
+    Comment lines `: keepalive` are sent on idle intervals so proxies/browsers do not drop the stream.
+    """
 
+    hub = get_hub()
     return StreamingResponse(
-        event_generator(),
+        sse_mission_updates_stream(hub),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

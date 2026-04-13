@@ -97,7 +97,7 @@ export function ControlPlaneLiveProvider({ children }: { children: ReactNode }) 
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [eventsByMissionId, setEventsByMissionId] = useState<Record<string, MissionEvent[]>>({});
   const [missionById, setMissionById] = useState<Record<string, Mission | undefined>>({});
-  const [streamPhase, setStreamPhase] = useState<StreamPhase>("reconnecting");
+  const [streamPhase, setStreamPhase] = useState<StreamPhase>("offline");
   const [streamError, setStreamError] = useState<string | null>(null);
   const [eventStreamRevision, setEventStreamRevision] = useState(0);
 
@@ -260,8 +260,6 @@ export function ControlPlaneLiveProvider({ children }: { children: ReactNode }) 
       clearBackoff();
       ac?.abort();
       ac = new AbortController();
-      setStreamPhase("reconnecting");
-      setStreamError(null);
 
       api.connectControlPlaneStream(
         (msg) => {
@@ -287,7 +285,7 @@ export function ControlPlaneLiveProvider({ children }: { children: ReactNode }) 
             if (cancelled) return;
             if (ac?.signal.aborted) return;
             setStreamPhase("offline");
-            scheduleReconnect("stream closed");
+            scheduleReconnect("SSE stream ended (EOF — proxy idle close or server closed)");
           },
         }
       );

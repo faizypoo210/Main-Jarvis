@@ -22,10 +22,13 @@ export default defineConfig(({ mode }) => {
       include: ["src/**/*.test.{ts,tsx}"],
     },
     server: {
+      // Long-lived SSE: disable /api proxy socket timeouts (defaults can drop idle streams).
       proxy: {
         "/api": {
           target: proxyTarget,
           changeOrigin: true,
+          timeout: 0,
+          proxyTimeout: 0,
           configure: (proxy) => {
             proxy.on("proxyReq", (proxyReq) => {
               if (apiKey) {

@@ -57,6 +57,40 @@ export type StreamConnectOptions = {
   onStreamEnd?: () => void;
 };
 
+/** Split buffered SSE into complete blocks; ignores comment-only blocks (e.g. `: keepalive`). */
+export function parseSseDataPayloads(buffer: string): { payloads: string[]; rest: string } {
+  const parts = buffer.split("\n\n");
+  const rest = parts.pop() ?? "";
+  const payloads: string[] = [];
+  for (const block of parts) {
+    const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
+    if (!dataLine) continue;
+    const raw = dataLine.replace(/^data:\s*/, "").trim();
+    if (raw) payloads.push(raw);
+  }
+  return { payloads, rest };
+}
+
+function sseHttpErrorMessage(res: Response, body: string): string {
+  const base = `SSE HTTP ${res.status} ${res.statusText || ""}`.trim();
+  let hint = "";
+  if (res.status === 401 || res.status === 403) {
+    hint =
+      " — auth failed (dev: CONTROL_PLANE_API_KEY must match control plane; Vite injects x-api-key)";
+  } else if (res.status >= 500) {
+    hint = " — server error";
+  }
+  const tail = body.trim() ? `: ${body.trim().slice(0, 200)}` : "";
+  return `${base}${hint}${tail}`;
+}
+
+function wrapSseFetchError(e: unknown): Error {
+  if (e instanceof TypeError) {
+    return new Error(`SSE network error (${e.message})`);
+  }
+  return e instanceof Error ? e : new Error(String(e));
+}
+
 /**
  * Fetch-based SSE reader (dev proxy injects x-api-key; production should use same-origin + edge auth).
  */
@@ -78,13 +112,13 @@ export function connectControlPlaneStream(
       });
       if (!res.ok) {
         const t = await res.text().catch(() => "");
-        onError(new Error(t || `stream HTTP ${res.status}`));
+        onError(new Error(sseHttpErrorMessage(res, t)));
         return;
       }
       options?.onOpen?.();
       const reader = res.body?.getReader();
       if (!reader) {
-        onError(new Error("stream has no body"));
+        onError(new Error("SSE stream has no body (unexpected response)"));
         return;
       }
       const dec = new TextDecoder();
@@ -93,25 +127,21 @@ export function connectControlPlaneStream(
         const { done, value } = await reader.read();
         if (done) break;
         buf += dec.decode(value, { stream: true });
-        const parts = buf.split("\n\n");
-        buf = parts.pop() ?? "";
-        for (const block of parts) {
-          const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
-          if (!dataLine) continue;
-          const raw = dataLine.replace(/^data:\s*/, "").trim();
-          if (!raw) continue;
+        const { payloads, rest } = parseSseDataPayloads(buf);
+        buf = rest;
+        for (const raw of payloads) {
           try {
             const j = JSON.parse(raw) as LiveStreamMessage;
             onMessage(j);
           } catch {
-            /* ignore malformed chunk */
+            /* malformed JSON in data: line — skip without tearing down the stream */
           }
         }
       }
       options?.onStreamEnd?.();
     } catch (e: unknown) {
       if (signal.aborted) return;
-      onError(e instanceof Error ? e : new Error(String(e)));
+      onError(wrapSseFetchError(e));
     }
   })();
 }

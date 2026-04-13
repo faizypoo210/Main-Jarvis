@@ -80,6 +80,8 @@ npm run build
 
 Vitest + Testing Library cover a few high-value shell/runtime behaviors; production verification remains `npm run build`.
 
+**SSE live updates:** In dev, Command Center uses Vite’s `/api` proxy, which injects `x-api-key` from `CONTROL_PLANE_API_KEY`. The stream sends periodic `: keepalive` comment lines; if that key does not match the control plane, REST can look fine while `/api/v1/updates/stream` returns 401.
+
 ### Run a subset
 
 ```powershell

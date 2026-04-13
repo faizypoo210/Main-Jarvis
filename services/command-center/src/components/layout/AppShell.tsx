@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import * as api from "../../lib/api";
 import { useControlPlaneLive, useMissions, usePendingApprovals } from "../../hooks/useControlPlane";
@@ -17,6 +17,11 @@ export type ShellOutletContext = {
    */
   threadMissionId: string | null;
   setThreadMissionId: (id: string | null) => void;
+  /**
+   * When set, Overview may show a one-time handoff cue after global quick command created this mission.
+   * Cleared when focus moves to another mission or is cleared.
+   */
+  quickCommandHandoffMissionId: string | null;
 };
 
 export function useShellOutlet() {
@@ -37,6 +42,7 @@ export function AppShell() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
   const [threadMissionId, setThreadMissionId] = useState<string | null>(null);
+  const [quickCommandHandoffMissionId, setQuickCommandHandoffMissionId] = useState<string | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
 
   const openQuickCommand = useCallback(() => setQuickOpen(true), []);
@@ -56,6 +62,7 @@ export function AppShell() {
       const res = await api.createCommand(text, "command_center");
       const mid = String(res.mission_id);
       setThreadMissionId(mid);
+      setQuickCommandHandoffMissionId(mid);
       await live.bootstrapMission(mid);
       setQuickOpen(false);
       if (location.pathname !== "/") {
@@ -65,10 +72,18 @@ export function AppShell() {
     [live, location.pathname, navigate]
   );
 
+  useEffect(() => {
+    if (quickCommandHandoffMissionId == null) return;
+    if (threadMissionId == null || threadMissionId !== quickCommandHandoffMissionId) {
+      setQuickCommandHandoffMissionId(null);
+    }
+  }, [threadMissionId, quickCommandHandoffMissionId]);
+
   const outletCtx: ShellOutletContext = {
     openVoiceMode: () => setVoiceOpen(true),
     threadMissionId,
     setThreadMissionId,
+    quickCommandHandoffMissionId,
   };
 
   return (

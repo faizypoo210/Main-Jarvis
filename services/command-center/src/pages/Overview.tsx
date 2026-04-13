@@ -32,6 +32,11 @@ function triageViewAllHref(bucket: OverviewTriageUrlParam): string {
   return `/missions?${p.toString()}`;
 }
 
+function shortMissionIdLabel(id: string): string {
+  const t = id.trim();
+  return t.length <= 14 ? t : `${t.slice(0, 8)}…`;
+}
+
 function handoffToMission(missionId: string, setThreadMissionId: (id: string | null) => void) {
   setThreadMissionId(missionId);
 }
@@ -434,9 +439,35 @@ export function Overview() {
     setThreadMissionId: ctx.setThreadMissionId,
   };
 
+  const showQuickHandoff =
+    ctx.quickCommandHandoffMissionId != null &&
+    ctx.threadMissionId === ctx.quickCommandHandoffMissionId;
+  const handoffMissionId = ctx.quickCommandHandoffMissionId ?? "";
+  const handoffTitle = handoffMissionId
+    ? live.missionById[handoffMissionId]?.title?.trim() || null
+    : null;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-0 flex-1 flex-col">
+        {showQuickHandoff ? (
+          <div
+            className="shrink-0 border-b border-[var(--bg-border)]/80 bg-[var(--bg-void)]/40 px-3 py-2 md:px-6"
+            role="status"
+          >
+            <p className="text-[10px] leading-snug text-[var(--text-secondary)]">
+              Focused on new mission
+              {handoffTitle ? (
+                <>
+                  <span aria-hidden> · </span>
+                  <span className="font-medium text-[var(--text-primary)]">{handoffTitle}</span>
+                </>
+              ) : null}
+              <span aria-hidden> · </span>
+              <span className="font-mono text-[var(--text-muted)]">{shortMissionIdLabel(handoffMissionId)}</span>
+            </p>
+          </div>
+        ) : null}
         <ConversationThread onVoiceClick={ctx.openVoiceMode} />
       </div>
       <div className="shrink-0 border-t border-[var(--bg-border)] px-3 py-3 md:px-6">

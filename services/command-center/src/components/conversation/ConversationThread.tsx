@@ -77,7 +77,7 @@ function approvalFromRequestedEvent(ev: MissionEvent): Approval | null {
 }
 
 export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void }) {
-  const { setThreadMissionId } = useShellOutlet();
+  const { threadMissionId, setThreadMissionId } = useShellOutlet();
   const live = useControlPlaneLive();
   const liveRef = useRef(live);
   liveRef.current = live;
@@ -89,6 +89,10 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
     useResolveApprovalAction();
 
   const watchedMissionIdsRef = useRef<Set<string>>(new Set());
+  /** When the composer just created a mission, skip shell-focus hydration so user + activity lines stay. */
+  const lastComposerMissionIdRef = useRef<string | null>(null);
+  /** Last mission id we applied shell-focus hydration for (avoids duplicate ticks under Strict Mode). */
+  const shellFocusHydratedMissionIdRef = useRef<string | null>(null);
   /** Clears transient "waiting…" activity once `processMissionTick` runs for that mission. */
   const pendingActivityByMissionRef = useRef<Map<string, string>>(new Map());
   const processedEventIdsRef = useRef<Set<string>>(new Set());
@@ -97,6 +101,14 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
 
   const stopPoll = useCallback((missionId: string) => {
     delete tickCountsRef.current[missionId];
+  }, []);
+
+  const resetThreadForShellFocus = useCallback(() => {
+    setItems([]);
+    processedEventIdsRef.current.clear();
+    terminalShownRef.current.clear();
+    tickCountsRef.current = {};
+    pendingActivityByMissionRef.current.clear();
   }, []);
 
   const resolveApproval = useCallback(
@@ -516,10 +528,38 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
     return () => clearInterval(id);
   }, [live.streamConnected, processMissionTick]);
 
+  /**
+   * Keep the thread aligned with AppShell `threadMissionId`: hydrate from real mission events when focus
+   * comes from quick command, triage, or the right panel. Composer submissions set a ref so we do not
+   * wipe the user bubble + activity line.
+   */
+  useEffect(() => {
+    const mid = threadMissionId?.trim() || null;
+    if (!mid) {
+      shellFocusHydratedMissionIdRef.current = null;
+      watchedMissionIdsRef.current.clear();
+      resetThreadForShellFocus();
+      return;
+    }
+    if (lastComposerMissionIdRef.current === mid) {
+      lastComposerMissionIdRef.current = null;
+      shellFocusHydratedMissionIdRef.current = mid;
+      return;
+    }
+    if (shellFocusHydratedMissionIdRef.current === mid) {
+      return;
+    }
+    shellFocusHydratedMissionIdRef.current = mid;
+    resetThreadForShellFocus();
+    watchedMissionIdsRef.current = new Set([mid]);
+    void liveRef.current.bootstrapMission(mid);
+    void processMissionTick(mid);
+  }, [threadMissionId, processMissionTick, resetThreadForShellFocus]);
+
   const startMissionPipeline = useCallback(
     (missionId: string) => {
       setThreadMissionId(missionId);
-      watchedMissionIdsRef.current.add(missionId);
+      watchedMissionIdsRef.current = new Set([missionId]);
       void liveRef.current.bootstrapMission(missionId);
       void processMissionTick(missionId);
     },
@@ -534,10 +574,10 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
         const res = await api.createCommand(text, "command_center");
         const uid = crypto.randomUUID();
         const mid = res.mission_id;
+        lastComposerMissionIdRef.current = mid;
         const activityId = `activity-${mid}`;
         pendingActivityByMissionRef.current.set(mid, activityId);
-        setItems((prev) => [
-          ...prev,
+        setItems([
           { id: `u-${uid}`, kind: "user", body: text },
           { id: activityId, kind: "activity", text: operatorCopy.threadWaitingForMission },
         ]);
@@ -566,6 +606,11 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
                 ? operatorCopy.liveReconnecting
                 : operatorCopy.liveOfflinePolling}
             </div>
+          ) : null}
+          {!threadMissionId?.trim() && items.length === 0 ? (
+            <p className="text-[11px] leading-snug text-[var(--text-muted)]" role="status">
+              Send a command to start a mission thread, or focus a mission from triage.
+            </p>
           ) : null}
           {items.map((item, index) => {
             if (item.kind === "user") {

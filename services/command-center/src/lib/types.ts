@@ -518,6 +518,41 @@ export interface MemoryCountsResponse {
   archived: number;
 }
 
+/** POST /api/v1/operator/memory */
+export interface MemoryCreateBody {
+  memory_type: string;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  importance?: number;
+  tags?: string[];
+  mission_id?: string | null;
+  dedupe_key?: string | null;
+}
+
+/** PATCH /api/v1/operator/memory/{id} */
+export interface MemoryPatchBody {
+  title?: string;
+  summary?: string | null;
+  content?: string | null;
+  status?: "active" | "archived";
+  importance?: number;
+  tags?: string[];
+  last_reviewed_at?: string | null;
+}
+
+/** POST /api/v1/operator/memory/promote-from-mission */
+export interface MissionMemoryPromoteBody {
+  mission_id: string;
+  memory_type: string;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  importance?: number;
+  tags?: string[];
+  dedupe_key?: string | null;
+}
+
 /** GET /api/v1/operator/evals — Operator Value Evals v1 */
 export interface EvalLatencyStats {
   sample_count: number;

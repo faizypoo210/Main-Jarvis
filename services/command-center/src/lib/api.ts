@@ -12,8 +12,11 @@ import type {
   GovernedActionCatalogResponse,
   HeartbeatOperatorResponse,
   MemoryCountsResponse,
+  MemoryCreateBody,
   MemoryItemRead,
   MemoryListResponse,
+  MemoryPatchBody,
+  MissionMemoryPromoteBody,
   Mission,
   MissionBundle,
   MissionEvent,
@@ -343,34 +346,14 @@ export async function getMemory(id: string): Promise<MemoryItemRead> {
   );
 }
 
-export async function createMemory(data: {
-  memory_type: string;
-  title: string;
-  summary?: string | null;
-  content?: string | null;
-  importance?: number;
-  tags?: string[];
-  mission_id?: string | null;
-  dedupe_key?: string | null;
-}): Promise<MemoryItemRead> {
+export async function createMemory(data: MemoryCreateBody): Promise<MemoryItemRead> {
   return requestJson<MemoryItemRead>(`${BASE}/operator/memory`, {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export async function patchMemory(
-  id: string,
-  data: {
-    title?: string;
-    summary?: string | null;
-    content?: string | null;
-    status?: "active" | "archived";
-    importance?: number;
-    tags?: string[];
-    last_reviewed_at?: string | null;
-  }
-): Promise<MemoryItemRead> {
+export async function patchMemory(id: string, data: MemoryPatchBody): Promise<MemoryItemRead> {
   return requestJson<MemoryItemRead>(
     `${BASE}/operator/memory/${encodeURIComponent(id)}`,
     {
@@ -380,16 +363,9 @@ export async function patchMemory(
   );
 }
 
-export async function promoteMemoryFromMission(data: {
-  mission_id: string;
-  memory_type: string;
-  title: string;
-  summary?: string | null;
-  content?: string | null;
-  importance?: number;
-  tags?: string[];
-  dedupe_key?: string | null;
-}): Promise<MemoryItemRead> {
+export async function promoteMemoryFromMission(
+  data: MissionMemoryPromoteBody
+): Promise<MemoryItemRead> {
   return requestJson<MemoryItemRead>(`${BASE}/operator/memory/promote-from-mission`, {
     method: "POST",
     body: JSON.stringify(data),

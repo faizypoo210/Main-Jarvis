@@ -21,7 +21,7 @@
 
 The repo root script **`jarvis.ps1`** automates this path (Windows). Manual bring-up should follow the **same dependency order**.
 
-**Honesty:** `jarvis.ps1` **starts** processes and **probes** some surfaces with HTTP (control plane `/health`, Command Center and voice `GET /`, gateway `/health` or `/`). It does **not** supervise processes or guarantee long-term health. It prints a **bring-up summary** (healthy vs listening vs started/unverified). **Coordinator** and **executor** are **started/unverified** in that script (no fixed port check there).
+**Honesty:** `jarvis.ps1` **starts** processes and **probes** some surfaces with HTTP (control plane `/health`, Command Center and voice `GET /`, gateway `/health` or `/`). It does **not** supervise processes or guarantee long-term health. It prints a **bring-up summary** (healthy vs listening vs started/unverified). **Coordinator** and **executor** have **no HTTP probe in this script** (background processes — “unverified here”). When they **register** with the control plane, Command Center **Workers** / **System Health** show **role readiness** (`ready_state`, reasons) from worker metadata — a separate signal from bring-up.
 
 **Stricter gate:** `scripts/07-verify-jarvis-stack.ps1` runs `jarvis.ps1`, then classifies rows as **HEALTHY** (HTTP OK where implemented), **LISTENING** (TCP or container only, or **gateway** TCP without HTTP), **OPTIONAL_DOWN**, or **DOWN**. It **exits non-zero** if core gates fail (containers, control plane `/health`, gateway listening, Command Center HTTP). Voice and optional services are reported but do not fail that script. See script output for the exact line items.
 

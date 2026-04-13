@@ -83,7 +83,7 @@ cd F:\Jarvis
 .\jarvis.ps1
 ```
 
-**Bring-up vs readiness:** `jarvis.ps1` **initiates** bring-up and prints a **per-surface summary** (what is health-checked via HTTP, what is only listening, what is **started/unverified** — e.g. coordinator and executor have no probe in that script). It does **not** mean “the entire stack is healthy.” For a **stricter readiness gate** (containers + `GET /health` on the control plane + gateway TCP + Command Center HTTP), run **`scripts/07-verify-jarvis-stack.ps1`** after bring-up (it exits non-zero if core gates fail).
+**Bring-up vs readiness:** `jarvis.ps1` **initiates** bring-up and prints a **per-surface summary** (what is health-checked via HTTP, what is only listening, what is **started/unverified in that script** — coordinator and executor are background workers with no probe there). **Worker registry readiness** (when coord/exec POST register/heartbeat) is visible in Command Center **Workers** and **System Health**, separate from the script summary. It does **not** mean “the entire stack is healthy.” For a **stricter process gate** (containers + `GET /health` on the control plane + gateway TCP + Command Center HTTP), run **`scripts/07-verify-jarvis-stack.ps1`** after bring-up (it exits non-zero if core gates fail).
 
 **Legacy Mission Control:** not started here. **`JARVIS_INCLUDE_MISSION_CONTROL=1`** only shows an extra deprecation notice; legacy UI is **manual** from `deprecated/mission-control/` if you still need it.
 

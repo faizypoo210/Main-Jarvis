@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import engine, get_db
 from app.schemas.system import ComponentHealth, SystemHealthResponse
-from app.schemas.workers import WorkerRegistrySummary
 from app.services.worker_registry_service import build_registry_summary
 
 router = APIRouter()
@@ -89,10 +88,17 @@ async def _probe_http_chain(urls: list[str]) -> ComponentHealth:
 
 
 @router.get("/system/health", response_model=SystemHealthResponse)
-async def system_health() -> SystemHealthResponse:
+async def system_health(
+    session: AsyncSession = Depends(get_db),
+) -> SystemHealthResponse:
     """Aggregated health for Command Center operator surfaces."""
     settings = get_settings()
     checked = _utc_now_iso()
+
+    threshold = _worker_stale_threshold_minutes()
+    worker_registry = await build_registry_summary(
+        session, threshold_minutes=threshold
+    )
 
     postgres = await _check_postgres()
     redis_url = settings.REDIS_URL or "redis://localhost:6379"
@@ -123,5 +129,5 @@ async def system_health() -> SystemHealthResponse:
         redis=redis,
         openclaw_gateway=gateway,
         ollama=ollama,
-        worker_registry=wr,
+        worker_registry=worker_registry,
     )

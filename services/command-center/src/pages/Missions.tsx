@@ -95,16 +95,8 @@ export function Missions() {
           Could not reach control plane
         </div>
       ) : null}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--bg-border)] px-4 py-3 md:px-6">
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-xs text-[var(--text-muted)]">{filtered.length} total</span>
-        </div>
-        <button
-          type="button"
-          className="rounded-lg bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white transition-opacity duration-150 ease-linear hover:opacity-90"
-        >
-          New Mission
-        </button>
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--bg-border)] px-4 py-3 md:px-6">
+        <span className="font-mono text-xs text-[var(--text-muted)]">{filtered.length} total</span>
       </div>
       {triageParam && handoffLabel ? (
         <div
@@ -160,7 +152,19 @@ export function Missions() {
               >
                 Show all missions
               </Link>
-            ) : null}
+            ) : (
+              <>
+                <p className="max-w-sm text-xs text-[var(--text-muted)]">
+                  Send a command from Overview to create a mission — there is no separate &quot;new mission&quot; form here.
+                </p>
+                <Link
+                  to="/"
+                  className="text-xs font-medium text-[var(--accent-blue)] underline-offset-2 hover:opacity-90 focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-blue)]/40"
+                >
+                  Go to Overview
+                </Link>
+              </>
+            )}
           </div>
         ) : (
           <MissionList missions={filtered} />

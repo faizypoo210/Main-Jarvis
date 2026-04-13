@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Phase 2: Verify Mission Control containers and HTTP endpoints.
-  Note: upstream API health is at /health (not /api/health).
+  DEPRECATED — Legacy only: verify openclaw-mission-control containers and HTTP (3000/3001).
+  Primary product: Command Center + Control Plane. See deprecated/mission-control/README.md.
 #>
 $ErrorActionPreference = "Stop"
 
@@ -11,7 +11,7 @@ function Write-Step($msg) { Write-Host $msg -ForegroundColor Cyan }
 function Write-Ok($msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red }
 
-Write-Step "=== JARVIS Phase 2: Verify Mission Control ==="
+Write-Step "=== DEPRECATED: Verify legacy Mission Control ==="
 
 if (-not (Test-Path -LiteralPath $RepoRoot)) {
     Write-Fail "Mission Control repo not found at $RepoRoot"

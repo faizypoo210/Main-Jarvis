@@ -10,9 +10,7 @@ $JarvisRoot = $PSScriptRoot
 $LanIp = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')
 if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = $env:JARVIS_LAN_IP }
 if ([string]::IsNullOrWhiteSpace($LanIp)) { $LanIp = '127.0.0.1' }
-# Deprecated external UI (openclaw-mission-control). Not started unless explicitly enabled.
-$LegacyMissionControlRoot = 'C:\projects\openclaw-mission-control'
-$IncludeLegacyMissionControl = ($env:JARVIS_INCLUDE_MISSION_CONTROL -eq '1')
+# Legacy openclaw-mission-control (3000/3001) is deprecated — not started by this script. See deprecated/mission-control/.
 
 function Test-TcpListen([int]$Port) {
     return (@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue).Count -gt 0)
@@ -134,28 +132,18 @@ $ollamaScript = Join-Path $JarvisRoot 'scripts\05-start-ollama.ps1'
 & $ollamaScript
 if ($LASTEXITCODE -ne 0) { throw "05-start-ollama.ps1 failed (exit $LASTEXITCODE)." }
 
-if ($IncludeLegacyMissionControl) {
-    Invoke-Step "Legacy openclaw-mission-control (optional - deprecated)"
-    $mcUp = (Test-TcpListen 3000) -and (Test-TcpListen 3001)
-    if ($mcUp) {
-        Write-Host "Legacy stack appears up (ports 3000 and 3001 listening)."
-    } else {
-        if (-not (Test-Path -LiteralPath $LegacyMissionControlRoot)) {
-            throw "Legacy mission-control repo not found: $LegacyMissionControlRoot (unset JARVIS_INCLUDE_MISSION_CONTROL or clone the repo)."
-        }
-        Push-Location $LegacyMissionControlRoot
-        try {
-            docker compose up -d 2>&1 | Write-Host
-            if ($LASTEXITCODE -ne 0) { throw "docker compose up -d failed in $LegacyMissionControlRoot (exit $LASTEXITCODE)." }
-        } finally {
-            Pop-Location
-        }
-        Write-Host "docker compose up -d completed."
-    }
+if ($env:JARVIS_INCLUDE_MISSION_CONTROL -eq '1') {
+    Write-Host ""
+    Write-Host "=== DEPRECATED: JARVIS_INCLUDE_MISSION_CONTROL=1 ===" -ForegroundColor Yellow
+    Write-Host "Legacy Mission Control (openclaw-mission-control, ports 3000/3001) is NOT started by jarvis.ps1." -ForegroundColor Yellow
+    Write-Host "Primary operator UI: Command Center (typically :5173). API authority: Control Plane (:8001). Stack: Coordinator + Executor + Voice + Gateway." -ForegroundColor Yellow
+    $legacyMcDir = Join-Path $JarvisRoot 'deprecated\mission-control'
+    Write-Host "Quarantined scripts and compose template (manual use only, do not extend):" -ForegroundColor DarkYellow
+    Write-Host "  $legacyMcDir" -ForegroundColor DarkYellow
+    Write-Host "Unset JARVIS_INCLUDE_MISSION_CONTROL to silence this reminder." -ForegroundColor DarkGray
 } else {
     Write-Host ""
-    Write-Host "Legacy openclaw-mission-control: skipped. Primary UI: Command Center :5173; authority: Control Plane :8001." -ForegroundColor DarkGray
-    Write-Host "To start deprecated 3000/3001 stack, set User env JARVIS_INCLUDE_MISSION_CONTROL=1." -ForegroundColor DarkGray
+    Write-Host "Legacy openclaw-mission-control: unused (deprecated). See deprecated\mission-control\README.md." -ForegroundColor DarkGray
 }
 
 Write-Host ""
@@ -172,9 +160,6 @@ Write-Host ""
 Write-Host "Local URLs (supplemental):" -ForegroundColor Cyan
 Write-Host "  LobsterBoard:                http://localhost:8080"
 Write-Host "  Ollama:                      http://localhost:11434"
-if ($IncludeLegacyMissionControl) {
-    Write-Host "  Legacy UI/API (deprecated):  http://localhost:3000 / http://localhost:3001"
-}
 Write-Host ""
 Write-Host "LAN URLs (phone / same WiFi, $LanIp):" -ForegroundColor Cyan
 Write-Host "  Command Center:   http://${LanIp}:5173"
@@ -184,9 +169,6 @@ Write-Host "  OpenClaw Gateway: http://${LanIp}:18789"
 Write-Host "  LobsterBoard:     http://${LanIp}:8080"
 Write-Host "  Ollama:           http://${LanIp}:11434"
 Write-Host "  Executor/Coord:   background"
-if ($IncludeLegacyMissionControl) {
-    Write-Host "  Legacy 3000/3001: http://${LanIp}:3000 / http://${LanIp}:3001"
-}
 
 # System tray
 $TrayDir = Join-Path $JarvisRoot 'tray'

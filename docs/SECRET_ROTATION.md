@@ -12,7 +12,7 @@ Use this when **any** credential may have been exposed (git history, logs, scree
 | `%USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json` | Provider API keys per OpenClaw (never commit). |
 | `services/control-plane/.env` | Control plane DB URL, `SECRET_KEY`, **`CONTROL_PLANE_API_KEY`** (gitignored; copy from `.env.example`). |
 | `coordinator/.env`, `executor/.env` | Local process overrides (gitignored); see `.env.example` templates where present. |
-| Ephemeral generation | `scripts/02-setup-mission-control.ps1` can generate a random `LOCAL_AUTH_TOKEN` if `JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN` is unset — set the User env to persist across Docker restarts. |
+| Ephemeral generation | `deprecated/mission-control/02-setup-mission-control.ps1` (legacy only) can generate a random `LOCAL_AUTH_TOKEN` if `JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN` is unset — set the User env to persist across Docker restarts. |
 
 ---
 
@@ -58,7 +58,7 @@ Use this when **any** credential may have been exposed (git history, logs, scree
 | --- | --- |
 | **Purpose** | Control plane database. |
 | **Where it lives** | `DATABASE_URL` in `services/control-plane/.env`. Docker scripts and `config/database-config.json` use a **documented local dev** password (`jarvis_secure_password_2026` pattern) for the default stack. |
-| **Used by** | `scripts/01-install-docker-databases.ps1`, `scripts/02-setup-mission-control.ps1`, control plane SQLAlchemy. |
+| **Used by** | `scripts/01-install-docker-databases.ps1`, `deprecated/mission-control/02-setup-mission-control.ps1` (legacy Mission Control DB only), control plane SQLAlchemy. |
 | **After rotation (recommended for shared or non-dev hosts)** | Change Postgres password in Docker/env → update `DATABASE_URL` everywhere → rotate any derived backups. |
 
 ---
@@ -77,9 +77,9 @@ Use this when **any** credential may have been exposed (git history, logs, scree
 
 | | |
 | --- | --- |
-| **Purpose** | Bearer for old 3001 API / optional `08-test-mission-control.ps1`. |
+| **Purpose** | Bearer for old 3001 API / optional `deprecated/mission-control/08-test-mission-control.ps1`. |
 | **Where it lives** | User env **`JARVIS_MISSION_CONTROL_TOKEN`**. |
-| **Local auth token** | `JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN` for `02-setup-mission-control.ps1` → Mission Control `LOCAL_AUTH_TOKEN` in generated `.env` (never commit). |
+| **Local auth token** | `JARVIS_MISSION_CONTROL_LOCAL_AUTH_TOKEN` for `deprecated/mission-control/02-setup-mission-control.ps1` → Mission Control `LOCAL_AUTH_TOKEN` in generated `.env` (never commit). |
 
 ---
 

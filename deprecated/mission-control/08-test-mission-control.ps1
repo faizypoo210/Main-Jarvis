@@ -1,6 +1,6 @@
 #Requires -Version 5.1
-# Phase 8: OPTIONAL legacy Mission Control API checks (creates/deletes one test task; uses Bearer auth).
-# Set User env JARVIS_MISSION_CONTROL_TOKEN to your Mission Control API token, or this suite is skipped.
+# DEPRECATED — Phase 8 optional: legacy Mission Control API checks (3001). Quarantined under deprecated/mission-control/.
+# Canonical operator path: Command Center + Control Plane. Set JARVIS_MISSION_CONTROL_TOKEN or skipped.
 $ErrorActionPreference = 'Continue'
 
 $LanIp = [Environment]::GetEnvironmentVariable('JARVIS_LAN_IP', 'User')

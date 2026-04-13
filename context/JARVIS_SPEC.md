@@ -162,6 +162,8 @@ Generate all files now. Make scripts idempotent (safe to re-run).
 
 ## Phase 2: Mission Control Deployment
 
+**Historical / deprecated:** The primary Jarvis stack is Command Center + Control Plane + workers. Legacy Mission Control scripts and compose live under **`deprecated/mission-control/`** (not `scripts/`). Do not extend this path for new features.
+
 ### Cursor Prompt (Composer):
 
 ```
@@ -207,13 +209,13 @@ IMPORTANT: Use host.docker.internal for all host service connections from Docker
 Generate all files now.
 ```
 
-**Execute in Cursor Terminal:**
+**Execute in Cursor Terminal (legacy only):**
 ```powershell
 # Run setup
-.\scripts\02-setup-mission-control.ps1
+.\deprecated\mission-control\02-setup-mission-control.ps1
 
 # Verify
-.\scripts\02-verify-mission-control.ps1
+.\deprecated\mission-control\02-verify-mission-control.ps1
 
 # Open Mission Control
 start http://localhost:3000

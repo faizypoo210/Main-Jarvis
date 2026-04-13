@@ -33,7 +33,7 @@ function Get-Phase8Metric {
 
 $sInfra = Join-Path $ScriptDir '08-test-infrastructure.ps1'
 $sGw = Join-Path $ScriptDir '08-test-gateway.ps1'
-$sMc = Join-Path $ScriptDir '08-test-mission-control.ps1'
+$sMc = Join-Path $RepoRoot 'deprecated\mission-control\08-test-mission-control.ps1'
 $sLan = Join-Path $ScriptDir '08-test-lan-access.ps1'
 $sFlow = Join-Path $ScriptDir '08-test-full-flow.ps1'
 $sOperator = Join-Path $ScriptDir '08-smoke-operator-control-plane.ps1'

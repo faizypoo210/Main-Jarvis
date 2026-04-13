@@ -1,19 +1,22 @@
 <#
 .SYNOPSIS
-  Phase 2: Clone Mission Control, write JARVIS env files, apply host-DB compose, build and start stack.
+  DEPRECATED — Legacy only: clone openclaw-mission-control, write env files, apply host-DB compose, build/start.
+  Not part of the primary Jarvis stack (use Command Center + Control Plane + Coordinator + Executor + Voice).
+  See deprecated/mission-control/README.md. Do not extend for new features.
 #>
 $ErrorActionPreference = "Stop"
 
-$JarvisRoot = Split-Path -Parent $PSScriptRoot
+# Repo root: .../Jarvis (this script lives in deprecated/mission-control/)
+$JarvisRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $RepoRoot = "C:\projects\openclaw-mission-control"
 $RepoUrl = "https://github.com/abhi1693/openclaw-mission-control"
-$ComposeTemplateYml = Join-Path $JarvisRoot "config\mission-control-compose.yml"
+$ComposeTemplateYml = Join-Path $JarvisRoot "deprecated\mission-control\mission-control-compose.yml"
 
 function Write-Step($msg) { Write-Host $msg -ForegroundColor Cyan }
 function Write-Ok($msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red }
 
-Write-Step "=== JARVIS Phase 2: Mission Control ==="
+Write-Step "=== DEPRECATED: Legacy openclaw-mission-control setup (Phase 2) ==="
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Fail "git not found. Install Git for Windows."
@@ -128,5 +131,5 @@ Write-Step "Opening Mission Control in default browser..."
 Start-Process "http://localhost:3000"
 
 Write-Host ""
-Write-Ok "Phase 2 setup finished. Run .\scripts\02-verify-mission-control.ps1"
+Write-Ok "Phase 2 setup finished. Run .\deprecated\mission-control\02-verify-mission-control.ps1"
 exit 0

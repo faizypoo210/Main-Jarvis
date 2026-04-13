@@ -48,4 +48,4 @@ OpenClaw or the control plane may request human approval → DashClaw risk → L
 
 - Control Plane, Command Center (`npm run dev`), Voice Server, Coordinator, Executor  
 - OpenClaw Gateway, Ollama, LobsterBoard  
-- Optional: deprecated openclaw-mission-control compose (only if `JARVIS_INCLUDE_MISSION_CONTROL=1`)
+- Optional: deprecated openclaw-mission-control (3000/3001) — bring up manually from `deprecated/mission-control/`; `jarvis.ps1` does not start it (`JARVIS_INCLUDE_MISSION_CONTROL=1` prints a deprecation reminder only)

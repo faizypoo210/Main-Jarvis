@@ -1,5 +1,6 @@
-# JARVIS: Mission Control stack using host PostgreSQL/Redis (see Phase 1).
-# Copy to openclaw-mission-control repo root as compose.yml (replaces bundled db/redis services).
+# DEPRECATED — Legacy openclaw-mission-control only (not primary Jarvis architecture).
+# Copy to external openclaw-mission-control repo root as compose.yml (replaces bundled db/redis).
+# Active stack: Command Center + Control Plane + Coordinator + Executor + Voice.
 
 name: openclaw-mission-control
 

@@ -11,7 +11,7 @@
 
 ## Phase 2: Legacy openclaw-mission-control (optional) ✅
 
-_Not required for the canonical stack (Command Center + Control Plane). Tracked OpenClaw markdown mirrors live under `config/workspace/`; deploy to `%USERPROFILE%\.openclaw\workspace\main\` with `scripts\10-sync-openclaw-workspace.ps1`._
+_Deprecated scripts and compose template: `deprecated/mission-control/`. Not required for the canonical stack (Command Center + Control Plane). Tracked OpenClaw markdown mirrors live under `config/workspace/`; deploy to `%USERPROFILE%\.openclaw\workspace\main\` with `scripts\10-sync-openclaw-workspace.ps1`._
 
 - [x] Repo cloned (`C:\projects\openclaw-mission-control`) — only if you use legacy UI  
 - [x] `.env` and `backend\.env` created (host DB/Redis via `host.docker.internal`) — if used  
@@ -59,7 +59,7 @@ _Not required for the canonical stack (Command Center + Control Plane). Tracked 
 - [x] **Phase 8 aggregate:** `08-final-report.ps1` writes `docs/08-deployment-report.txt`
 - [x] **End-of-day handoff snapshot:** `19-day-wrap-snapshot.ps1` writes **`docs/reports/day-wrap-YYYY-MM-DD-*.md`** — honest pass/fail/skip (governed action catalog smoke, operator inbox/workers/cost reads, optional Phase 8 aggregate, Command Center `npm run build` when `node_modules` exists, workspace governance smoke). Use `-SkipPhase8` / `-SkipCommandCenterBuild` when those layers are intentionally out of scope.
 - [x] **Core probes:** `08-test-infrastructure.ps1` (core = Postgres, Redis, control plane `/health`, OpenClaw gateway; extended = CC 5173, LobsterBoard, Ollama, DashClaw web — extended failures are warnings only), `08-test-gateway.ps1`, `08-test-lan-access.ps1`, **`08-smoke-operator-control-plane.ps1`** (operator + system health + approval bundle when pending), **`08-smoke-workspace-governance.ps1`** (manifest audit)
-- [x] **Optional / informational:** `08-test-mission-control.ps1` (legacy), `08-test-full-flow.ps1` (OpenClaw agent), **`08-smoke-external-probes.ps1`** (GitHub/Gmail — skipped if tokens absent; fail only if token set and API errors)
+- [x] **Optional / informational:** `deprecated/mission-control/08-test-mission-control.ps1` (legacy), `08-test-full-flow.ps1` (OpenClaw agent), **`08-smoke-external-probes.ps1`** (GitHub/Gmail — skipped if tokens absent; fail only if token set and API errors)
 - [x] Synthetic API rehearsal: `13-rehearse-golden-path.ps1` (includes `GET /approvals/{id}/bundle` + optional `routing_decided` note)
 - [ ] **`08-final-report.ps1` exits 0** on **core** (infrastructure **core**, gateway, LAN, operator smoke, workspace audit). Extended infra rows and external probes do not block core; external probe **fail** means a configured token was rejected (report still notes it).
 

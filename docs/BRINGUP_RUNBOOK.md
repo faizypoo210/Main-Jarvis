@@ -41,6 +41,8 @@ The repo root script **`jarvis.ps1`** automates this path (Windows). Manual brin
 
 **Alembic:** Before first use or after pulling migrations, run `alembic upgrade head` from `services/control-plane/` with `DATABASE_URL` set (see `REPO_TRUTH.md`).
 
+If `/api/v1/system/health` or `/api/v1/operator/heartbeat` misbehave with SQL errors about missing columns or tables, the DB almost always needs **`python -m alembic upgrade head`** against the **same** `DATABASE_URL` the control plane uses. The API process fails fast at startup when the schema is not at Alembic head (unless `CONTROL_PLANE_SKIP_SCHEMA_CHECK=1`).
+
 ---
 
 ## 3. Heartbeat worker (manual)

@@ -36,6 +36,10 @@ class HeartbeatOperatorResponse(BaseModel):
     by_severity: dict[str, int]
     by_type: dict[str, int]
     open_findings: list[HeartbeatFindingRead]
+    operator_note: str | None = Field(
+        default=None,
+        description="Non-fatal hint when the snapshot could not be loaded (e.g. DB schema drift).",
+    )
 
 
 class HeartbeatRunResponse(BaseModel):

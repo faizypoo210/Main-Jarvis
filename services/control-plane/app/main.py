@@ -30,6 +30,7 @@ from app.core.auth import assert_auth_config_for_startup
 from app.core.config import ControlPlaneAuthMode, get_settings
 from app.core.db import engine
 from app.core.logging import configure_logging, get_logger
+from app.core.schema_guard import verify_schema_at_startup
 
 configure_logging()
 log = get_logger(__name__)
@@ -44,6 +45,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         "database connectivity verified service=%s",
         settings.SERVICE_NAME,
     )
+    await verify_schema_at_startup(engine)
     testing = os.environ.get("CONTROL_PLANE_TESTING") == "1"
     assert_auth_config_for_startup(get_settings(), testing=testing)
     if not testing and settings.CONTROL_PLANE_AUTH_MODE == ControlPlaneAuthMode.LOCAL_TRUSTED:

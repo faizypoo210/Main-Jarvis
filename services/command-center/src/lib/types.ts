@@ -397,6 +397,8 @@ export interface HeartbeatOperatorResponse {
   by_severity: Record<string, number>;
   by_type: Record<string, number>;
   open_findings: HeartbeatFindingRead[];
+  /** Present when the snapshot could not be loaded (e.g. DB schema behind Alembic head). */
+  operator_note?: string | null;
 }
 
 export interface OperatorActivityItem {

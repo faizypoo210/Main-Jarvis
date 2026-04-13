@@ -13,8 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import engine, get_db
+from app.core.logging import get_logger
+from app.core.schema_guard import is_schema_drift_db_error
 from app.repositories.worker_repo import WorkerRepository
 from app.schemas.system import ComponentHealth, SystemHealthResponse
+from app.schemas.workers import WorkerRegistrySummary
 from app.services.system_execution_health import (
     PROBE_CONTROL_PLANE_LOCAL,
     ollama_health,
@@ -23,6 +26,7 @@ from app.services.system_execution_health import (
 from app.services.worker_registry_service import build_registry_summary
 
 router = APIRouter()
+log = get_logger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -59,10 +63,42 @@ def _worker_stale_threshold_minutes() -> float:
         return 15.0
 
 
-@router.get("/system/health", response_model=SystemHealthResponse)
-async def system_health(
-    session: AsyncSession = Depends(get_db),
-) -> SystemHealthResponse:
+def _system_health_schema_degraded() -> SystemHealthResponse:
+    """Honest snapshot when DB queries fail due to missing migrations (no raw SQL in operator fields)."""
+    checked = _utc_now_iso()
+    short = "Database schema incomplete or outdated. Run: python -m alembic upgrade head (from services/control-plane)."
+    return SystemHealthResponse(
+        checked_at=checked,
+        control_plane=ComponentHealth(
+            status="degraded",
+            detail="API responding; " + short,
+            probe_source=PROBE_CONTROL_PLANE_LOCAL,
+        ),
+        postgres=ComponentHealth(
+            status="offline",
+            detail=short,
+            probe_source=PROBE_CONTROL_PLANE_LOCAL,
+        ),
+        redis=ComponentHealth(
+            status="unknown",
+            detail="Not evaluated (database schema error).",
+            probe_source=PROBE_CONTROL_PLANE_LOCAL,
+        ),
+        openclaw_gateway=ComponentHealth(
+            status="unknown",
+            detail="Not evaluated (database schema error).",
+            probe_source="unknown",
+        ),
+        ollama=ComponentHealth(
+            status="unknown",
+            detail="Not evaluated (database schema error).",
+            probe_source="unknown",
+        ),
+        worker_registry=WorkerRegistrySummary(),
+    )
+
+
+async def _build_system_health(session: AsyncSession) -> SystemHealthResponse:
     """Aggregated health for Command Center operator surfaces."""
     settings = get_settings()
     checked = _utc_now_iso()
@@ -108,3 +144,16 @@ async def system_health(
         ollama=ollama,
         worker_registry=worker_registry,
     )
+
+
+@router.get("/system/health", response_model=SystemHealthResponse)
+async def system_health(
+    session: AsyncSession = Depends(get_db),
+) -> SystemHealthResponse:
+    try:
+        return await _build_system_health(session)
+    except Exception as e:
+        if is_schema_drift_db_error(e):
+            log.exception("system_health_schema_drift")
+            return _system_health_schema_degraded()
+        raise

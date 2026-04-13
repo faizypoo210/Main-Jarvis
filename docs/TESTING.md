@@ -108,3 +108,11 @@ GitHub Actions runs the same suite against a **PostgreSQL 16** service container
 - **`password authentication failed for user "postgres"`** — Point `PYTEST_CONTROL_PLANE_DATABASE_URL` at credentials that exist on your Postgres instance (your `services/control-plane/.env` may use a different user/password than the CI default).
 - **`database "jarvis_cp_test" does not exist`** — Create the database or set `PYTEST_CONTROL_PLANE_DATABASE_URL` to an existing empty database.
 - **`got Future ... attached to a different loop`** — Ensure you are not overriding `pytest.ini` asyncio settings; session-scoped loops are intentional.
+- **Schema drift (`UndefinedColumnError`, `UndefinedTableError`, missing `workers.instance_id`, missing `heartbeat_findings`, etc.)** — The live database is behind Alembic. With `DATABASE_URL` pointing at that database:
+
+  ```powershell
+  cd F:\Jarvis\services\control-plane
+  python -m alembic upgrade head
+  ```
+
+  Production/dev control plane startup also runs a **schema guard** (skipped when `CONTROL_PLANE_TESTING=1` in pytest). For emergency local debugging only, `CONTROL_PLANE_SKIP_SCHEMA_CHECK=1` disables the guard (not recommended for real deployments).

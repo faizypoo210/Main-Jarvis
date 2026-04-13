@@ -44,7 +44,11 @@ The old **openclaw-mission-control** UI (3000/3001) is **deprecated** and not st
 | Tier | Default | Notes |
 |------|---------|--------|
 | Local fast | Ollama `qwen3:4b` | Override with `OLLAMA_MODEL` |
-| Cloud execution | MiniMax 2.5 via OpenClaw | **Do not hardcode** provider/model slugs in repo; set `JARVIS_OPENCLAW_GATEWAY_MODEL` (or edit `%USERPROFILE%\.openclaw\openclaw.json`) per your OpenClaw + MiniMax profile |
+| Cloud execution | Provider via OpenClaw gateway | **Do not hardcode** provider/model slugs in repo; set **`JARVIS_OPENCLAW_GATEWAY_MODEL`** and configure auth outside git—see **[`docs/MINIMAX_SETUP.md`](docs/MINIMAX_SETUP.md)** (MiniMax and other clouds use the same gateway lane) |
+
+### MiniMax / cloud model setup
+
+Cloud models (including MiniMax) are selected with **`JARVIS_OPENCLAW_GATEWAY_MODEL`** and provider credentials in **`%USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json`**, not in tracked `.env` files. Step-by-step: **[`docs/MINIMAX_SETUP.md`](docs/MINIMAX_SETUP.md)**.
 
 ## Machine
 

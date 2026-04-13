@@ -19,6 +19,19 @@ function Write-Step($msg) { Write-Host $msg -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red }
 
+function Write-OperatorEnvGuidance {
+    Write-Host ""
+    Write-Host "Where to set Windows User env vars (then open a new terminal):" -ForegroundColor DarkGray
+    Write-Host "  - System Properties > Environment Variables, or PowerShell:" -ForegroundColor DarkGray
+    Write-Host "    [Environment]::SetEnvironmentVariable(`"JARVIS_OPENCLAW_GATEWAY_MODEL`", `"<value>`", `"User`")" -ForegroundColor DarkGray
+    Write-Host "    [Environment]::SetEnvironmentVariable(`"JARVIS_OPENCLAW_GATEWAY_TOKEN`", `"<value>`", `"User`")" -ForegroundColor DarkGray
+    Write-Host "  - JARVIS_OPENCLAW_GATEWAY_MODEL : default agent model written into openclaw.json (cloud/local id per OpenClaw; not hardcoded in repo)." -ForegroundColor DarkGray
+    Write-Host "  - JARVIS_OPENCLAW_GATEWAY_TOKEN : gateway HTTP auth token (required by this script)." -ForegroundColor DarkGray
+    Write-Host "Cloud provider API keys / profiles (MiniMax, etc.):" -ForegroundColor DarkGray
+    Write-Host "  %USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json" -ForegroundColor DarkGray
+    Write-Host "  Keep provider secrets outside git; see docs/MINIMAX_SETUP.md" -ForegroundColor DarkGray
+}
+
 Write-Step "=== JARVIS Phase 3: Configure OpenClaw ==="
 
 $base = Join-Path $env:USERPROFILE ".openclaw"
@@ -33,8 +46,9 @@ if ([string]::IsNullOrWhiteSpace($gatewayToken)) {
 
 if ([string]::IsNullOrWhiteSpace($gatewayToken)) {
     Write-Fail "JARVIS_OPENCLAW_GATEWAY_TOKEN is not set."
-    Write-Host "Set a User environment variable JARVIS_OPENCLAW_GATEWAY_TOKEN, then re-run." -ForegroundColor DarkGray
-    Write-Host "See docs/SECRET_ROTATION.md." -ForegroundColor DarkGray
+    Write-Host "Set Windows User (or process) env JARVIS_OPENCLAW_GATEWAY_TOKEN, then re-run this script." -ForegroundColor DarkGray
+    Write-Host "See docs/SECRET_ROTATION.md and docs/MINIMAX_SETUP.md." -ForegroundColor DarkGray
+    Write-OperatorEnvGuidance
     exit 1
 }
 
@@ -87,9 +101,8 @@ Write-Ok "Wrote $openclawPath"
 Write-Ok "Wrote $configPath"
 
 Write-Host ""
-Write-Host "Manual cloud-provider step:" -ForegroundColor DarkGray
-Write-Host "  %USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json" -ForegroundColor DarkGray
-Write-Host "Do not commit provider secrets to git." -ForegroundColor DarkGray
+Write-Host "Gateway model in JSON: from JARVIS_OPENCLAW_GATEWAY_MODEL (or default ollama/... if unset). Guide: docs/MINIMAX_SETUP.md" -ForegroundColor DarkGray
+Write-OperatorEnvGuidance
 
 Write-Ok "Phase 3 configure finished."
 exit 0

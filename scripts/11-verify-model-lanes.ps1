@@ -138,16 +138,16 @@ if (-not $oc.Ok) {
     Pass "Gateway model string: $($oc.Model)"
     $m = $oc.Model.ToLowerInvariant()
     if ($m.StartsWith('ollama/')) {
-        Pass "Gateway lane classification: local (OpenClaw -> Ollama)"
+        Pass "Gateway model lane: local (OpenClaw gateway -> Ollama; auth-profiles.json not required for this lane)"
     } else {
-        Pass "Gateway lane classification: cloud/other (not ollama/ prefix)"
+        Pass "Gateway model lane: cloud/gateway (model id is not ollama/...; execution still goes through OpenClaw gateway)"
         $ap = Test-AuthProfilesObject
         if (-not $ap.Present) {
-            Warn "auth-profiles.json missing at $($ap.Path). Cloud execution usually requires provider entries (edit manually per OpenClaw docs)."
+            Warn "Cloud/gateway model configured but auth-profiles.json is MISSING at $($ap.Path). Add provider credentials there (outside git); see docs/MINIMAX_SETUP.md and OpenClaw docs."
         } elseif (-not $ap.NonEmpty) {
-            Warn "auth-profiles.json exists but appears empty or invalid. Cloud lane may not be authenticated."
+            Warn "Cloud/gateway model configured but auth-profiles.json exists yet looks EMPTY or invalid at $($ap.Path). Cloud calls may fail until profiles are filled (no secrets shown here)."
         } else {
-            Pass "auth-profiles.json present with at least one top-level key (no secrets printed)"
+            Pass "auth-profiles.json present with at least one top-level key (secrets not printed)"
         }
     }
 }

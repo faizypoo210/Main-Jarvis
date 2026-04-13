@@ -126,10 +126,13 @@ See [`INTEGRATIONS_GMAIL.md`](INTEGRATIONS_GMAIL.md).
 
 ## Machine-wide (common)
 
+These apply across tools and scripts. **Provider secrets for cloud models are not stored in repo `.env` files**; cloud auth for OpenClaw lives under **`%USERPROFILE%\.openclaw\agents\main\agent\auth-profiles.json`** (manual, out of git). See [`MINIMAX_SETUP.md`](MINIMAX_SETUP.md).
+
 | Variable | Purpose | R/O | Feature |
 |----------|---------|-----|---------|
 | `JARVIS_LAN_IP` | Advertised LAN IP in scripts | O | Phone / LAN URLs in `jarvis.ps1` |
-| `JARVIS_OPENCLAW_GATEWAY_MODEL` | Model override | O | Gateway default model |
+| `JARVIS_OPENCLAW_GATEWAY_MODEL` | Default agent **model id** for OpenClaw gateway | O | **Controls** the gateway default model written by `scripts/03-configure-openclaw.ps1` into `%USERPROFILE%\.openclaw\openclaw.json` (unset → local default). Not a repo hardcode. |
+| `JARVIS_OPENCLAW_GATEWAY_TOKEN` | Gateway HTTP auth token | R* | Required when running `03-configure-openclaw.ps1` (token embedded in generated JSON). *Set User env before configure. |
 | `COMPOSIO_API_KEY` | Composio (if used) | O | OpenClaw plugins |
 
 See also [`MACHINE_SETUP_STATUS.md`](../MACHINE_SETUP_STATUS.md).

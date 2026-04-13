@@ -84,3 +84,5 @@ These are **related but not identical**; the UI uses labels like **OpenClaw mode
 
 - **Configured**: `openclaw.json` lists a default model string.
 - **Not verified**: cloud credentials until you follow OpenClaw docs for `auth-profiles.json`.
+
+For Windows operator setup (env vars, `auth-profiles.json` path, verification commands) without hardcoding provider model slugs in the repo, see [`MINIMAX_SETUP.md`](MINIMAX_SETUP.md).

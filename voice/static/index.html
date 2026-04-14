@@ -132,9 +132,36 @@
   let chunks = [];
   let audioCtx = null;
 
+  /** Monotonic id per incoming tts message; stale onended callbacks must not change UI. */
+  let ttsPlaybackGen = 0;
+  let currentTtsSource = null;
+  let ttsDecodeInFlight = false;
+  /** Fallback if BufferSource.onended does not fire (browser quirks after stop/replace). */
+  let currentTtsPlaybackTimer = null;
+
   function setState(state, label) {
     dot.className = 'dot ' + state;
     statusText.textContent = label;
+  }
+
+  function stopCurrentTtsPlayback() {
+    if (currentTtsPlaybackTimer) {
+      clearTimeout(currentTtsPlaybackTimer);
+      currentTtsPlaybackTimer = null;
+    }
+    if (currentTtsSource) {
+      try {
+        currentTtsSource.stop(0);
+      } catch (e) { /* already stopped */ }
+      try {
+        currentTtsSource.disconnect();
+      } catch (e) { /* ignore */ }
+      currentTtsSource = null;
+    }
+  }
+
+  function clientOwnsSpeakingIdle() {
+    return ttsDecodeInFlight || currentTtsSource !== null;
   }
 
   function appendLine(cls, title, body) {
@@ -158,6 +185,10 @@
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg.type === 'status') {
         var st = msg.state || 'idle';
+        // During local TTS decode/playback, server speaking/idle are stale (server sends idle before audio ends).
+        if (clientOwnsSpeakingIdle() && (st === 'speaking' || st === 'idle')) {
+          return;
+        }
         if (st === 'listening') setState('listening', 'Listening…');
         else if (st === 'thinking') setState('thinking', 'Thinking…');
         else if (st === 'speaking') setState('speaking', 'Speaking…');
@@ -182,6 +213,10 @@
         return;
       }
       if (msg.type === 'tts' && msg.audio_b64) {
+        var myGen = ++ttsPlaybackGen;
+        stopCurrentTtsPlayback();
+        ttsDecodeInFlight = true;
+        setState('speaking', 'Speaking…');
         (async function playTts() {
           try {
             if (!audioCtx) {
@@ -195,14 +230,49 @@
             for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
             const copy = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
             const audioBuffer = await audioCtx.decodeAudioData(copy);
+            if (myGen !== ttsPlaybackGen) {
+              return;
+            }
             const src = audioCtx.createBufferSource();
             src.buffer = audioBuffer;
             src.connect(audioCtx.destination);
+            currentTtsSource = src;
+            ttsDecodeInFlight = false;
+            var durationMs = Math.ceil(audioBuffer.duration * 1000) + 300;
+            if (currentTtsPlaybackTimer) {
+              clearTimeout(currentTtsPlaybackTimer);
+            }
+            currentTtsPlaybackTimer = setTimeout(function () {
+              currentTtsPlaybackTimer = null;
+              if (myGen !== ttsPlaybackGen) return;
+              if (currentTtsSource !== src) return;
+              try { src.disconnect(); } catch (e) { /* ignore */ }
+              currentTtsSource = null;
+              setState('idle', 'Idle');
+            }, durationMs);
             src.onended = function () {
+              if (myGen !== ttsPlaybackGen) return;
+              if (currentTtsPlaybackTimer) {
+                clearTimeout(currentTtsPlaybackTimer);
+                currentTtsPlaybackTimer = null;
+              }
+              try { src.disconnect(); } catch (e) { /* ignore */ }
+              if (currentTtsSource === src) {
+                currentTtsSource = null;
+              }
               setState('idle', 'Idle');
             };
             src.start();
           } catch (e) {
+            if (myGen !== ttsPlaybackGen) {
+              return;
+            }
+            if (currentTtsPlaybackTimer) {
+              clearTimeout(currentTtsPlaybackTimer);
+              currentTtsPlaybackTimer = null;
+            }
+            ttsDecodeInFlight = false;
+            currentTtsSource = null;
             appendLine('err', 'Playback', 'Could not play audio.');
             setState('idle', 'Idle');
           }

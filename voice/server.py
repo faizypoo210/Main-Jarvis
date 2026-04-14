@@ -35,16 +35,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 
-from approval_voice import forget_voice_approval_state, try_handle_voice_approval
-from briefing_voice import forget_voice_briefing_state, try_handle_voice_briefing
-from inbox_voice import forget_voice_inbox_state, try_handle_voice_inbox
-from governed_action_voice import (
+from .approval_voice import forget_voice_approval_state, try_handle_voice_approval
+from .briefing_voice import forget_voice_briefing_state, try_handle_voice_briefing
+from .governed_action_voice import (
     forget_voice_governed_action_state,
     note_voice_command_mission,
     try_handle_governed_action_voice,
 )
-from intake_voice import post_voice_intake
-from voice_routing import MissionSubscriptionIndex
+from .inbox_voice import forget_voice_inbox_state, try_handle_voice_inbox
+from .intake_voice import post_voice_intake
+from .voice_routing import MissionSubscriptionIndex
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")

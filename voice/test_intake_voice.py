@@ -1,19 +1,12 @@
 """Unit tests for intake_voice parsing (no network, no FastAPI).
 
-Run: python -m pytest voice/test_intake_voice.py -v
-Or from voice/: python test_intake_voice.py
+Run from repository root: ``python -m pytest voice/test_intake_voice.py -v``
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-_HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
-
-from intake_voice import VoiceIntakeResult, friendly_intake_failure, parse_intake_response
+# Imports must work when the package is loaded like uvicorn: ``python -m uvicorn voice.server:app``
+from voice.intake_voice import friendly_intake_failure, parse_intake_response
 
 
 def test_parse_mission_created() -> None:

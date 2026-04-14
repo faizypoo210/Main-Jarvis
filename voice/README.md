@@ -4,6 +4,19 @@ FastAPI + WebSocket: STT (faster-whisper), pyttsx3 TTS, Redis stream fan-out. **
 
 **Where this fits in the system:** see repo [`docs/ARCHITECTURE_V3.md`](../docs/ARCHITECTURE_V3.md) (voice flow, boundaries vs mission `lane_truth`).
 
+## Run (canonical)
+
+From the **repository root** (the directory that contains the `voice/` package):
+
+```powershell
+cd F:\Jarvis
+python -m uvicorn voice.server:app --reload --port 8002
+```
+
+Use **module** form `voice.server:app` so imports resolve under the `voice` package. Running `uvicorn server:app` only from inside `voice/` is a different layout and is not the supported launch path.
+
+Env: copy `voice/.env.example` to `voice/.env` (or set `REDIS_URL`, `CONTROL_PLANE_URL`, etc.).
+
 ## Voice mission briefing + status readout (v1)
 
 Read-only summaries from existing operator GETs (no new mission state). Implemented in `briefing_voice.py`; ephemeral ranked mission list + cursor per WebSocket (not persisted).

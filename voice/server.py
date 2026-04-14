@@ -6,7 +6,7 @@ UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to
 TRUTH_SOURCE: free-form utterances use ``POST /api/v1/intake``; replies come from the control-plane bundle (no cosmetic Ollama ack).
 
 Specialized handlers (unchanged order): read that again → inbox → briefing → governed action → approval → **unified intake**.
-"Read that again" repeats the last spoken reply (inbox, briefing, governed, approval, or intake).
+"Read that again" repeats the last reply text and replays the last successful TTS payload (no regeneration).
 """
 
 from __future__ import annotations
@@ -44,6 +44,12 @@ from .governed_action_voice import (
 )
 from .inbox_voice import forget_voice_inbox_state, try_handle_voice_inbox
 from .intake_voice import post_voice_intake
+from .last_spoken import (
+    NO_AUDIO_REPEAT_HINT,
+    LastSpokenTurn,
+    normalize_last_voice_entry,
+    ws_tts_message,
+)
 from .voice_routing import MissionSubscriptionIndex
 
 logging.basicConfig(level=logging.INFO)
@@ -77,8 +83,8 @@ _http_client: httpx.AsyncClient | None = None
 _tts_lock = threading.Lock()
 _tts_engine = None
 
-# Last spoken reply per WebSocket (briefing or approval) for "read that again"
-_last_voice_reply: dict[int, str] = {}
+# Last spoken reply per WebSocket for "read that again" (text + last successful TTS payload).
+_last_voice_reply: dict[int, LastSpokenTurn | str] = {}
 
 RE_VOICE_READ_AGAIN = re.compile(
     r"\b(read\s+that\s+again|repeat\s+(that|it|the\s+approval)|say\s+that\s+again)\b",
@@ -428,7 +434,31 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             tnorm = _norm_for_intent(text)
 
-            async def _speak_local(reply: str, *, kind: str) -> None:
+            async def _replay_cached_tts(turn: LastSpokenTurn) -> None:
+                """Resend last successful TTS bytes — no pyttsx3 (avoids Windows hangs on repeat)."""
+                msg = ws_tts_message(turn, kind="repeat")
+                if msg is None:
+                    await _repeat_text_only_no_audio(turn)
+                    return
+                await _manager.send_json(websocket, {"type": "reply", "text": turn.text})
+                await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
+                try:
+                    await _manager.send_json(websocket, msg)
+                finally:
+                    try:
+                        await _manager.send_json(websocket, {"type": "status", "state": "idle"})
+                    except Exception as e2:
+                        log.warning("voice status idle send failed: %s", e2)
+
+            async def _repeat_text_only_no_audio(turn: LastSpokenTurn) -> None:
+                await _manager.send_json(websocket, {"type": "reply", "text": turn.text})
+                await _manager.send_json(
+                    websocket,
+                    {"type": "error", "message": NO_AUDIO_REPEAT_HINT},
+                )
+                await _manager.send_json(websocket, {"type": "status", "state": "idle"})
+
+            async def _speak_local(ws_key_inner: int, reply: str, *, kind: str) -> None:
                 await _manager.send_json(websocket, {"type": "reply", "text": reply})
                 await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
                 try:
@@ -441,12 +471,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         websocket,
                         {"type": "tts", "kind": kind, "text": reply, "audio_b64": b64},
                     )
+                    _last_voice_reply[ws_key_inner] = LastSpokenTurn(
+                        text=reply, kind=kind, audio_b64=b64
+                    )
                 except asyncio.TimeoutError:
                     log.warning(
                         "tts voice reply timed out after %ss (kind=%s, len=%s)",
                         TTS_WAV_TIMEOUT_SEC,
                         kind,
                         len(reply),
+                    )
+                    _last_voice_reply[ws_key_inner] = LastSpokenTurn(
+                        text=reply, kind=kind, audio_b64=None
                     )
                     await _manager.send_json(
                         websocket,
@@ -457,6 +493,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     )
                 except Exception as e:
                     log.exception("tts voice reply: %s", e)
+                    _last_voice_reply[ws_key_inner] = LastSpokenTurn(
+                        text=reply, kind=kind, audio_b64=None
+                    )
                 finally:
                     try:
                         await _manager.send_json(websocket, {"type": "status", "state": "idle"})
@@ -464,11 +503,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         log.warning("voice status idle send failed: %s", e2)
 
             if RE_VOICE_READ_AGAIN.search(tnorm):
-                prev = _last_voice_reply.get(ws_key)
-                if prev:
-                    await _speak_local(prev, kind="repeat")
+                prev = normalize_last_voice_entry(_last_voice_reply.get(ws_key))
+                if prev and prev.text.strip():
+                    if prev.audio_b64:
+                        await _replay_cached_tts(prev)
+                    else:
+                        await _repeat_text_only_no_audio(prev)
                     continue
                 await _speak_local(
+                    ws_key,
                     "I don't have anything to repeat yet. Ask what's in your inbox, what's happening, "
                     "what needs my attention, or what needs my approval.",
                     kind="repeat",
@@ -482,8 +525,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
             )
             if inbox_reply is not None:
-                _last_voice_reply[ws_key] = inbox_reply
-                await _speak_local(inbox_reply, kind="inbox")
+                await _speak_local(ws_key, inbox_reply, kind="inbox")
                 continue
 
             briefing_reply = await try_handle_voice_briefing(
@@ -493,8 +535,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
             )
             if briefing_reply is not None:
-                _last_voice_reply[ws_key] = briefing_reply
-                await _speak_local(briefing_reply, kind="briefing")
+                await _speak_local(ws_key, briefing_reply, kind="briefing")
                 continue
 
             governed_reply = await try_handle_governed_action_voice(
@@ -504,8 +545,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
             )
             if governed_reply is not None:
-                _last_voice_reply[ws_key] = governed_reply
-                await _speak_local(governed_reply, kind="governed_action")
+                await _speak_local(ws_key, governed_reply, kind="governed_action")
                 continue
 
             approval_reply = await try_handle_voice_approval(
@@ -515,8 +555,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
             )
             if approval_reply is not None:
-                _last_voice_reply[ws_key] = approval_reply
-                await _speak_local(approval_reply, kind="approval")
+                await _speak_local(ws_key, approval_reply, kind="approval")
                 continue
 
             surface = _manager.surface_session_for(ws_key)
@@ -536,7 +575,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     websocket,
                     {"type": "error", "message": err},
                 )
-                await _speak_local(err, kind="error")
+                await _speak_local(ws_key, err, kind="error")
                 continue
 
             if intake_res.outcome == "mission_created" and intake_res.mission_id:
@@ -545,8 +584,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             speak_text = intake_res.message
             tts_kind = intake_res.reply_kind or "intake"
-            _last_voice_reply[ws_key] = speak_text
-            await _speak_local(speak_text, kind=tts_kind)
+            await _speak_local(ws_key, speak_text, kind=tts_kind)
     except WebSocketDisconnect:
         pass
     except Exception as e:

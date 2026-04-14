@@ -222,6 +222,7 @@
           stream.getTracks().forEach(function (t) { t.stop(); });
           var blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
           if (blob.size && ws.readyState === WebSocket.OPEN) {
+            setState('thinking', 'Thinking…');
             blob.arrayBuffer().then(function (ab) { ws.send(ab); });
           }
           micBtn.classList.remove('recording');

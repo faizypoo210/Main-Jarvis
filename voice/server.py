@@ -437,7 +437,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     )
                 except Exception as e:
                     log.exception("tts voice reply: %s", e)
-                await _manager.send_json(websocket, {"type": "status", "state": "idle"})
+                finally:
+                    try:
+                        await _manager.send_json(websocket, {"type": "status", "state": "idle"})
+                    except Exception as e2:
+                        log.warning("voice status idle send failed: %s", e2)
 
             if RE_VOICE_READ_AGAIN.search(tnorm):
                 prev = _last_voice_reply.get(ws_key)

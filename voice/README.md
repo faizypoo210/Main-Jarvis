@@ -27,6 +27,8 @@ Read-only summaries from existing operator GETs (no new mission state). Implemen
 
 **Order:** WebSocket handler runs **read that again** → **inbox** → **briefing** → **governed action requests** → **approval** → **unified intake** (`POST /api/v1/intake`). If data is missing, the reply says so briefly.
 
+**Precedence:** Briefing only answers **operator snapshot** questions (what is happening, what needs my attention, what’s blocked *as an overview*, next/previous mission, etc.). Utterances that sound like **delegated work** on GitHub, PRs, Gmail, or mailbox/inbox (check, summarize, look through, …) **defer** to unified intake — see `routing_precedence.py`.
+
 ## Voice inbox triage (v1)
 
 Actionable **operator inbox** readout + explicit triage only — `inbox_voice.py`. Ephemeral queue + cursor per WebSocket (not persisted). Uses `GET /api/v1/operator/inbox` and, for acknowledge/snooze/dismiss, `POST /api/v1/operator/inbox/{item_key}/acknowledge|snooze|dismiss` with `CONTROL_PLANE_API_KEY`.

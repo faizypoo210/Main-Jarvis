@@ -16,6 +16,8 @@ from typing import Any
 
 import httpx
 
+from .routing_precedence import should_defer_briefing_to_freeform_intake
+
 log = logging.getLogger("jarvis.voice.briefing")
 
 _sessions: dict[int, VoiceBriefingState] = {}
@@ -374,8 +376,10 @@ RE_WHATS_RUNNING = re.compile(
     r"\b(what'?s\s+running|what\s+is\s+running|what\s+is\s+in\s+progress)\b",
     re.I,
 )
+# Do not use bare \b(blockers|stuck)\b — phrases like "summarize blockers" are mission work (intake).
 RE_WHATS_BLOCKED = re.compile(
-    r"\b(what'?s\s+blocked|what\s+is\s+blocked|blockers|what\s+is\s+stuck)\b",
+    r"\b(what'?s\s+blocked|what\s+is\s+blocked|what\s+is\s+stuck|"
+    r"what\s+are\s+the\s+blockers|what'?s\s+blocking(\s+us)?|where\s+are\s+we\s+blocked)\b",
     re.I,
 )
 RE_READ_TOP_MISSION = re.compile(
@@ -410,6 +414,9 @@ async def try_handle_voice_briefing(
     _ = api_key  # reserved; briefing uses public GETs only
     t = _norm(text)
     if not t:
+        return None
+
+    if should_defer_briefing_to_freeform_intake(text):
         return None
 
     st = get_voice_briefing_state(ws_key)

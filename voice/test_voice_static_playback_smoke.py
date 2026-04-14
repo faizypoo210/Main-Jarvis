@@ -19,3 +19,5 @@ def test_index_html_has_playback_ownership_and_cleanup():
     assert "myGen !== ttsPlaybackGen" in text
     assert "tts_unavailable" in text
     assert "repeat_no_audio" in text
+    assert "SPEECH_MODE" in text
+    assert "speech_mode" in text

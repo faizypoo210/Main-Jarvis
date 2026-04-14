@@ -50,6 +50,7 @@ from .last_spoken import (
     normalize_last_voice_entry,
     ws_tts_message,
 )
+from .speech_mode import MODE_BROWSER_FIRST, normalize_speech_mode
 from .spoken_render import generic_voice_spoken, shape_intake_voice_reply
 from .tts_isolated import TTS_SYNTHESIS_TIMEOUT_SEC, synthesize_wav_isolated
 from .voice_routing import MissionSubscriptionIndex
@@ -93,6 +94,8 @@ RE_VOICE_READ_AGAIN = re.compile(
 # Client may speak this locally (Web Speech API) when server WAV synthesis fails.
 TTS_UNAVAILABLE_REASON = "tts_unavailable"
 REPEAT_NO_AUDIO_REASON = "repeat_no_audio"
+# ``tts`` JSON: ``delivery: "browser"`` means speak ``text`` locally; no ``audio_b64``.
+TTS_DELIVERY_BROWSER = "browser"
 
 
 def _tts_fallback_error_message() -> str:
@@ -144,6 +147,7 @@ class VoiceConnectionManager:
         self._index = MissionSubscriptionIndex()
         self._sockets: dict[int, WebSocket] = {}
         self._surface_session: dict[int, str | None] = {}
+        self._speech_mode: dict[int, str] = {}
         self._lock = asyncio.Lock()
 
     async def connect(
@@ -152,26 +156,34 @@ class VoiceConnectionManager:
         *,
         surface_session_id: str | None,
         thread_mission_id: str | None,
+        speech_mode: str | None = None,
     ) -> int:
         await ws.accept()
         k = id(ws)
+        mode = normalize_speech_mode(speech_mode)
         initial: set[str] = set()
         if thread_mission_id and str(thread_mission_id).strip():
             initial.add(str(thread_mission_id).strip())
         async with self._lock:
             self._sockets[k] = ws
             self._surface_session[k] = surface_session_id.strip() if surface_session_id else None
+            self._speech_mode[k] = mode
             self._index.add_connection(k, initial)
         log.info(
-            "voice_ws_registered key=%s surface_session=%s initial_mission_subs=%s",
+            "voice_ws_registered key=%s surface_session=%s speech_mode=%s initial_mission_subs=%s",
             k,
             _short_sid(self._surface_session.get(k)),
+            mode,
             len(initial),
         )
         return k
 
     def surface_session_for(self, ws_key: int) -> str | None:
         return self._surface_session.get(ws_key)
+
+    def speech_mode_for(self, ws_key: int) -> str:
+        """``browser_first`` (default) or ``server_preferred``."""
+        return self._speech_mode.get(ws_key, MODE_BROWSER_FIRST)
 
     async def subscribe_mission(self, ws_key: int, mission_id: str) -> None:
         mid = str(mission_id).strip()
@@ -191,6 +203,7 @@ class VoiceConnectionManager:
         async with self._lock:
             self._sockets.pop(k, None)
             self._surface_session.pop(k, None)
+            self._speech_mode.pop(k, None)
             self._index.remove_connection(k)
         log.info("voice_ws_disconnected key=%s", k)
 
@@ -216,20 +229,52 @@ class VoiceConnectionManager:
 
 
 async def _tts_to_websockets(
-    _manager: VoiceConnectionManager, websockets: list[WebSocket], text: str, *, kind: str
+    manager: VoiceConnectionManager, websockets: list[WebSocket], text: str, *, kind: str
 ) -> None:
     if not text.strip() or not websockets:
         return
+    line = text.strip()
+    wav_clients: list[WebSocket] = []
+    for ws in websockets:
+        k = id(ws)
+        if manager.speech_mode_for(k) == MODE_BROWSER_FIRST:
+            msg = {
+                "type": "tts",
+                "kind": kind,
+                "text": line,
+                "delivery": TTS_DELIVERY_BROWSER,
+            }
+            try:
+                await manager.send_json(ws, msg)
+            except Exception as e:
+                log.warning("voice_tts_send_failed: %s", e)
+        else:
+            wav_clients.append(ws)
+    if not wav_clients:
+        return
     try:
-        wav = await synthesize_wav_isolated(text)
+        wav = await synthesize_wav_isolated(line)
     except (asyncio.TimeoutError, RuntimeError, ValueError) as e:
         log.warning("voice_redis_tts_skipped: %s", e)
+        for ws in wav_clients:
+            try:
+                await manager.send_json(
+                    ws,
+                    {
+                        "type": "tts",
+                        "kind": kind,
+                        "text": line,
+                        "delivery": TTS_DELIVERY_BROWSER,
+                    },
+                )
+            except Exception as e2:
+                log.warning("voice_tts_send_failed: %s", e2)
         return
     b64 = base64.b64encode(wav).decode("ascii")
-    msg = {"type": "tts", "kind": kind, "text": text, "audio_b64": b64}
-    for ws in websockets:
+    msg = {"type": "tts", "kind": kind, "text": line, "audio_b64": b64}
+    for ws in wav_clients:
         try:
-            await ws.send_json(msg)
+            await manager.send_json(ws, msg)
         except Exception as e:
             log.warning("voice_tts_send_failed: %s", e)
 
@@ -373,10 +418,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     ws_key: int | None = None
     loop = asyncio.get_event_loop()
     try:
+        speech_mode_q = (qp.get("speech_mode") or "").strip() or None
         ws_key = await _manager.connect(
             websocket,
             surface_session_id=surface_sid,
             thread_mission_id=thread_mid,
+            speech_mode=speech_mode_q,
         )
         while True:
             msg = await websocket.receive()
@@ -492,18 +539,35 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 )
                 await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
                 try:
-                    wav = await synthesize_wav_isolated(spoken)
-                    b64 = base64.b64encode(wav).decode("ascii")
-                    await _manager.send_json(
-                        websocket,
-                        {"type": "tts", "kind": kind, "text": spoken, "audio_b64": b64},
-                    )
-                    _last_voice_reply[ws_key_inner] = LastSpokenTurn(
-                        display_text=display_text,
-                        spoken_text=spoken,
-                        kind=kind,
-                        audio_b64=b64,
-                    )
+                    if _manager.speech_mode_for(ws_key_inner) == MODE_BROWSER_FIRST:
+                        await _manager.send_json(
+                            websocket,
+                            {
+                                "type": "tts",
+                                "kind": kind,
+                                "text": spoken,
+                                "delivery": TTS_DELIVERY_BROWSER,
+                            },
+                        )
+                        _last_voice_reply[ws_key_inner] = LastSpokenTurn(
+                            display_text=display_text,
+                            spoken_text=spoken,
+                            kind=kind,
+                            audio_b64=None,
+                        )
+                    else:
+                        wav = await synthesize_wav_isolated(spoken)
+                        b64 = base64.b64encode(wav).decode("ascii")
+                        await _manager.send_json(
+                            websocket,
+                            {"type": "tts", "kind": kind, "text": spoken, "audio_b64": b64},
+                        )
+                        _last_voice_reply[ws_key_inner] = LastSpokenTurn(
+                            display_text=display_text,
+                            spoken_text=spoken,
+                            kind=kind,
+                            audio_b64=b64,
+                        )
                 except (asyncio.TimeoutError, RuntimeError) as e:
                     log.warning(
                         "tts voice reply failed (%s): kind=%s spoken_len=%s display_len=%s detail=%s",

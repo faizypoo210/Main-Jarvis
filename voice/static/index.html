@@ -126,6 +126,9 @@
   const statusText = document.getElementById('statusText');
   const logEl = document.getElementById('log');
 
+  /** ``browser_first`` (default): Web Speech for fresh lines; server WAV only when sent. ``server_preferred``: try server WAV per reply. */
+  var SPEECH_MODE = (new URLSearchParams(location.search).get('speech_mode') || 'browser_first').trim();
+
   let ws = null;
   let recording = false;
   let mediaRecorder = null;
@@ -167,8 +170,8 @@
   }
 
   /**
-   * When server WAV is missing, speak short line locally (Chrome/Edge).
-   * Uses same gen model as WAV so new turns invalidate old onend handlers.
+   * Web Speech output for ``spoken_text`` (browser-first mode, error fallback, or decode failure).
+   * Same gen model as WAV so new turns invalidate stale onend handlers.
    */
   function startBrowserSpokenFallback(spokenText) {
     var line = (spokenText || '').trim();
@@ -221,7 +224,9 @@
 
   function connectWs() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(proto + '//' + location.host + '/ws');
+    const qs = new URLSearchParams();
+    qs.set('speech_mode', SPEECH_MODE);
+    ws = new WebSocket(proto + '//' + location.host + '/ws?' + qs.toString());
     ws.binaryType = 'arraybuffer';
     ws.onopen = function () { appendLine('heard', 'System', 'Connected.'); };
     ws.onclose = function () { setState('idle', 'Disconnected'); };
@@ -268,7 +273,17 @@
         appendLine('upd', 'Coordinator', JSON.stringify(msg.payload || {}));
         return;
       }
-      if (msg.type === 'tts' && msg.audio_b64) {
+      if (msg.type === 'tts') {
+        var hasWav = !!(msg.audio_b64 && String(msg.audio_b64).length > 0);
+        var line = (msg.text || '').trim();
+        if (!hasWav) {
+          if (line) {
+            startBrowserSpokenFallback(line);
+          } else {
+            setState('idle', 'Idle');
+          }
+          return;
+        }
         var myGen = ++ttsPlaybackGen;
         stopAllSpeaking();
         ttsDecodeInFlight = true;

@@ -21,11 +21,13 @@ Env: copy `voice/.env.example` to `voice/.env` (or set `REDIS_URL`, `CONTROL_PLA
 
 **Browser playback:** The static UI (`static/index.html`) resumes `AudioContext` before decoding WAV (required for repeat and other turns after the first). Spoken reply shaping (`spoken_render.py`) keeps **transcript** text full while shortening **TTS input** for long status snapshots.
 
-**Hybrid speech (resilience):** Preferred path is **server WAV** (`tts.audio_b64`). If synthesis fails or times out, the server sends `error` with `reason: tts_unavailable` and `spoken_text` (the same short line that would have been synthesized). The UI then uses the **Web Speech API** (`speechSynthesis`) locally when available, so multi-turn sessions stay usable without a working Windows SAPI worker. **Repeat** unchanged: when cached `audio_b64` exists, the client replays server bytes only — no browser fallback unless decode fails (then it uses the `tts` message’s `text`). When repeat has no cached audio, `reason: repeat_no_audio` includes `spoken_text` so the browser can still read the line aloud.
+**Speech mode (local web voice):** The static UI connects with **`?speech_mode=browser_first`** by default (override per tab, or set **`JARVIS_VOICE_DEFAULT_SPEECH_MODE`** on the server). **browser_first:** fresh replies use **`tts`** messages with **`delivery: "browser"`** and no **`audio_b64`** — the browser speaks **`text`** (the short `spoken_text` line) via **Web Speech API** immediately; the server does **not** run subprocess WAV synthesis for those turns, so Windows TTS flakes cannot block the session. **server_preferred:** same as before — server tries isolated WAV per reply; on failure the **`error`** payload still carries **`reason: tts_unavailable`** and **`spoken_text`** for local speech. **Repeat:** unchanged — if **`audio_b64`** was cached from an earlier **server_preferred** success, the client plays WAV; otherwise **`tts`** has no bytes and the browser speaks the line.
+
+**Coordinator Redis fan-out:** Per connection, **`browser_first`** clients get **`tts`** with **`delivery: "browser"`** only; **`server_preferred`** shares one synthesized WAV when synthesis succeeds.
 
 `server.py` aliases `TTS_WAV_TIMEOUT_SEC` to `TTS_SYNTHESIS_TIMEOUT_SEC` for compatibility with older notes.
 
-**WebSocket reply fields:** `reply` may include optional `spoken_text` (defaults to `text` for old clients). Errors that invite browser fallback include `reason` and `spoken_text` as above.
+**WebSocket reply fields:** `reply` includes **`text`** (full transcript) and **`spoken_text`** (short voice line). **`tts`** either carries **`audio_b64`** or **`delivery: "browser"`** with no audio. Errors that invite local speech include **`reason`** and **`spoken_text`** as before.
 
 ## Voice mission briefing + status readout (v1)
 

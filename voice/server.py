@@ -1,14 +1,12 @@
 """
-JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, Ollama (default qwen3:4b), pyttsx3 TTS, Redis streams.
+JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, pyttsx3 TTS, Redis streams.
 
-MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Ollama/Whisper env; local .env beside this file.
+MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Whisper env; local .env beside this file.
 UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to CI here.
-TRUTH_SOURCE: intent forwarding targets control plane HTTP; mission truth remains control plane + DB.
+TRUTH_SOURCE: free-form utterances use ``POST /api/v1/intake``; replies come from the control-plane bundle (no cosmetic Ollama ack).
 
-Voice approval v1: approval_voice.try_handle_voice_approval; briefing_voice.try_handle_voice_briefing (read-only).
-Voice governed action requests v1: governed_action_voice.try_handle_governed_action_voice (approval creation only).
-Voice inbox triage v1: inbox_voice.try_handle_voice_inbox (operator inbox readout + explicit ack/snooze/dismiss).
-Handlers run before POST /commands. "Read that again" repeats the last inbox, briefing, governed, or approval reply (ephemeral).
+Specialized handlers (unchanged order): read that again → inbox → briefing → governed action → approval → **unified intake**.
+"Read that again" repeats the last spoken reply (inbox, briefing, governed, approval, or intake).
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ import os
 import re
 import sys
 import tempfile
-from uuid import UUID
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -45,6 +43,7 @@ from governed_action_voice import (
     note_voice_command_mission,
     try_handle_governed_action_voice,
 )
+from intake_voice import post_voice_intake
 from voice_routing import MissionSubscriptionIndex
 
 logging.basicConfig(level=logging.INFO)
@@ -55,8 +54,6 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 # Override with CONTROL_PLANE_URL if the control plane listens elsewhere.
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
-OLLAMA_BASE = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b")
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 if WHISPER_DEVICE == "cuda":
     WHISPER_COMPUTE = "float16"
@@ -65,13 +62,6 @@ else:
 
 STREAM_UPDATES = "jarvis.updates"
 
-OLLAMA_ACK_SYSTEM = (
-    "You are Jarvis, a calm executive AI assistant. "
-    "Acknowledge the user's command in 1-2 sentences. "
-    "Be brief. Confirm what you understood and that you are on it. "
-    "Do not make up information. Do not invent results."
-)
-
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _model = None
@@ -79,6 +69,10 @@ _redis: Redis | None = None
 _manager = None
 _updates_task: asyncio.Task | None = None
 _worker_hb_task: asyncio.Task | None = None
+_http_client: httpx.AsyncClient | None = None
+
+_tts_lock = threading.Lock()
+_tts_engine = None
 
 # Last spoken reply per WebSocket (briefing or approval) for "read that again"
 _last_voice_reply: dict[int, str] = {}
@@ -113,12 +107,15 @@ def _get_model():
 def _tts_wav_bytes(text: str) -> bytes:
     import pyttsx3
 
-    engine = pyttsx3.init()
+    global _tts_engine
     fd, path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     try:
-        engine.save_to_file(text, path)
-        engine.runAndWait()
+        with _tts_lock:
+            if _tts_engine is None:
+                _tts_engine = pyttsx3.init()
+            _tts_engine.save_to_file(text, path)
+            _tts_engine.runAndWait()
         with open(path, "rb") as f:
             return f.read()
     finally:
@@ -141,33 +138,6 @@ def _short_sid(s: str | None) -> str:
     if len(s) <= 12:
         return s
     return f"{s[:8]}…"
-
-
-async def post_command_to_control_plane(
-    text: str, *, surface_session_id: str | None = None
-) -> str | None:
-    """POST command to the Jarvis control plane; return mission_id or None on failure."""
-    url = f"{CONTROL_PLANE_URL}/api/v1/commands"
-    body: dict[str, object] = {"text": text, "source": "voice"}
-    if surface_session_id:
-        try:
-            body["surface_session_id"] = str(UUID(surface_session_id.strip()))
-        except ValueError:
-            log.warning("voice command: invalid surface_session_id; omitting")
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
-            r = await client.post(url, json=body, headers=headers)
-            r.raise_for_status()
-            resp = r.json()
-            mid = resp.get("mission_id")
-            if mid is None:
-                log.warning("control plane response missing mission_id: %s", resp)
-                return None
-            return str(mid)
-    except Exception as e:
-        log.warning("control plane command post failed: %s", e)
-        return None
 
 
 class VoiceConnectionManager:
@@ -354,7 +324,11 @@ async def _voice_worker_heartbeat_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    global _redis, _manager, _updates_task, _worker_hb_task
+    global _redis, _manager, _updates_task, _worker_hb_task, _http_client
+    _http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(120.0, connect=10.0),
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+    )
     _redis = Redis.from_url(REDIS_URL, decode_responses=False)
     _manager = VoiceConnectionManager()
     _updates_task = asyncio.create_task(_redis_updates_loop(_manager))
@@ -375,6 +349,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             pass
     if _redis:
         await _redis.close()
+    if _http_client:
+        await _http_client.aclose()
+        _http_client = None
 
 
 app = FastAPI(title="JARVIS Voice", lifespan=lifespan)
@@ -389,6 +366,7 @@ async def index() -> FileResponse:
 async def websocket_endpoint(websocket: WebSocket) -> None:
     assert _manager is not None
     assert _redis is not None
+    assert _http_client is not None
     qp = websocket.query_params
     surface_sid = (qp.get("surface_session_id") or "").strip() or None
     thread_mid = (qp.get("thread_mission_id") or "").strip() or None
@@ -518,58 +496,33 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             surface = _manager.surface_session_for(ws_key)
-            mission_id = await post_command_to_control_plane(
-                text, surface_session_id=surface
+            intake_res = await post_voice_intake(
+                _http_client,
+                control_plane_url=CONTROL_PLANE_URL,
+                api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
+                text=text,
+                surface_session_id=surface,
+                thread_mission_id=thread_mid,
             )
-            if mission_id is not None:
-                note_voice_command_mission(ws_key, mission_id)
-                await _manager.subscribe_mission(ws_key, mission_id)
-                user_ollama = (
-                    f"The user said: '{text}'. Mission ID {mission_id} has been created."
+            if not intake_res.ok:
+                err = intake_res.error_message or (
+                    "I could not reach the Jarvis control plane. Check that it is running and configured."
                 )
-            else:
-                user_ollama = (
-                    f"The user said: '{text}'. Acknowledge and confirm you understood."
-                )
-
-            try:
-                async with httpx.AsyncClient(timeout=120.0) as client:
-                    r = await client.post(
-                        f"{OLLAMA_BASE}/api/chat",
-                        json={
-                            "model": OLLAMA_MODEL,
-                            "messages": [
-                                {"role": "system", "content": OLLAMA_ACK_SYSTEM},
-                                {"role": "user", "content": user_ollama},
-                            ],
-                            "stream": False,
-                        },
-                    )
-                    r.raise_for_status()
-                    body = r.json()
-                    reply = (body.get("message") or {}).get("content") or ""
-                    reply = re.sub(r"<\|[^>]+\|>", "", reply).strip()
-            except Exception as e:
-                log.exception("ollama: %s", e)
                 await _manager.send_json(
                     websocket,
-                    {"type": "error", "message": "Ollama request failed."},
+                    {"type": "error", "message": err},
                 )
+                await _speak_local(err, kind="error")
                 continue
 
-            await _manager.send_json(websocket, {"type": "reply", "text": reply})
-            _last_voice_reply[ws_key] = reply
-            await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
-            try:
-                wav = await loop.run_in_executor(None, _tts_wav_bytes, reply)
-                b64 = base64.b64encode(wav).decode("ascii")
-                await _manager.send_json(
-                    websocket,
-                    {"type": "tts", "kind": "ollama", "text": reply, "audio_b64": b64},
-                )
-            except Exception as e:
-                log.exception("tts: %s", e)
-            await _manager.send_json(websocket, {"type": "status", "state": "idle"})
+            if intake_res.outcome == "mission_created" and intake_res.mission_id:
+                note_voice_command_mission(ws_key, intake_res.mission_id)
+                await _manager.subscribe_mission(ws_key, intake_res.mission_id)
+
+            speak_text = intake_res.message
+            tts_kind = intake_res.reply_kind or "intake"
+            _last_voice_reply[ws_key] = speak_text
+            await _speak_local(speak_text, kind=tts_kind)
     except WebSocketDisconnect:
         pass
     except Exception as e:

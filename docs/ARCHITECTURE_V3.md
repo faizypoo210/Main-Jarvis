@@ -14,7 +14,7 @@
 |--------|------|---------------------------|
 | **Control plane** | Authoritative HTTP API + Alembic/PostgreSQL: missions, timeline events, approvals, receipts, operator routes, integrations, heartbeat run, SMS inbound webhook | **8001** |
 | **Command Center** | React/Vite operator UI: missions, approvals (incl. review **bundle**), inbox, activity, workers, cost, integrations (readiness), evals | **5173** (dev) |
-| **Voice server** | FastAPI + WebSocket: STT/TTS; **read-only** briefings; inbox triage; approval readout/decision; governed-action **request** drafts; **`POST /commands`** for new missions (planned: **`POST /api/v1/intake`** on control plane as the single interpreted path) | **8000** |
+| **Voice server** | FastAPI + WebSocket: STT/TTS; **read-only** briefings; inbox triage; approval readout/decision; governed-action **request** drafts; free-form utterances → **`POST /api/v1/intake`** (`source_surface: voice`) | **8000** |
 | **Coordinator** | Stateless consumer: Redis streams ↔ control plane ↔ optional **DashClaw**; publishes execution/updates streams | Env → Redis, HTTP |
 | **Executor** | Consumes **`jarvis.execution`**, invokes **OpenClaw CLI**, **`POST /api/v1/receipts`** | Redis consumer |
 | **Heartbeat worker** | Calls **`POST /api/v1/heartbeat/run`** (and related) on a schedule; drives supervision + **approval reminders** when configured | Python process + env |
@@ -43,7 +43,7 @@
 | **Approval state** | Pending/resolved approvals, risk, `action_type`, review **packets** | Same |
 | **Receipt / execution metadata** | Agent output, `lane_truth`, cost hooks | Same (`receipts` + derived **cost_events**) |
 | **Operator durable memory** | Long-lived **`memory_items`** | Same — **not** mission logs or automatic chat export |
-| **Conversational / ephemeral** | Voice WebSocket focus, “read that again”, Ollama **direct** acks | **Not** persisted as mission truth; voice uses CP for reads/writes **only** via explicit API calls |
+| **Conversational / ephemeral** | Voice WebSocket focus, “read that again”, intake reply TTS | **Not** persisted as mission truth except via control-plane API calls; mission work still flows through coordinator/executor |
 | **Operator inbox (v1)** | Actionable queue shown in UI/voice | **Derived** from approvals, `heartbeat_findings`, missions, integration failures — merged with **`operator_inbox_state`** (ack/snooze/dismiss), **not** a second mission store |
 | **Reminders** | Attempts / escalation tracking | **`approval_reminders`**; tied to heartbeat run when enabled |
 
@@ -72,7 +72,7 @@ Schema evolution: **Alembic** under `services/control-plane/`.
 | Surface | Access pattern | Decisions / writes |
 |--------|----------------|---------------------|
 | **Web (Command Center)** | REST + SSE (`/api/v1/updates/stream`) | Approvals, inbox triage, governed launchers → same integration POSTs as API |
-| **Voice** | WebSocket + HTTP to control plane | **`decided_via: voice`**; governed actions **`requested_via: voice`**; commands → **`POST /api/v1/commands`** |
+| **Voice** | WebSocket + HTTP to control plane | **`decided_via: voice`**; governed actions **`requested_via: voice`**; free-form → **`POST /api/v1/intake`**; primitive **`POST /api/v1/commands`** available for tools but not the default voice path |
 | **SMS** | Twilio webhook | **`decided_via: sms`**; **explicit** `APPROVE|DENY|READ` + code only |
 
 **Unified intake (v1)** — `POST /api/v1/intake` applies deterministic interpretation (`app/services/intake_interpretation.py`), returns structured `InterpretationResult` + `IntakeReplyBundle`, and routes to existing control-plane services: **`CommandService`** for mission-creating intents, **`ApprovalService.resolve_approval`** when an approval id and decision are resolvable, **operator inbox** state updates for explicit triage, and read-only **mission list** snapshots for status-style queries. **`POST /api/v1/commands`** stays the lower-level primitive that always creates a mission (surfaces that already classified intent can keep using it).
@@ -101,7 +101,7 @@ Catalog metadata: **`GET /api/v1/operator/action-catalog`** (six actions; **no**
 
 ## 9. Canonical voice flow (handler order)
 
-On each utterance, the voice server evaluates in order: **read that again** → **inbox** → **briefing** → **governed action request** → **approval** → **`POST /commands`** → optional **direct Ollama** ack. **Direct Ollama** does **not** populate mission **`routing_decided`** or executor **`lane_truth`** (see [`MODEL_LANES.md`](MODEL_LANES.md)).
+On each utterance, the voice server evaluates in order: **read that again** → **inbox** → **briefing** → **governed action request** → **approval** → **`POST /api/v1/intake`** (free-form). Spoken copy follows the **intake reply bundle**; it does **not** invent mission results. Executor **`lane_truth`** still comes from receipts/coordinator (see [`MODEL_LANES.md`](MODEL_LANES.md)).
 
 ---
 
@@ -139,7 +139,7 @@ On each utterance, the voice server evaluates in order: **read that again** → 
 |--------------------|----------------|-------------------------|------------------------|--------|
 | **Control plane** | APIs, persistence, workflows, webhooks | PostgreSQL rows for missions/approvals/receipts/memory/inbox state/reminders/cost/workers | Postgres, Redis (for app), vendor tokens (env) | `GET /health`, `13-rehearse-golden-path.ps1`, `08-final-report.ps1` |
 | **Command Center** | Operator UI | **None** (client) | Control plane API | `npm run build` |
-| **Voice** | STT/TTS, routing | Ephemeral WS state only | Control plane, optional Ollama | `voice/README.md` |
+| **Voice** | STT/TTS, routing | Ephemeral WS state only | Control plane (`/intake` + specialized GETs/POSTs) | `voice/README.md` |
 | **Coordinator** | Stream routing, DashClaw bridge | **None** (derives writes via API) | Redis, DashClaw, control plane | Env + logs; live stack rehearsal |
 | **Executor** | Run OpenClaw, post receipts | **None** | Redis, gateway, control plane | `14-rehearse-live-stack.ps1` |
 | **Heartbeat worker** | Scheduled supervision + reminder hook | **None** | Control plane API key | `POST /heartbeat/run` docs in `REPO_TRUTH.md` |
@@ -183,7 +183,7 @@ flowchart LR
   EX -->|POST /receipts| cp
 ```
 
-*Voice may instead hit inbox/approval/governed handlers before `POST /commands`; direct Ollama acks are out of band for `lane_truth`.*
+*Voice may hit inbox/approval/governed handlers before **`POST /api/v1/intake`**; spoken replies follow the intake reply bundle (no local LLM ack as mission truth).*
 
 ### B. Governed action → approval → execution
 

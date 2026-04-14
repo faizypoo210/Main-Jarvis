@@ -1,8 +1,8 @@
 """
-JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, pyttsx3 TTS, Redis streams.
+JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, subprocess-isolated TTS, Redis streams.
 
 MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Whisper env; local .env beside this file.
-UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3, and optional GPU — not pinned to CI here.
+UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3 (one-shot worker only), and optional GPU — not pinned to CI here.
 TRUTH_SOURCE: free-form utterances use ``POST /api/v1/intake``; replies come from the control-plane bundle (no cosmetic Ollama ack).
 Voice TTS uses ``spoken_render`` condensation; the transcript still shows full ``reply.message``.
 
@@ -20,7 +20,6 @@ import os
 import re
 import sys
 import tempfile
-import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -52,13 +51,14 @@ from .last_spoken import (
     ws_tts_message,
 )
 from .spoken_render import generic_voice_spoken, shape_intake_voice_reply
+from .tts_isolated import TTS_SYNTHESIS_TIMEOUT_SEC, synthesize_wav_isolated
 from .voice_routing import MissionSubscriptionIndex
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
 
-# pyttsx3 can hang on some Windows stacks; never block the receive loop indefinitely.
-TTS_WAV_TIMEOUT_SEC = 120.0
+# Subprocess TTS budget (see ``tts_isolated``); override with JARVIS_VOICE_TTS_TIMEOUT_SEC.
+TTS_WAV_TIMEOUT_SEC = TTS_SYNTHESIS_TIMEOUT_SEC
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -81,9 +81,6 @@ _manager = None
 _updates_task: asyncio.Task | None = None
 _worker_hb_task: asyncio.Task | None = None
 _http_client: httpx.AsyncClient | None = None
-
-_tts_lock = threading.Lock()
-_tts_engine = None
 
 # Last spoken reply per WebSocket for "read that again" (text + last successful TTS payload).
 _last_voice_reply: dict[int, LastSpokenTurn | str] = {}
@@ -113,27 +110,6 @@ def _get_model():
 
         _model = WhisperModel("base", device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
     return _model
-
-
-def _tts_wav_bytes(text: str) -> bytes:
-    import pyttsx3
-
-    global _tts_engine
-    fd, path = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
-    try:
-        with _tts_lock:
-            if _tts_engine is None:
-                _tts_engine = pyttsx3.init()
-            _tts_engine.save_to_file(text, path)
-            _tts_engine.runAndWait()
-        with open(path, "rb") as f:
-            return f.read()
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
 
 
 def _transcribe_file(path: str) -> str:
@@ -234,8 +210,11 @@ async def _tts_to_websockets(
 ) -> None:
     if not text.strip() or not websockets:
         return
-    loop = asyncio.get_event_loop()
-    wav = await loop.run_in_executor(None, _tts_wav_bytes, text)
+    try:
+        wav = await synthesize_wav_isolated(text)
+    except (asyncio.TimeoutError, RuntimeError, ValueError) as e:
+        log.warning("voice_redis_tts_skipped: %s", e)
+        return
     b64 = base64.b64encode(wav).decode("ascii")
     msg = {"type": "tts", "kind": kind, "text": text, "audio_b64": b64}
     for ws in websockets:
@@ -477,10 +456,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _manager.send_json(websocket, {"type": "reply", "text": display_text})
                 await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
                 try:
-                    wav = await asyncio.wait_for(
-                        loop.run_in_executor(None, _tts_wav_bytes, spoken),
-                        timeout=TTS_WAV_TIMEOUT_SEC,
-                    )
+                    wav = await synthesize_wav_isolated(spoken)
                     b64 = base64.b64encode(wav).decode("ascii")
                     await _manager.send_json(
                         websocket,
@@ -492,13 +468,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         kind=kind,
                         audio_b64=b64,
                     )
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, RuntimeError) as e:
                     log.warning(
-                        "tts voice reply timed out after %ss (kind=%s, spoken_len=%s display_len=%s)",
-                        TTS_WAV_TIMEOUT_SEC,
+                        "tts voice reply failed (%s): kind=%s spoken_len=%s display_len=%s detail=%s",
+                        type(e).__name__,
                         kind,
                         len(spoken),
                         len(display_text),
+                        e,
                     )
                     _last_voice_reply[ws_key_inner] = LastSpokenTurn(
                         display_text=display_text,
@@ -510,7 +487,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         websocket,
                         {
                             "type": "error",
-                            "message": "Text-to-speech timed out; reply text is still shown above.",
+                            "message": (
+                                "Text-to-speech failed or timed out; reply text is still shown above."
+                            ),
                         },
                     )
                 except Exception as e:

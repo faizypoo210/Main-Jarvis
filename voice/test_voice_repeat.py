@@ -59,7 +59,7 @@ def test_no_audio_hint_is_explicit() -> None:
 
 
 def test_server_repeat_path_resends_cached_tts_without_regenerating() -> None:
-    """Regression: repeat must use ``ws_tts_message`` / ``_replay_cached_tts``, not ``_tts_wav_bytes``."""
+    """Regression: repeat must use ``ws_tts_message`` / ``_replay_cached_tts``, not ``synthesize_wav_isolated``."""
     from voice import server as voice_server
 
     body = Path(voice_server.__file__).read_text(encoding="utf-8")
@@ -67,3 +67,7 @@ def test_server_repeat_path_resends_cached_tts_without_regenerating() -> None:
     assert "ws_tts_message(turn" in body
     assert "if prev.audio_b64:" in body
     assert "await _replay_cached_tts(prev)" in body
+    _a = body.find("async def _replay_cached_tts")
+    _b = body.find("async def _repeat_text_only_no_audio", _a)
+    assert _a >= 0 and _b > _a
+    assert "synthesize_wav_isolated" not in body[_a:_b]

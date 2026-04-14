@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-# Hard cap for pyttsx3 / Windows TTS — keeps sessions from multi-minute hangs.
+# Hard cap for subprocess TTS input — avoids oversized synthesis requests.
 MAX_SPOKEN_CHARS = 900
 
 

@@ -1,6 +1,6 @@
 # Jarvis voice server
 
-FastAPI + WebSocket: STT (faster-whisper), pyttsx3 TTS, Redis stream fan-out. **Free-form** utterances use the control plane **`POST /api/v1/intake`** (`source_surface: voice`); the spoken reply is the control-plane **reply bundle** (no local LLM “fake ack”).
+FastAPI + WebSocket: STT (faster-whisper), **subprocess-isolated** TTS, Redis stream fan-out. **Free-form** utterances use the control plane **`POST /api/v1/intake`** (`source_surface: voice`); the spoken reply is the control-plane **reply bundle** (no local LLM “fake ack”).
 
 **Where this fits in the system:** see repo [`docs/ARCHITECTURE_V3.md`](../docs/ARCHITECTURE_V3.md) (voice flow, boundaries vs mission `lane_truth`).
 
@@ -17,7 +17,11 @@ Use **module** form `voice.server:app` so imports resolve under the `voice` pack
 
 Env: copy `voice/.env.example` to `voice/.env` (or set `REDIS_URL`, `CONTROL_PLANE_URL`, etc.).
 
-**Browser playback:** The static UI (`static/index.html`) resumes `AudioContext` before decoding WAV (required for repeat and other turns after the first). TTS synthesis on the server is bounded by `TTS_WAV_TIMEOUT_SEC` in `server.py` so a stuck pyttsx3 call cannot block the next utterance forever.
+**Text-to-speech (Windows stability):** Fresh WAV generation does **not** use a long-lived in-process pyttsx3 engine. The server runs `python -m voice.tts_worker` **per utterance** (stdin = UTF-8 text, stdout = WAV). That isolates flaky Windows SAPI state so one bad synthesis cannot poison the next. The asyncio harness in `tts_isolated.py` applies a timeout (`TTS_SYNTHESIS_TIMEOUT_SEC`, default **45s**, override with `JARVIS_VOICE_TTS_TIMEOUT_SEC`), kills the subprocess on expiry, and logs wall-clock duration. **“Read that again”** still **replays cached base64** from the last successful synthesis — no new subprocess.
+
+**Browser playback:** The static UI (`static/index.html`) resumes `AudioContext` before decoding WAV (required for repeat and other turns after the first). Spoken reply shaping (`spoken_render.py`) keeps **transcript** text full while shortening **TTS input** for long status snapshots.
+
+`server.py` aliases `TTS_WAV_TIMEOUT_SEC` to `TTS_SYNTHESIS_TIMEOUT_SEC` for compatibility with older notes.
 
 ## Voice mission briefing + status readout (v1)
 

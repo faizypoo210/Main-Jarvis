@@ -11,7 +11,11 @@ def _index_html() -> str:
 def test_index_html_has_playback_ownership_and_cleanup():
     text = _index_html()
     assert "ttsPlaybackGen" in text
-    assert "stopCurrentTtsPlayback" in text
+    assert "stopAllSpeaking" in text
+    assert "startBrowserSpokenFallback" in text
+    assert "browserSpeechActive" in text
     assert "clientOwnsSpeakingIdle" in text
     assert "currentTtsPlaybackTimer" in text
     assert "myGen !== ttsPlaybackGen" in text
+    assert "tts_unavailable" in text
+    assert "repeat_no_audio" in text

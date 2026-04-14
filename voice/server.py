@@ -90,6 +90,16 @@ RE_VOICE_READ_AGAIN = re.compile(
     re.I,
 )
 
+# Client may speak this locally (Web Speech API) when server WAV synthesis fails.
+TTS_UNAVAILABLE_REASON = "tts_unavailable"
+REPEAT_NO_AUDIO_REASON = "repeat_no_audio"
+
+
+def _tts_fallback_error_message() -> str:
+    return (
+        "Server speech synthesis failed or timed out; try local voice playback if offered below."
+    )
+
 
 def _norm_for_intent(text: str) -> str:
     return " ".join(text.lower().strip().split())
@@ -421,7 +431,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 if msg is None:
                     await _repeat_text_only_no_audio(turn)
                     return
-                await _manager.send_json(websocket, {"type": "reply", "text": turn.display_text})
+                await _manager.send_json(
+                    websocket,
+                    {
+                        "type": "reply",
+                        "text": turn.display_text,
+                        "spoken_text": turn.spoken_text,
+                    },
+                )
                 await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
                 try:
                     await _manager.send_json(websocket, msg)
@@ -432,10 +449,22 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         log.warning("voice status idle send failed: %s", e2)
 
             async def _repeat_text_only_no_audio(turn: LastSpokenTurn) -> None:
-                await _manager.send_json(websocket, {"type": "reply", "text": turn.display_text})
                 await _manager.send_json(
                     websocket,
-                    {"type": "error", "message": NO_AUDIO_REPEAT_HINT},
+                    {
+                        "type": "reply",
+                        "text": turn.display_text,
+                        "spoken_text": turn.spoken_text,
+                    },
+                )
+                await _manager.send_json(
+                    websocket,
+                    {
+                        "type": "error",
+                        "message": NO_AUDIO_REPEAT_HINT,
+                        "spoken_text": turn.spoken_text,
+                        "reason": REPEAT_NO_AUDIO_REASON,
+                    },
                 )
                 await _manager.send_json(websocket, {"type": "status", "state": "idle"})
 
@@ -453,7 +482,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 ).strip()
                 if not spoken:
                     spoken = generic_voice_spoken(display_text, kind=kind).strip()
-                await _manager.send_json(websocket, {"type": "reply", "text": display_text})
+                await _manager.send_json(
+                    websocket,
+                    {
+                        "type": "reply",
+                        "text": display_text,
+                        "spoken_text": spoken,
+                    },
+                )
                 await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
                 try:
                     wav = await synthesize_wav_isolated(spoken)
@@ -487,9 +523,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         websocket,
                         {
                             "type": "error",
-                            "message": (
-                                "Text-to-speech failed or timed out; reply text is still shown above."
-                            ),
+                            "message": _tts_fallback_error_message(),
+                            "spoken_text": spoken,
+                            "reason": TTS_UNAVAILABLE_REASON,
                         },
                     )
                 except Exception as e:
@@ -499,6 +535,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         spoken_text=spoken,
                         kind=kind,
                         audio_b64=None,
+                    )
+                    await _manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "message": _tts_fallback_error_message(),
+                            "spoken_text": spoken,
+                            "reason": TTS_UNAVAILABLE_REASON,
+                        },
                     )
                 finally:
                     try:

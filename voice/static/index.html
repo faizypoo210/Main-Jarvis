@@ -132,10 +132,12 @@
   let chunks = [];
   let audioCtx = null;
 
-  /** Monotonic id per incoming tts message; stale onended callbacks must not change UI. */
+  /** Monotonic id per speaking session (WAV decode, buffer playback, or browser speech); stale callbacks bail. */
   let ttsPlaybackGen = 0;
   let currentTtsSource = null;
   let ttsDecodeInFlight = false;
+  /** True while Web Speech API utterance may be active. */
+  let browserSpeechActive = false;
   /** Fallback if BufferSource.onended does not fire (browser quirks after stop/replace). */
   let currentTtsPlaybackTimer = null;
 
@@ -144,7 +146,11 @@
     statusText.textContent = label;
   }
 
-  function stopCurrentTtsPlayback() {
+  function stopAllSpeaking() {
+    if (window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    }
+    browserSpeechActive = false;
     if (currentTtsPlaybackTimer) {
       clearTimeout(currentTtsPlaybackTimer);
       currentTtsPlaybackTimer = null;
@@ -160,8 +166,49 @@
     }
   }
 
+  /**
+   * When server WAV is missing, speak short line locally (Chrome/Edge).
+   * Uses same gen model as WAV so new turns invalidate old onend handlers.
+   */
+  function startBrowserSpokenFallback(spokenText) {
+    var line = (spokenText || '').trim();
+    if (!line) {
+      setState('idle', 'Idle');
+      return;
+    }
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      appendLine('upd', 'Voice', 'Browser speech unavailable; read the transcript above.');
+      setState('idle', 'Idle');
+      return;
+    }
+    stopAllSpeaking();
+    var myGen = ++ttsPlaybackGen;
+    ttsDecodeInFlight = false;
+    browserSpeechActive = true;
+    setState('speaking', 'Speaking…');
+    var u = new SpeechSynthesisUtterance(line);
+    u.onend = function () {
+      browserSpeechActive = false;
+      if (myGen !== ttsPlaybackGen) return;
+      setState('idle', 'Idle');
+    };
+    u.onerror = function () {
+      browserSpeechActive = false;
+      if (myGen !== ttsPlaybackGen) return;
+      appendLine('upd', 'Voice', 'Browser speech interrupted.');
+      setState('idle', 'Idle');
+    };
+    try {
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      browserSpeechActive = false;
+      appendLine('err', 'Voice', 'Could not start browser speech.');
+      setState('idle', 'Idle');
+    }
+  }
+
   function clientOwnsSpeakingIdle() {
-    return ttsDecodeInFlight || currentTtsSource !== null;
+    return ttsDecodeInFlight || currentTtsSource !== null || browserSpeechActive;
   }
 
   function appendLine(cls, title, body) {
@@ -204,8 +251,17 @@
         return;
       }
       if (msg.type === 'error') {
+        var rsn = msg.reason || '';
+        var st = (msg.spoken_text != null ? String(msg.spoken_text) : '').trim();
+        if (st && (rsn === 'tts_unavailable' || rsn === 'repeat_no_audio')) {
+          appendLine('upd', 'Voice', msg.message || '');
+          startBrowserSpokenFallback(st);
+          return;
+        }
         appendLine('err', 'Error', msg.message || 'Unknown');
-        setState('idle', 'Idle');
+        if (!clientOwnsSpeakingIdle()) {
+          setState('idle', 'Idle');
+        }
         return;
       }
       if (msg.type === 'coordinator_update') {
@@ -214,7 +270,7 @@
       }
       if (msg.type === 'tts' && msg.audio_b64) {
         var myGen = ++ttsPlaybackGen;
-        stopCurrentTtsPlayback();
+        stopAllSpeaking();
         ttsDecodeInFlight = true;
         setState('speaking', 'Speaking…');
         (async function playTts() {
@@ -273,8 +329,13 @@
             }
             ttsDecodeInFlight = false;
             currentTtsSource = null;
-            appendLine('err', 'Playback', 'Could not play audio.');
-            setState('idle', 'Idle');
+            appendLine('upd', 'Playback', 'Could not decode server audio; using browser speech if available.');
+            var fallbackLine = (msg.text || '').trim();
+            if (fallbackLine) {
+              startBrowserSpokenFallback(fallbackLine);
+            } else {
+              setState('idle', 'Idle');
+            }
           }
         })();
         return;

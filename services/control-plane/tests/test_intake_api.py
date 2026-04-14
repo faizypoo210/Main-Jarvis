@@ -59,6 +59,22 @@ async def test_intake_status_query_returns_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_intake_status_query_what_is_going_on_regression(
+    client: AsyncClient, api_headers: dict[str, str]
+) -> None:
+    r = await client.post(
+        "/api/v1/intake",
+        json={"source_surface": "api", "text": "What is going on right now?"},
+        headers=api_headers,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["outcome"] == "status_reply"
+    assert data["interpretation"]["intent_type"] == "status_query"
+    assert data["reply"]["kind"] == "status_snapshot"
+
+
+@pytest.mark.asyncio
 async def test_intake_requires_api_key(client: AsyncClient) -> None:
     r = await client.post(
         "/api/v1/intake",

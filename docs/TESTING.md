@@ -2,6 +2,8 @@
 
 This repo’s **authoritative** HTTP API is `services/control-plane` (FastAPI + PostgreSQL + Alembic). Automated tests use **pytest**, **httpx** (async ASGI client), and a **disposable PostgreSQL** database — the same dialect and driver as production (`asyncpg`), not SQLite.
 
+**Manual vs automated:** When you **run the API locally** (`uvicorn`), only **`DATABASE_URL`** in `.env` matters. **`PYTEST_CONTROL_PLANE_DATABASE_URL`** is for **pytest only**; `tests/conftest.py` sets `DATABASE_URL` from it (or the default test DB) so integration tests do not accidentally use your dev database. If `uvicorn` fails to connect, fix `DATABASE_URL`—not the pytest variable.
+
 ## Prerequisites
 
 - **Python 3.11+** (match CI).

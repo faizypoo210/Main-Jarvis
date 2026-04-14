@@ -2,6 +2,15 @@
 
 Authoritative backend for missions, timeline events, approvals, receipts, workers, integrations, cost tracking, and surface sessions. Surfaces (voice, web UI, SMS, API) call this service; OpenClaw is the execution plane and reports here.
 
+## Database URLs (manual run vs pytest)
+
+| Variable | When |
+|----------|------|
+| **`DATABASE_URL`** | **Running the app** (`uvicorn`, local smoke). This is the only variable the server reads for Postgres. It must be a valid `postgresql+asyncpg://…` URL to a database that exists, with credentials your Postgres accepts. |
+| **`PYTEST_CONTROL_PLANE_DATABASE_URL`** | **Integration tests only** (optional). If set, `tests/conftest.py` uses it and **overwrites `DATABASE_URL` inside the pytest process** so tests never hit your dev DB. If unset, tests default to `postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/jarvis_cp_test`. |
+
+If the app fails at startup with a database auth error, fix **`DATABASE_URL`** in `.env` (user/password/database name), not the pytest variable—pytest does not apply when you run `uvicorn` yourself.
+
 ## Setup
 
 1. Copy `.env.example` to `.env` and set `DATABASE_URL`, `SECRET_KEY`, and other values for your environment.

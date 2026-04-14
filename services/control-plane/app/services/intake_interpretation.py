@@ -36,10 +36,19 @@ _INTERRUPT = re.compile(
     re.IGNORECASE,
 )
 
+# Operator / situational awareness — prefer these over mission_request.
 _STATUS_QUERY = re.compile(
-    r"\b(status|what'?s running|list missions|pending missions|how many missions|"
-    r"mission list|overview)\b",
-    re.IGNORECASE,
+    r"(?i)"
+    r"\b(?:"
+    r"what\s+is\s+going\s+on|what'?s\s+going\s+on|what\s+is\s+happening|what'?s\s+happening|"
+    r"what'?s\s+up(?:\s+right\s+now)?|"
+    r"what\s+is\s+up|"
+    r"any\s+(?:approvals?\s+pending|pending\s+approvals?)|"
+    r"what\s+needs\s+my\s+attention|needs\s+my\s+attention|"
+    r"status|what'?s\s+running|list\s+missions|pending\s+missions|how\s+many\s+missions|"
+    r"mission\s+list|overview|operator\s+overview|state\s+of\s+(?:things|the\s+system)|"
+    r"what\s+is\s+the\s+status|what'?s\s+the\s+status"
+    r")\b",
 )
 
 _APPROVE_VERB = re.compile(
@@ -53,15 +62,6 @@ _DENY_VERB = re.compile(
 
 _INBOX_LINE = re.compile(
     r"^(ack|acknowledge|dismiss|snooze)\s+(\S+)(?:\s+(\d+))?\s*$",
-    re.IGNORECASE,
-)
-
-_GITHUB_GOVERNED = re.compile(
-    r"\b(github|create issue|draft pr|pull request|merge pull request)\b",
-    re.IGNORECASE,
-)
-_GMAIL_GOVERNED = re.compile(
-    r"\b(gmail|create draft|send draft|reply draft)\b",
     re.IGNORECASE,
 )
 
@@ -92,19 +92,37 @@ def _extract_uuid_from_text(text: str) -> UUID | None:
         return None
 
 
-def _infer_governed_action(text: str) -> str | None:
-    low = text.lower()
-    if "merge" in low and "pull" in low:
+def _infer_explicit_governed_action(text: str) -> str | None:
+    """Match only explicit governed *write* intents (create/open/merge/send drafts).
+
+    Read-only or investigative phrasing (check issues, summarize PRs, list inbox) must not
+    match — those stay ``mission_request`` or ``status_query``.
+    """
+    low = (text or "").lower()
+    # GitHub — merge
+    if re.search(r"\bmerge\s+(that|the|a)\s+(pull\s+request|pr)\b", low):
         return "github_merge_pull_request"
-    if "pull" in low or "pr" in low or "draft pr" in low:
+    # GitHub — open draft PR / PR
+    if re.search(
+        r"\bopen\s+(a|an)\s+(?:draft\s+)?(?:pull\s+request|pr)\b",
+        low,
+    ):
         return "github_create_pull_request"
-    if _GITHUB_GOVERNED.search(text):
+    # GitHub — create issue (explicit product words or “issue for …”)
+    if re.search(r"\bcreate\s+(a|an)\s+github\s+issue\b", low):
         return "github_create_issue"
-    if "send" in low and "draft" in low:
+    if re.search(r"\bcreate\s+(a|an)\s+issue\s+for\b", low):
+        return "github_create_issue"
+    # Gmail — send existing draft
+    if re.search(r"\bsend\s+(that|the)\s+draft\b", low):
         return "gmail_send_draft"
-    if "reply" in low and "draft" in low:
+    # Gmail — reply draft
+    if re.search(r"\bcreate\s+(a|an)\s+reply\s+draft\b", low):
         return "gmail_create_reply_draft"
-    if _GMAIL_GOVERNED.search(text):
+    # Gmail — new draft (explicit gmail or “email draft”)
+    if re.search(r"\bcreate\s+(a|an)\s+gmail\s+draft\b", low):
+        return "gmail_create_draft"
+    if re.search(r"\bcreate\s+(a|an)\s+(?:new\s+)?email\s+draft\b", low):
         return "gmail_create_draft"
     return None
 
@@ -213,7 +231,7 @@ def interpret(
                 approval_candidate=approval_candidate,
             )
 
-    # --- 4. Status / list ---
+    # --- 4. Status / operator awareness ---
     if _STATUS_QUERY.search(raw) or low in ("status", "missions", "list"):
         return InterpretationResult(
             intent_type="status_query",
@@ -226,8 +244,8 @@ def interpret(
             **base_kwargs,
         )
 
-    # --- 5. Governed integration intent (hint only in v1) ---
-    gat = _infer_governed_action(raw)
+    # --- 5. Governed write intent (explicit only; hint path in v1) ---
+    gat = _infer_explicit_governed_action(raw)
     if gat:
         return InterpretationResult(
             intent_type="governed_action_request",

@@ -22,6 +22,49 @@ def test_interpret_status_query() -> None:
     assert r.mission_needed is False
 
 
+def test_interpret_status_query_what_is_going_on_regression() -> None:
+    r = interpret(
+        text="What is going on right now?",
+        source_surface="command_center",
+        mission_id=None,
+        context=None,
+    )
+    assert r.intent_type == "status_query"
+    assert r.mission_needed is False
+
+
+def test_interpret_status_query_whats_happening_and_approvals() -> None:
+    for phrase in (
+        "what's happening?",
+        "Any approvals pending?",
+        "What needs my attention right now?",
+    ):
+        r = interpret(text=phrase, source_surface="api", mission_id=None, context=None)
+        assert r.intent_type == "status_query", phrase
+
+
+def test_interpret_github_inspection_is_mission_not_governed_regression() -> None:
+    r = interpret(
+        text="Check my active GitHub issues and summarize blockers",
+        source_surface="api",
+        mission_id=None,
+        context=None,
+    )
+    assert r.intent_type == "mission_request"
+    assert r.governed_action_type is None
+
+
+def test_interpret_look_through_prs_mission_request() -> None:
+    r = interpret(
+        text="Look through my PRs and note risks",
+        source_surface="api",
+        mission_id=None,
+        context=None,
+    )
+    assert r.intent_type == "mission_request"
+    assert r.governed_action_type is None
+
+
 def test_interpret_mission_request_default() -> None:
     r = interpret(
         text="Refactor the auth module for clarity and test coverage",
@@ -55,15 +98,55 @@ def test_interpret_followup_with_mission_id() -> None:
     assert r.target_mission_id == mid
 
 
-def test_interpret_governed_github_hint() -> None:
+def test_interpret_governed_github_create_issue_explicit() -> None:
     r = interpret(
-        text="create a GitHub issue for the bug",
+        text="Create a GitHub issue for the login bug",
         source_surface="command_center",
         mission_id=None,
         context=None,
     )
     assert r.intent_type == "governed_action_request"
     assert r.governed_action_type == "github_create_issue"
+
+
+def test_interpret_governed_github_open_pr_and_merge() -> None:
+    open_pr = interpret(
+        text="Open a pull request against main",
+        source_surface="command_center",
+        mission_id=None,
+        context=None,
+    )
+    assert open_pr.intent_type == "governed_action_request"
+    assert open_pr.governed_action_type == "github_create_pull_request"
+
+    merge_pr = interpret(
+        text="Merge that PR after checks pass",
+        source_surface="command_center",
+        mission_id=None,
+        context=None,
+    )
+    assert merge_pr.intent_type == "governed_action_request"
+    assert merge_pr.governed_action_type == "github_merge_pull_request"
+
+
+def test_interpret_governed_gmail_send_and_reply_draft() -> None:
+    send_d = interpret(
+        text="Send that draft",
+        source_surface="command_center",
+        mission_id=None,
+        context=None,
+    )
+    assert send_d.intent_type == "governed_action_request"
+    assert send_d.governed_action_type == "gmail_send_draft"
+
+    reply_d = interpret(
+        text="Create a reply draft for the last thread",
+        source_surface="command_center",
+        mission_id=None,
+        context=None,
+    )
+    assert reply_d.intent_type == "governed_action_request"
+    assert reply_d.governed_action_type == "gmail_create_reply_draft"
 
 
 def test_map_quick_action() -> None:

@@ -14,13 +14,23 @@ from voice.last_spoken import (
 
 
 def test_ws_tts_message_none_when_no_cached_audio() -> None:
-    turn = LastSpokenTurn(text="hello", kind="intake", audio_b64=None)
+    turn = LastSpokenTurn(
+        display_text="hello",
+        spoken_text="hello",
+        kind="intake",
+        audio_b64=None,
+    )
     assert ws_tts_message(turn, kind="repeat") is None
 
 
 def test_ws_tts_message_returns_payload_when_audio_cached() -> None:
     b64 = base64.b64encode(b"fake wav").decode("ascii")
-    turn = LastSpokenTurn(text="hello", kind="intake", audio_b64=b64)
+    turn = LastSpokenTurn(
+        display_text="LONG",
+        spoken_text="hello",
+        kind="intake",
+        audio_b64=b64,
+    )
     msg = ws_tts_message(turn, kind="repeat")
     assert msg == {
         "type": "tts",
@@ -33,7 +43,8 @@ def test_ws_tts_message_returns_payload_when_audio_cached() -> None:
 def test_normalize_legacy_string_to_turn() -> None:
     t = normalize_last_voice_entry("plain")
     assert isinstance(t, LastSpokenTurn)
-    assert t.text == "plain"
+    assert t.display_text == "plain"
+    assert t.spoken_text == "plain"
     assert t.kind == "legacy"
     assert t.audio_b64 is None
 

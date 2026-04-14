@@ -1,8 +1,8 @@
 """Unified control-plane intake for free-form voice (POST /api/v1/intake).
 
 TRUTH_SOURCE: ``IntakeResponse`` JSON from ``services/control-plane/app/schemas/intake.py``.
-Voice speaks ``reply.message``; mission subscription uses ``reply.mission_id`` when
-``outcome == mission_created``.
+Voice shows full ``reply.message``; TTS uses a voice-safe condensation (see ``spoken_render``).
+Mission subscription uses ``reply.mission_id`` when ``outcome == mission_created``.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ class VoiceIntakeResult:
     message: str = ""
     mission_id: str | None = None
     reply_kind: str | None = None
+    extras: dict[str, Any] | None = None
     raw: dict[str, Any] | None = None
 
 
@@ -49,6 +50,8 @@ def parse_intake_response(data: dict[str, Any]) -> VoiceIntakeResult:
     kind = reply.get("kind")
     reply_kind = str(kind).strip() if kind is not None else None
     mid = _str_mission_id(reply.get("mission_id"))
+    raw_extras = reply.get("extras")
+    extras = raw_extras if isinstance(raw_extras, dict) else None
     return VoiceIntakeResult(
         ok=True,
         http_status=200,
@@ -56,6 +59,7 @@ def parse_intake_response(data: dict[str, Any]) -> VoiceIntakeResult:
         message=msg,
         mission_id=mid,
         reply_kind=reply_kind,
+        extras=extras,
         raw=data,
     )
 

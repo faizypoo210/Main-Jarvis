@@ -33,6 +33,7 @@ def test_parse_status_reply() -> None:
         "reply": {
             "message": "Recent missions (newest first):\n- …",
             "kind": "status_snapshot",
+            "extras": {"mission_count": 2, "preview": [{"title": "A", "status": "open"}]},
         },
         "outcome": "status_reply",
     }
@@ -40,6 +41,7 @@ def test_parse_status_reply() -> None:
     assert r.outcome == "status_reply"
     assert r.reply_kind == "status_snapshot"
     assert r.mission_id is None
+    assert r.extras == {"mission_count": 2, "preview": [{"title": "A", "status": "open"}]}
 
 
 def test_parse_clarification() -> None:

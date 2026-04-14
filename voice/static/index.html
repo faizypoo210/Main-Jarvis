@@ -182,19 +182,32 @@
         return;
       }
       if (msg.type === 'tts' && msg.audio_b64) {
-        try {
-          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const bin = atob(msg.audio_b64);
-          const buf = new Uint8Array(bin.length);
-          for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-          const audioBuffer = await audioCtx.decodeAudioData(buf.buffer.slice(0));
-          const src = audioCtx.createBufferSource();
-          src.buffer = audioBuffer;
-          src.connect(audioCtx.destination);
-          src.start();
-        } catch (e) {
-          appendLine('err', 'Playback', 'Could not play audio.');
-        }
+        (async function playTts() {
+          try {
+            if (!audioCtx) {
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+              await audioCtx.resume();
+            }
+            const bin = atob(msg.audio_b64);
+            const buf = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+            const copy = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+            const audioBuffer = await audioCtx.decodeAudioData(copy);
+            const src = audioCtx.createBufferSource();
+            src.buffer = audioBuffer;
+            src.connect(audioCtx.destination);
+            src.onended = function () {
+              setState('idle', 'Idle');
+            };
+            src.start();
+          } catch (e) {
+            appendLine('err', 'Playback', 'Could not play audio.');
+            setState('idle', 'Idle');
+          }
+        })();
+        return;
       }
     };
   }

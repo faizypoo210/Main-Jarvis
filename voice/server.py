@@ -49,6 +49,9 @@ from .voice_routing import MissionSubscriptionIndex
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("jarvis.voice")
 
+# pyttsx3 can hang on some Windows stacks; never block the receive loop indefinitely.
+TTS_WAV_TIMEOUT_SEC = 120.0
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
@@ -429,11 +432,28 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _manager.send_json(websocket, {"type": "reply", "text": reply})
                 await _manager.send_json(websocket, {"type": "status", "state": "speaking"})
                 try:
-                    wav = await loop.run_in_executor(None, _tts_wav_bytes, reply)
+                    wav = await asyncio.wait_for(
+                        loop.run_in_executor(None, _tts_wav_bytes, reply),
+                        timeout=TTS_WAV_TIMEOUT_SEC,
+                    )
                     b64 = base64.b64encode(wav).decode("ascii")
                     await _manager.send_json(
                         websocket,
                         {"type": "tts", "kind": kind, "text": reply, "audio_b64": b64},
+                    )
+                except asyncio.TimeoutError:
+                    log.warning(
+                        "tts voice reply timed out after %ss (kind=%s, len=%s)",
+                        TTS_WAV_TIMEOUT_SEC,
+                        kind,
+                        len(reply),
+                    )
+                    await _manager.send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "message": "Text-to-speech timed out; reply text is still shown above.",
+                        },
                     )
                 except Exception as e:
                     log.exception("tts voice reply: %s", e)

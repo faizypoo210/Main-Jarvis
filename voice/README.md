@@ -17,6 +17,8 @@ Use **module** form `voice.server:app` so imports resolve under the `voice` pack
 
 Env: copy `voice/.env.example` to `voice/.env` (or set `REDIS_URL`, `CONTROL_PLANE_URL`, etc.).
 
+**Browser playback:** The static UI (`static/index.html`) resumes `AudioContext` before decoding WAV (required for repeat and other turns after the first). TTS synthesis on the server is bounded by `TTS_WAV_TIMEOUT_SEC` in `server.py` so a stuck pyttsx3 call cannot block the next utterance forever.
+
 ## Voice mission briefing + status readout (v1)
 
 Read-only summaries from existing operator GETs (no new mission state). Implemented in `briefing_voice.py`; ephemeral ranked mission list + cursor per WebSocket (not persisted).

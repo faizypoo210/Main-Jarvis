@@ -363,76 +363,102 @@ class Coordinator:
         await redis.xack(STREAM_COMMANDS, GROUP_COMMANDS, msg_id)
 
     async def handle_receipt(self, redis: Redis, msg_id: bytes, fields: dict[Any, Any]) -> None:
-        f = _decode_fields(fields)
-        data = _parse_json_field(f, "data")
-        mission_id = str(data.get("mission_id") or "").strip()
-        if not mission_id:
-            await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
-            return
+        mission_id_log = "unknown"
+        try:
+            f = _decode_fields(fields)
+            data = _parse_json_field(f, "data")
+            mission_id = str(data.get("mission_id") or "").strip()
+            mission_id_log = mission_id if mission_id else "unknown"
+            if not mission_id:
+                await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
+                return
 
-        status_raw = (data.get("status") or data.get("outcome") or "").strip().lower()
-        summary = data.get("summary") or data.get("message") or ""
+            status_raw = (data.get("status") or data.get("outcome") or "").strip().lower()
+            summary = data.get("summary") or data.get("message") or ""
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            ok = status_raw in ("complete", "success", "done", "ok")
-            outcome_body = {
-                "mission_id": mission_id,
-                "outcome": "success" if ok else "failure",
-                "evidence": data.get("evidence") or data,
-                "summary": summary,
-            }
-            or_post = await client.post(
-                f"{DASHCLAW_BASE_URL}/api/outcomes",
-                headers=self._dash_headers,
-                json=outcome_body,
-            )
-            or_post.raise_for_status()
-
-            if ok:
-                await post_to_control_plane(
-                    f"/api/v1/missions/{mission_id}/status",
-                    {"status": ST_COMPLETE},
-                )
-                decision = "complete"
-            else:
-                await post_to_control_plane(
-                    f"/api/v1/missions/{mission_id}/status",
-                    {"status": ST_FAILED},
-                )
-                decision = "failed"
-
-            up = {
-                "type": "receipt_summary",
-                "mission_id": mission_id,
-                "status": decision,
-                "summary": summary,
-            }
-            await redis.xadd(STREAM_UPDATES, {"data": json.dumps(up, default=str)})
-
-            _log_event(
-                stream=STREAM_RECEIPTS,
-                event_type="receipt_processed",
-                mission_id=mission_id,
-                decision=decision,
-            )
-
-            summ: str | None = None
-            if summary is not None:
-                s = str(summary).strip()
-                if s:
-                    summ = s[:500] if len(s) > 500 else s
-            await post_to_control_plane(
-                "/api/v1/receipts",
-                {
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                ok = status_raw in ("complete", "success", "done", "ok")
+                outcome_body = {
                     "mission_id": mission_id,
-                    "receipt_type": "agent_output",
-                    "source": "coordinator",
-                    "payload": data,
-                    "summary": summ,
-                },
-            )
+                    "outcome": "success" if ok else "failure",
+                    "evidence": data.get("evidence") or data,
+                    "summary": summary,
+                }
+                # DashClaw outcomes is best-effort; CP and jarvis.updates are authoritative.
+                try:
+                    or_post = await client.post(
+                        f"{DASHCLAW_BASE_URL}/api/outcomes",
+                        headers=self._dash_headers,
+                        json=outcome_body,
+                    )
+                    or_post.raise_for_status()
+                except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                    log.warning(
+                        json.dumps(
+                            {
+                                "warning": "dashclaw_outcomes_degraded",
+                                "mission_id": mission_id,
+                                "detail": str(e),
+                            }
+                        )
+                    )
 
-        await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
+                if ok:
+                    await post_to_control_plane(
+                        f"/api/v1/missions/{mission_id}/status",
+                        {"status": ST_COMPLETE},
+                    )
+                    decision = "complete"
+                else:
+                    await post_to_control_plane(
+                        f"/api/v1/missions/{mission_id}/status",
+                        {"status": ST_FAILED},
+                    )
+                    decision = "failed"
+
+                up = {
+                    "type": "receipt_summary",
+                    "mission_id": mission_id,
+                    "status": decision,
+                    "summary": summary,
+                }
+                await redis.xadd(STREAM_UPDATES, {"data": json.dumps(up, default=str)})
+
+                _log_event(
+                    stream=STREAM_RECEIPTS,
+                    event_type="receipt_processed",
+                    mission_id=mission_id,
+                    decision=decision,
+                )
+
+                summ: str | None = None
+                if summary is not None:
+                    s = str(summary).strip()
+                    if s:
+                        summ = s[:500] if len(s) > 500 else s
+                await post_to_control_plane(
+                    "/api/v1/receipts",
+                    {
+                        "mission_id": mission_id,
+                        "receipt_type": "agent_output",
+                        "source": "coordinator",
+                        "payload": data,
+                        "summary": summ,
+                    },
+                )
+
+            await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
+        except Exception as e:
+            log.error(
+                json.dumps(
+                    {
+                        "error": "receipt_handler_unhandled",
+                        "mission_id": mission_id_log,
+                        "detail": str(e),
+                    }
+                )
+            )
+            await redis.xack(STREAM_RECEIPTS, GROUP_RECEIPTS, msg_id)
 
     async def _poll_stream(
         self,

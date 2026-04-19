@@ -344,8 +344,32 @@ Write-Host "  Voice Server:     http://${LanIp}:8000"
 Write-Host "  OpenClaw Gateway: http://${LanIp}:18789"
 Write-Host "  LobsterBoard:     http://${LanIp}:8080"
 Write-Host "  Ollama:           http://${LanIp}:11434"
-Write-Host "  Executor/Coord:   see PowerShell host PIDs in summary (not auto-supervised)"
+Write-Host "  Executor/Coord:   see PowerShell host PIDs in summary (watchdog supervises restarts - .jarvis-local\watchdog.log)"
 
 Write-JarvisLaunchStateFile -RepoRoot $JarvisRoot -LaunchRecords $JarvisLaunchRecords
+
+# --- Service watchdog (control plane, voice, executor, coordinator) ---
+$watchdogScript = Join-Path $JarvisRoot 'scripts\watchdog.ps1'
+if (Test-Path -LiteralPath $watchdogScript) {
+    Write-Host ""
+    Write-Host "Starting Jarvis service watchdog..." -ForegroundColor Cyan
+    try {
+        $wdProc = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', $watchdogScript,
+            '-JarvisRoot', $JarvisRoot
+        ) -WindowStyle Hidden -PassThru
+        if ($wdProc) {
+            Write-Host ("Watchdog process PID={0} - log: .jarvis-local\watchdog.log" -f $wdProc.Id) -ForegroundColor DarkGray
+        } else {
+            Write-Host "[WARN] Watchdog Start-Process returned null." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[WARN] Could not start watchdog: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[WARN] Watchdog script missing: $watchdogScript" -ForegroundColor Yellow
+}
 
 exit 0

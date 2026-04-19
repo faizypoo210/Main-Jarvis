@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: jarvis-postgres
+    environment:
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: jarvispass
+      POSTGRES_DB: jarvis_control
+    ports:
+      - "5432:5432"
+    volumes:
+      - jarvis_postgres_data:/var/lib/postgresql/data
+    networks:
+      - jarvis-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - jarvis-net
+
+volumes:
+  jarvis_postgres_data:
+
+networks:
+  jarvis-net:
+    name: jarvis-net

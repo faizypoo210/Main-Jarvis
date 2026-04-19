@@ -70,7 +70,7 @@ export function QuickCommandPalette({ open, onClose, onSubmit }: QuickCommandPal
           Quick command
         </h2>
         <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-muted)]">
-          Sends a short command to the control plane and opens Overview with that mission in focus.
+          Sends a short command to the control plane and opens Missions with that mission in focus.
         </p>
         <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
           <input

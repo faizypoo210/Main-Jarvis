@@ -1,10 +1,11 @@
-import { Activity, LayoutDashboard, Plug, ShieldCheck, Target } from "lucide-react";
+import { Activity, LayoutDashboard, Plug, Receipt, ShieldCheck, Target } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const mobileNav = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/overview", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/missions", label: "Missions", icon: Target },
   { to: "/approvals", label: "Approvals", icon: ShieldCheck },
+  { to: "/receipts", label: "Receipts", icon: Receipt },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/integrations", label: "Integrations", icon: Plug },
 ];

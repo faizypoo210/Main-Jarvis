@@ -158,7 +158,7 @@ export function Missions() {
                   Send a command from Overview to create a mission — there is no separate &quot;new mission&quot; form here.
                 </p>
                 <Link
-                  to="/"
+                  to="/overview"
                   className="text-xs font-medium text-[var(--accent-blue)] underline-offset-2 hover:opacity-90 focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-blue)]/40"
                 >
                   Go to Overview

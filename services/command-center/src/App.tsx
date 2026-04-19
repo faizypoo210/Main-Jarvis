@@ -7,6 +7,7 @@ import { CostUsage } from "./pages/CostUsage";
 import { MissionDetail } from "./pages/MissionDetail";
 import { Missions } from "./pages/Missions";
 import { Overview } from "./pages/Overview";
+import { Receipts } from "./pages/Receipts";
 import { Integrations } from "./pages/Integrations";
 import { Memory } from "./pages/Memory";
 import { SystemHealth } from "./pages/SystemHealth";
@@ -19,10 +20,12 @@ export default function App() {
     <RouteErrorBoundary>
     <Routes>
       <Route path="/" element={<AppShell />}>
-        <Route index element={<Overview />} />
+        <Route index element={<Navigate to="/missions" replace />} />
+        <Route path="overview" element={<Overview />} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="missions/:missionId" element={<MissionDetail />} />
         <Route path="missions" element={<Missions />} />
+        <Route path="receipts" element={<Receipts />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="activity" element={<Activity />} />
         <Route path="evals" element={<Evals />} />
@@ -31,7 +34,7 @@ export default function App() {
         <Route path="workers" element={<Workers />} />
         <Route path="cost" element={<CostUsage />} />
         <Route path="system" element={<SystemHealth />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/missions" replace />} />
       </Route>
     </Routes>
     </RouteErrorBoundary>

@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { MoreHorizontal, Search } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useControlPlaneLive, usePendingApprovals, usePolledMissionDetail, useResolveApprovalAction } from "../../hooks/useControlPlane";
+import { useSystemHealth } from "../../hooks/useSystemHealth";
 import { ApprovalCard } from "../approvals/ApprovalCard";
 import { StatusBadge } from "../common/StatusBadge";
 import type { Approval, Mission } from "../../lib/types";
@@ -11,6 +13,8 @@ import { LatestExecutionResultLine } from "../mission/LatestExecutionResultLine"
 import { MissionExecutiveSummaryBlock } from "../mission/MissionExecutiveSummaryBlock";
 import { LiveLinkIndicator } from "./LiveLinkIndicator";
 import { operatorCopy } from "../../lib/operatorCopy";
+import { healthDotClass, healthLabel } from "../../lib/operatorHealth";
+import { workerRegistryStatus } from "../../lib/operatorRuntimeHealth";
 
 export function RightPanel({
   missions,
@@ -29,6 +33,7 @@ export function RightPanel({
 }) {
   const { streamPhase } = useControlPlaneLive();
   const { approvals, loading: approvalsLoading } = usePendingApprovals();
+  const { data: healthData, error: healthError, loading: healthLoading } = useSystemHealth(30_000);
   const focusFromList = useMemo(() => selectFocusMission(missions), [missions]);
   const focusMissionId = useMemo(() => {
     const tid = threadMissionId?.trim();
@@ -73,11 +78,109 @@ export function RightPanel({
 
   const panelLoading = missionsLoading || (displayMission != null && detailLoading && events.length === 0);
 
+  const activeMissionCount = useMemo(
+    () => missions.filter((m) => m.status === "active").length,
+    [missions]
+  );
+
+  const registryHealthState = useMemo(
+    () => (healthData ? workerRegistryStatus(healthData.worker_registry) : null),
+    [healthData]
+  );
+
   return (
     <aside
       className="flex h-full w-full flex-col border-l border-[var(--bg-border)] lg:w-[320px] lg:shrink-0"
       style={{ backgroundColor: "var(--bg-surface)" }}
     >
+      <div className="shrink-0 space-y-3 border-b border-[var(--bg-border)] px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-display text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Quick stats
+          </h2>
+          <Link
+            to="/missions"
+            className="text-[10px] font-medium text-[var(--accent-blue)] hover:opacity-90 focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-blue)]/40"
+          >
+            Missions
+          </Link>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-void)]/50 px-2 py-2 text-center">
+            <p className="font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]">{missions.length}</p>
+            <p className="text-[9px] leading-tight text-[var(--text-muted)]">In panel</p>
+          </div>
+          <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-void)]/50 px-2 py-2 text-center">
+            <p className="font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]">{activeMissionCount}</p>
+            <p className="text-[9px] leading-tight text-[var(--text-muted)]">Active</p>
+          </div>
+          <div className="rounded-lg border border-[var(--bg-border)] bg-[var(--bg-void)]/50 px-2 py-2 text-center">
+            <p className="font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+              {approvalsLoading && approvals.length === 0 ? "…" : approvals.length}
+            </p>
+            <p className="text-[9px] leading-tight text-[var(--text-muted)]">Approvals</p>
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="font-display text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              System health
+            </h2>
+            <Link
+              to="/system"
+              className="shrink-0 text-[10px] font-medium text-[var(--accent-blue)] hover:opacity-90 focus-visible:rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-blue)]/40"
+            >
+              Full view
+            </Link>
+          </div>
+          {healthError ? (
+            <p className="text-[10px] leading-snug text-[var(--status-amber)]" role="status">
+              {healthError}
+            </p>
+          ) : null}
+          {healthLoading && !healthData ? (
+            <p className="text-[10px] text-[var(--text-muted)]">Loading snapshot…</p>
+          ) : null}
+          {healthData ? (
+            <ul className="space-y-1.5 text-[10px] text-[var(--text-secondary)]">
+              <li className="flex items-center justify-between gap-2">
+                <span className="text-[var(--text-muted)]">Control plane</span>
+                <span className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${healthDotClass(healthData.control_plane.status)}`} aria-hidden />
+                  <span className="font-medium text-[var(--text-primary)]">{healthLabel(healthData.control_plane.status)}</span>
+                </span>
+              </li>
+              <li className="flex items-center justify-between gap-2">
+                <span className="text-[var(--text-muted)]">Postgres</span>
+                <span className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${healthDotClass(healthData.postgres.status)}`} aria-hidden />
+                  <span className="font-medium text-[var(--text-primary)]">{healthLabel(healthData.postgres.status)}</span>
+                </span>
+              </li>
+              <li className="flex items-center justify-between gap-2">
+                <span className="text-[var(--text-muted)]">Redis</span>
+                <span className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${healthDotClass(healthData.redis.status)}`} aria-hidden />
+                  <span className="font-medium text-[var(--text-primary)]">{healthLabel(healthData.redis.status)}</span>
+                </span>
+              </li>
+              {registryHealthState ? (
+                <li className="flex items-center justify-between gap-2">
+                  <span className="text-[var(--text-muted)]">Workers</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`h-1.5 w-1.5 rounded-full ${healthDotClass(registryHealthState)}`} aria-hidden />
+                    <span className="font-medium text-[var(--text-primary)]">{healthLabel(registryHealthState)}</span>
+                  </span>
+                </li>
+              ) : null}
+            </ul>
+          ) : !healthLoading && !healthError ? (
+            <p className="text-[10px] text-[var(--text-muted)]">No health data</p>
+          ) : null}
+        </div>
+      </div>
+
       <div className="flex flex-col gap-1 border-b border-[var(--bg-border)] px-4 py-3">
         <div className="flex items-center justify-between gap-2">
         <h2 className="min-w-0 flex-1 truncate font-display text-sm font-semibold text-[var(--text-primary)]">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import * as api from "../../lib/api";
 import { ShellHealthProvider, useShellHealth } from "../../contexts/ShellHealthContext";
-import { useMissions, usePendingApprovals } from "../../hooks/useControlPlane";
+import { useControlPlaneLive, useMissions } from "../../hooks/useControlPlane";
 import { VoiceMode } from "../voice/VoiceMode";
 import { CenterPane } from "./CenterPane";
 import { LeftRail } from "./LeftRail";
@@ -19,7 +19,7 @@ export type ShellOutletContext = {
   threadMissionId: string | null;
   setThreadMissionId: (id: string | null) => void;
   /**
-   * When set, Overview may show a one-time handoff cue after global quick command created this mission.
+   * When set, the Overview page may show a one-time handoff cue after global quick command created this mission.
    * Cleared when focus moves to another mission or is cleared.
    */
   quickCommandHandoffMissionId: string | null;
@@ -35,10 +35,10 @@ function AppShellInner() {
   const location = useLocation();
   const { missions: panelMissions, loading: missionsLoading } = useMissions({ limit: 100 });
   const { missions: activeMissions } = useMissions({ status: "active", limit: 500 });
-  const { approvals } = usePendingApprovals();
+  const { pendingApprovals } = useControlPlaneLive();
 
   const missionActiveCount = useMemo(() => activeMissions.length, [activeMissions]);
-  const pendingApprovalCount = approvals.length;
+  const pendingApprovalCount = pendingApprovals.length;
 
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
@@ -66,8 +66,8 @@ function AppShellInner() {
       setQuickCommandHandoffMissionId(mid);
       await live.bootstrapMission(mid);
       setQuickOpen(false);
-      if (location.pathname !== "/") {
-        navigate("/");
+      if (location.pathname !== "/missions") {
+        navigate("/missions");
       }
     },
     [live, location.pathname, navigate]

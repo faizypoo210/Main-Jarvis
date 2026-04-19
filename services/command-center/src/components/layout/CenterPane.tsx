@@ -5,8 +5,9 @@ import { Avatar } from "../common/Avatar";
 import { ShellRuntimeAttentionBar, ShellRuntimeHeaderPills } from "./ShellRuntimeStatus";
 
 const titles: Record<string, string> = {
-  "/": "Overview",
+  "/overview": "Overview",
   "/missions": "Missions",
+  "/receipts": "Receipts",
   "/approvals": "Approvals",
   "/activity": "Activity",
   "/integrations": "Integrations",
@@ -42,7 +43,7 @@ export function CenterPane({
       >
         <div className="min-w-0 flex-1">
           <nav className="font-mono text-[10px] text-[var(--text-muted)]">
-            <Link to="/" className="hover:text-[var(--text-secondary)]">
+            <Link to="/missions" className="hover:text-[var(--text-secondary)]">
               Grok Plan
             </Link>
             <span className="mx-1">/</span>

@@ -8,6 +8,7 @@ import {
   Inbox,
   LayoutDashboard,
   Plug,
+  Receipt,
   Settings,
   ShieldCheck,
   Target,
@@ -18,10 +19,11 @@ import { LiveLinkIndicator } from "./LiveLinkIndicator";
 import { ShellRuntimeRail } from "./ShellRuntimeStatus";
 
 const nav = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/overview", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/missions", label: "Missions", icon: Target, badge: "missions" as const },
   { to: "/approvals", label: "Approvals", icon: ShieldCheck, badge: "approvals" as const },
+  { to: "/receipts", label: "Receipts", icon: Receipt },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/evals", label: "Evals", icon: ClipboardList },
   { to: "/memory", label: "Memory", icon: Brain },

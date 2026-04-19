@@ -139,6 +139,36 @@ if (Test-DockerContainerRunning 'jarvis-redis') {
     Write-Host "Started: jarvis-redis"
 }
 
+# --- 2b) Postgres readiness + Alembic (matches jarvis-start.bat; required when jarvis.ps1 is run alone) ---
+Invoke-Step "Postgres readiness + Alembic"
+$pgReady = $false
+for ($i = 1; $i -le 10; $i++) {
+    $null = docker exec jarvis-postgres pg_isready -U jarvis 2>&1
+    if ($LASTEXITCODE -eq 0) { $pgReady = $true; break }
+    Write-Host "Postgres not ready (attempt $i/10), waiting 3 seconds..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
+}
+if (-not $pgReady) {
+    Write-Host "ERROR: Postgres did not become ready in time (jarvis-postgres pg_isready)." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Postgres is ready." -ForegroundColor Green
+
+$controlPlaneDir = Join-Path $JarvisRoot 'services\control-plane'
+Push-Location -LiteralPath $controlPlaneDir
+try {
+    $venvPython = Join-Path $PWD '.venv\Scripts\python.exe'
+    if (Test-Path -LiteralPath $venvPython) {
+        & $venvPython -m alembic upgrade head
+    } else {
+        & python -m alembic upgrade head
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Alembic upgrade head failed (exit $LASTEXITCODE)." }
+} finally {
+    Pop-Location
+}
+Write-Host "Alembic: database schema at head." -ForegroundColor Green
+
 # --- 3) OpenClaw Gateway (agent runtime; executor/cLI depend on it) ---
 Invoke-Step "OpenClaw Gateway"
 if (Test-TcpListen 18789) {
@@ -163,7 +193,6 @@ if (Test-Path -LiteralPath $laneVerify) {
 # --- 4) Control Plane (authoritative API) ---
 Write-Host ""
 Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
-$controlPlaneDir = Join-Path $JarvisRoot 'services\control-plane'
 $cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001"
 $cpLaunch = Start-JarvisTrackedProcess -Name 'control-plane' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $cpCmd) -WindowStyle Normal
 [void]$JarvisLaunchRecords.Add($cpLaunch)

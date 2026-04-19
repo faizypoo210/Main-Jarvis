@@ -6,10 +6,10 @@
 - REPO_MAP.md — this file
 
 ## Services
-- control_plane/ — FastAPI (port 8001), SQLModel, mission state
-  - main.py — FastAPI app entry
-  - models.py — Mission, Approval, Receipt, Worker schemas
-  - routers/ — commands, missions, approvals, receipts, sse
+- services/control-plane/ — FastAPI (port 8001), SQLModel, mission state
+  - app/main.py — FastAPI app entry
+  - app/models/ — Mission, Approval, Receipt, Worker schemas
+  - app/api/routes/ — commands, missions, approvals, receipts, sse
 - voice/ — Voice server (port 8000)
   - server.py — FastAPI + WebSocket, STT, TTS, Ollama
 - executor/ — Executor worker (BEING BUILT)

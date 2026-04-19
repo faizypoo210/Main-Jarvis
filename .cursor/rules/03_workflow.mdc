@@ -1,0 +1,31 @@
+---
+description: Development workflow rules
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# WORKFLOW RULES
+
+## Start of every session
+1. Read the current task from CURRENT_TASK.md
+2. Read relevant service files before changing anything
+3. Confirm understanding of task scope before writing code
+4. Do not start coding until scope is agreed
+
+## Task states
+- READY → actively working on it
+- IN_PROGRESS → code written, needs test
+- NEEDS_TEST → stop coding, verify behavior
+- DONE → committed and working
+
+## When to stop coding
+- When a slice is written and needs testing → STOP. Do not add more.
+- When you are about to touch a second service → STOP. Confirm scope.
+- When you are unsure if something exists → STOP. Read the file first.
+
+## Commit flow
+1. Write code for one slice
+2. Read back changes with me
+3. Stage only relevant files
+4. Write clean commit message
+5. Push when verified

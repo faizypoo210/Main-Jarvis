@@ -1,0 +1,35 @@
+---
+description: Coding behavior rules for this repo
+globs: ["**/*.py", "**/*.ts", "**/*.tsx", "**/*.js"]
+alwaysApply: true
+---
+
+# CODING DISCIPLINE
+
+## Behavior
+- One task at a time. Do not refactor while adding features.
+- Do not change files outside the current task scope.
+- Never change the Mission schema without confirming first.
+- Never change Redis stream names without confirming first.
+- Read the existing file fully before editing it.
+- Match existing code style — do not introduce new patterns without asking.
+
+## Python rules
+- Use SQLModel for all database models.
+- Use async FastAPI patterns.
+- Use aioredis for Redis operations.
+- Do NOT add --reload to uvicorn (breaks pyttsx3 TTS cache).
+- All config from environment variables or .env files.
+
+## React rules  
+- Tailwind CSS only for styling.
+- State via React hooks (useState, useReducer).
+- NO localStorage or sessionStorage (not supported in this env).
+- Fetch from control plane (port 8001) for all data.
+- Use SSE endpoint for real-time mission updates.
+
+## Commit rules
+- Stage only files changed in this task.
+- Commit message format: `feat(scope): what changed`
+- Do not commit .env files.
+- Verify diff before committing.

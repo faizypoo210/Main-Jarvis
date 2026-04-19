@@ -1,0 +1,45 @@
+---
+description: Architecture rules — how layers talk
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# ARCHITECTURE CONTRACTS
+
+## Layer responsibilities
+
+### Voice server (port 8000)
+- STT → intent classification → publish to jarvis.commands Redis stream
+- Read from jarvis.updates Redis stream → TTS response
+- NEVER owns mission truth. Stateless surface.
+
+### Control plane (port 8001)
+- FastAPI + SQLModel + PostgreSQL
+- ONLY writer of mission state
+- Reads jarvis.commands, routes to jarvis.execution, writes jarvis.receipts
+- Manages approval queue, receipt store, SSE endpoint for UI
+
+### Executor worker
+- Reads jarvis.execution Redis stream
+- Classifies intent with Ollama
+- Takes action (webbrowser.open, etc.)
+- Publishes result to jarvis.receipts
+- NEVER writes to PostgreSQL directly — only through control plane API
+
+### Command Center (port 5173)
+- React/Vite frontend
+- Reads from control plane REST + SSE
+- Three-zone layout: left nav | center main | right sidebar
+- Shows missions, approvals, receipts, logs, worker health
+
+### Redis Streams (event bus)
+- jarvis.commands — voice/UI → control plane
+- jarvis.execution — control plane → executor
+- jarvis.receipts — executor → control plane
+- jarvis.updates — control plane → voice/UI
+
+## Contracts
+- State truth = PostgreSQL via control plane only
+- Redis = fast cache + event bus only
+- DashClaw = governance gate before risky actions
+- No service talks to PostgreSQL except control plane

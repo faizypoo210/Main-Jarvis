@@ -1,0 +1,42 @@
+---
+description: Enforce repo inspection before any action
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# REPO TRUTH — READ BEFORE TOUCHING ANYTHING
+
+This is the JARVIS project. A governed Iron Man-style AI command center.
+Running on Windows machine 10.0.0.249.
+
+## Services and ports (REAL, DEPLOYED)
+- Control plane: FastAPI, port 8001 (source of truth for mission state)
+- Voice server: FastAPI + WebSocket, port 8000
+- OpenClaw gateway: port 18789
+- Command Center: React/Vite, port 5173 (ACTIVE, replaces Mission Control)
+- LobsterBoard: port 8080
+- DashClaw: https://jarvis-dashclaw.vercel.app (permanent, Neon PostgreSQL)
+- Ollama (Qwen 3.5 4B): port 11434
+- PostgreSQL + Redis: Docker
+
+## Event flow (canonical)
+voice → jarvis.commands → control plane → jarvis.execution → executor worker → jarvis.receipts → control plane → jarvis.updates → voice + Command Center
+
+## What is MISSING (do not assume it exists)
+- Executor worker (reads jarvis.execution, does webbrowser.open, etc.) — NOT BUILT
+- Three-zone Command Center layout — NOT DONE
+- Wake word / conversation memory on voice — NOT DONE
+- Test suite — DOES NOT EXIST
+- Process supervision / auto-restart — DOES NOT EXIST
+
+## What is DEPRECATED (do not touch)
+- Mission Control (ports 3000/3001) — being killed, replaced by Command Center (5173)
+
+## RULES
+1. Inspect actual files before any changes.
+2. Ask to see file content if uncertain.
+3. Do not rebuild working services.
+4. One slice at a time. Do not change multiple services at once.
+5. After writing code, verify against this truth file.
+6. Models: local = Qwen 3.5 4B via Ollama. cloud = MiniMax 2.5.
+7. Stack: FastAPI, SQLModel, Redis, PostgreSQL, React/Vite, pyttsx3, faster-whisper, pystray.

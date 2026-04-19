@@ -131,12 +131,11 @@ function Start-WatchdogServiceHost {
 }
 
 $controlPlaneDir = Join-Path $JarvisRoot 'services\control-plane'
-$voiceDir = Join-Path $JarvisRoot 'voice'
 $coordDir = Join-Path $JarvisRoot 'coordinator'
 $executorDir = Join-Path $JarvisRoot 'executor'
 
 $cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001"
-$voiceCmd = "cd `"$voiceDir`"; .\.venv\Scripts\Activate.ps1; uvicorn server:app --host 0.0.0.0 --port 8000"
+$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\Activate.ps1; python -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
 $coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\Activate.ps1; python coordinator.py"
 $execCmd = "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u worker.py"
 

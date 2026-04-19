@@ -206,7 +206,7 @@ if ($ccHttpOk) {
 # --- 6) Voice Server ---
 Write-Host "Starting Jarvis Voice Server..." -ForegroundColor Cyan
 $voiceDir = Join-Path $JarvisRoot 'voice'
-$voiceCmd = "cd `"$voiceDir`"; .\.venv\Scripts\Activate.ps1; uvicorn server:app --host 0.0.0.0 --port 8000"
+$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\Activate.ps1; python -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
 $voiceLaunch = Start-JarvisTrackedProcess -Name 'voice' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $voiceCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($voiceLaunch)
 Start-Sleep -Seconds 2

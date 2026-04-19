@@ -187,7 +187,7 @@ if (-not $cpReady) {
 Write-Host "Starting Jarvis Command Center..." -ForegroundColor Cyan
 $commandCenterDir = Join-Path $JarvisRoot 'services\command-center'
 $ccCmd = "cd `"$commandCenterDir`"; npm run dev"
-$ccLaunch = Start-JarvisTrackedProcess -Name 'command-center' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $ccCmd) -WindowStyle Minimized
+$ccLaunch = Start-JarvisTrackedProcess -Name 'command-center' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $ccCmd) -WindowStyle Minimized -WorkingDirectory $commandCenterDir
 [void]$JarvisLaunchRecords.Add($ccLaunch)
 Start-Sleep -Seconds 2
 $ccHttpOk = $false

@@ -1,3 +1,6 @@
+import path from "path";
+import { fileURLToPath } from "url";
+
 import react from "@vitejs/plugin-react";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
@@ -7,7 +10,8 @@ import { defineConfig } from "vitest/config";
  * CONTROL_PLANE_API_KEY (Node-only — never bundled into the client).
  */
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const env = loadEnv(mode, __dirname, "");
   const proxyTarget =
     env.VITE_CONTROL_PLANE_PROXY_TARGET ||
     env.CONTROL_PLANE_PROXY_TARGET ||

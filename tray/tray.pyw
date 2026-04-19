@@ -33,36 +33,20 @@ def _open(url: str) -> None:
 
 
 def stop_jarvis(icon, item):
+    import os
     import subprocess
 
-    # Kill by port - covers voice(8000), command-center/vite(5173), control-plane(8001),
-    # lobsterboard(8080), optional mission control(3000,3001), openclaw(18789)
-    for port in [8000, 5173, 8001, 8080, 3000, 3001, 18789]:
-        subprocess.run(
-            f'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :{port} ^| findstr LISTENING\') do taskkill /F /PID %a',
-            shell=True, capture_output=True
-        )
-
-    # Stop Docker containers using full Docker Desktop path
-    docker_paths = [
-        r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
-        "docker"
-    ]
-    for docker in docker_paths:
-        result = subprocess.run(
-            [docker, "ps", "-q"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            ids = result.stdout.strip().split()
-            subprocess.run([docker, "stop"] + ids, capture_output=True)
-            break
-
-    # Kill python/node processes
-    for proc in ["python.exe", "pythonw.exe", "node.exe"]:
-        subprocess.run(["taskkill", "/F", "/IM", proc], capture_output=True)
-
-    icon.notify("JARVIS Offline", "All services stopped.")
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bat_path = os.path.join(repo_root, "jarvis-stop.bat")
+    if not os.path.isfile(bat_path):
+        icon.notify("jarvis-stop.bat not found", "JARVIS")
+        icon.stop()
+        return
+    subprocess.Popen(
+        ["cmd", "/c", bat_path],
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    icon.notify("Stopping JARVIS...", "JARVIS")
     icon.stop()
 
 

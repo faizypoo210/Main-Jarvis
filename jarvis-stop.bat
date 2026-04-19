@@ -42,6 +42,5 @@ if exist "%~dp0.jarvis-local\watchdog.lock" (
 
 echo.
 echo Jarvis stop sequence finished.
-pause
 endlocal
 exit /b 0

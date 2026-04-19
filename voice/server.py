@@ -4,6 +4,7 @@ JARVIS Voice Server — FastAPI + WebSocket, faster-whisper STT, subprocess-isol
 MACHINE_CONFIG_REQUIRED: REDIS_URL, CONTROL_PLANE_URL, Whisper env; local .env beside this file.
 UPSTREAM_DEPENDENCY: faster-whisper, pyttsx3 (one-shot worker only), and optional GPU — not pinned to CI here.
 TRUTH_SOURCE: free-form utterances use ``POST /api/v1/intake``; replies come from the control-plane bundle (no cosmetic Ollama ack).
+Optional Ollama JSON intent (same schema as ``executor/worker``) is merged into intake ``context`` when classification succeeds.
 Voice TTS uses ``spoken_render`` condensation; the transcript still shows full ``reply.message``.
 
 Specialized handlers (unchanged order): read that again → inbox → briefing → governed action → approval → **unified intake**.
@@ -23,6 +24,7 @@ import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
@@ -66,6 +68,9 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 # Override with CONTROL_PLANE_URL if the control plane listens elsewhere.
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
+OLLAMA_TIMEOUT_SEC = float(os.getenv("OLLAMA_TIMEOUT_SEC", "120"))
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 if WHISPER_DEVICE == "cuda":
     WHISPER_COMPUTE = "float16"
@@ -96,6 +101,61 @@ TTS_UNAVAILABLE_REASON = "tts_unavailable"
 REPEAT_NO_AUDIO_REASON = "repeat_no_audio"
 # ``tts`` JSON: ``delivery: "browser"`` means speak ``text`` locally; no ``audio_b64``.
 TTS_DELIVERY_BROWSER = "browser"
+
+CLASSIFIER_SYSTEM = """You classify operator commands for a local assistant.
+Respond with a single JSON object only (no markdown), using this schema:
+{"intent":"open_url"|"unknown","url":string|null,"reason":string|null}
+Rules:
+- intent "open_url" only if the user clearly wants to open a web page and you can extract one http(s) URL from the command.
+- Put the full URL in "url" (include https:// if the user omitted the scheme but clearly meant a hostname, e.g. example.com -> https://example.com).
+- Otherwise intent "unknown" with a short reason."""
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    s = text.strip()
+    if not s:
+        return None
+    try:
+        obj = json.loads(s)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{[\s\S]*\}", s)
+    if m:
+        try:
+            obj = json.loads(m.group(0))
+            return obj if isinstance(obj, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+async def classify_intent_voice(
+    client: httpx.AsyncClient,
+    command_text: str,
+) -> dict[str, Any]:
+    """Call Ollama /api/chat with JSON format; same contract as ``executor.worker.classify_intent``."""
+    url = f"{OLLAMA_URL}/api/chat"
+    body = {
+        "model": OLLAMA_MODEL,
+        "stream": False,
+        "format": "json",
+        "messages": [
+            {"role": "system", "content": CLASSIFIER_SYSTEM},
+            {"role": "user", "content": command_text},
+        ],
+    }
+    r = await client.post(url, json=body, timeout=OLLAMA_TIMEOUT_SEC)
+    r.raise_for_status()
+    payload = r.json()
+    msg = (payload.get("message") or {}) if isinstance(payload, dict) else {}
+    content = msg.get("content") if isinstance(msg, dict) else None
+    if not isinstance(content, str):
+        return {"intent": "unknown", "url": None, "reason": "empty_model_response"}
+    parsed = _extract_json_object(content)
+    if not parsed:
+        return {"intent": "unknown", "url": None, "reason": "unparseable_model_json"}
+    return parsed
 
 
 def _tts_fallback_error_message() -> str:
@@ -672,6 +732,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             surface = _manager.surface_session_for(ws_key)
+            intake_extra: dict[str, Any] | None = None
+            try:
+                intent_obj = await classify_intent_voice(_http_client, text)
+                intake_extra = {
+                    "voice_intent_classification": {
+                        **intent_obj,
+                        "ollama_model": OLLAMA_MODEL,
+                    }
+                }
+            except Exception as e:
+                log.warning("voice ollama intent classification failed: %s", e)
+
             intake_res = await post_voice_intake(
                 _http_client,
                 control_plane_url=CONTROL_PLANE_URL,
@@ -679,6 +751,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 text=text,
                 surface_session_id=surface,
                 thread_mission_id=thread_mid,
+                extra_context=intake_extra,
             )
             if not intake_res.ok:
                 err = intake_res.error_message or (

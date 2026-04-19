@@ -1,3 +1,4 @@
 aiohttp
+httpx
 redis[hiredis]
 python-dotenv

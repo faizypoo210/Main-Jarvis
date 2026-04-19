@@ -231,10 +231,10 @@ $coordLaunch = Start-JarvisTrackedProcess -Name 'coordinator' -FilePath 'powersh
 [void]$JarvisLaunchRecords.Add($coordLaunch)
 Start-Sleep -Seconds 1
 
-# --- 8) Executor (OpenClaw CLI worker) ---
+# --- 8) Executor (Ollama intent worker; legacy OpenClaw entrypoint is executor/executor.py, not started here) ---
 Write-Host "Starting Jarvis Executor..." -ForegroundColor Cyan
 $executorDir = Join-Path $JarvisRoot 'executor'
-$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u executor.py"
+$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u worker.py"
 $execLaunch = Start-JarvisTrackedProcess -Name 'executor' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $execCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($execLaunch)
 Start-Sleep -Seconds 2

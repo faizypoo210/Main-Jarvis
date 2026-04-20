@@ -235,7 +235,7 @@ if ($ccHttpOk) {
 # --- 6) Voice Server ---
 Write-Host "Starting Jarvis Voice Server..." -ForegroundColor Cyan
 $voiceDir = Join-Path $JarvisRoot 'voice'
-$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\Activate.ps1; python -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
+$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\python.exe -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
 $voiceLaunch = Start-JarvisTrackedProcess -Name 'voice' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $voiceCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($voiceLaunch)
 Start-Sleep -Seconds 2
@@ -255,7 +255,7 @@ if ($voiceHttpOk) {
 # --- 7) Coordinator (Redis guard routing) ---
 Write-Host "Starting Jarvis Coordinator..." -ForegroundColor Cyan
 $coordDir = Join-Path $JarvisRoot 'coordinator'
-$coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\Activate.ps1; python coordinator.py"
+$coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\python.exe coordinator.py"
 $coordLaunch = Start-JarvisTrackedProcess -Name 'coordinator' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $coordCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($coordLaunch)
 Start-Sleep -Seconds 1
@@ -263,7 +263,7 @@ Start-Sleep -Seconds 1
 # --- 8) Executor (Ollama intent worker; legacy OpenClaw entrypoint is executor/executor.py, not started here) ---
 Write-Host "Starting Jarvis Executor..." -ForegroundColor Cyan
 $executorDir = Join-Path $JarvisRoot 'executor'
-$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u worker.py"
+$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\python.exe -u worker.py"
 $execLaunch = Start-JarvisTrackedProcess -Name 'executor' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $execCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($execLaunch)
 Start-Sleep -Seconds 2

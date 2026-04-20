@@ -134,10 +134,10 @@ $controlPlaneDir = Join-Path $JarvisRoot 'services\control-plane'
 $coordDir = Join-Path $JarvisRoot 'coordinator'
 $executorDir = Join-Path $JarvisRoot 'executor'
 
-$cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001"
-$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\Activate.ps1; python -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
-$coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\Activate.ps1; python coordinator.py"
-$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\Activate.ps1; python -u worker.py"
+$cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8001"
+$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\python.exe -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
+$coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\python.exe coordinator.py"
+$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\python.exe -u worker.py"
 
 Ensure-LogDir
 

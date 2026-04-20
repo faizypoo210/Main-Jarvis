@@ -14,6 +14,7 @@ if ([string]::IsNullOrWhiteSpace($JarvisRoot)) {
 $PollSeconds = 15
 $BackoffSeconds = 3
 $RestartCooldownSeconds = 30
+$MaxConsecutiveErrors = 5
 $logDir = Join-Path $JarvisRoot '.jarvis-local'
 $logPath = Join-Path $logDir 'watchdog.log'
 $lockPath = Join-Path $logDir 'watchdog.lock'
@@ -173,72 +174,87 @@ Write-WatchdogLog ("watchdog start jarvisRoot={0} poll={1}s cooldown={2}s own_pi
         $JarvisRoot, $PollSeconds, $RestartCooldownSeconds, $watchdogOwnPid, $script:ControlPlaneHostPid, $script:VoiceHostPid, $script:ExecutorHostPid, $script:CoordinatorHostPid)
 
 try {
+    $ConsecutiveErrors = 0
     while ($true) {
-        $failed = @()
-        if (-not (Test-ControlPlaneHealthy)) { $failed += 'control-plane' }
-        if (-not (Test-VoiceHealthy)) { $failed += 'voice' }
-        if (-not (Test-HostPidAlive -ProcessId $script:ExecutorHostPid)) { $failed += 'executor' }
-        if (-not (Test-HostPidAlive -ProcessId $script:CoordinatorHostPid)) { $failed += 'coordinator' }
+        try {
+            $failed = @()
+            if (-not (Test-ControlPlaneHealthy)) { $failed += 'control-plane' }
+            if (-not (Test-VoiceHealthy)) { $failed += 'voice' }
+            if (-not (Test-HostPidAlive -ProcessId $script:ExecutorHostPid)) { $failed += 'executor' }
+            if (-not (Test-HostPidAlive -ProcessId $script:CoordinatorHostPid)) { $failed += 'coordinator' }
 
-        if ($failed.Count -eq 0) {
-            Start-Sleep -Seconds $PollSeconds
-            continue
-        }
-
-        $detail = @(
-            $(if ($failed -contains 'control-plane') { 'control_plane_GET_health_not_200' }),
-            $(if ($failed -contains 'voice') { 'voice_GET_slash_not_200' }),
-            $(if ($failed -contains 'executor') { "executor_host_pid=$script:ExecutorHostPid" }),
-            $(if ($failed -contains 'coordinator') { "coordinator_host_pid=$script:CoordinatorHostPid" })
-        ) | Where-Object { $_ }
-
-        $toRestart = @()
-        foreach ($role in $failed) {
-            if (Test-RestartCooldown -Role $role -LastRestartTable $LastRestart) {
-                Write-WatchdogLog ("skip_restart service={0} reason=cooldown" -f $role)
+            if ($failed.Count -eq 0) {
+                Start-Sleep -Seconds $PollSeconds
+                $ConsecutiveErrors = 0
                 continue
             }
-            $toRestart += $role
-        }
 
-        if ($toRestart.Count -eq 0) {
-            Write-WatchdogLog ("failure services={0} detail={1} restart_skipped reason=all_cooldown" -f (($failed -join ',')), (($detail -join ';')))
+            $detail = @(
+                $(if ($failed -contains 'control-plane') { 'control_plane_GET_health_not_200' }),
+                $(if ($failed -contains 'voice') { 'voice_GET_slash_not_200' }),
+                $(if ($failed -contains 'executor') { "executor_host_pid=$script:ExecutorHostPid" }),
+                $(if ($failed -contains 'coordinator') { "coordinator_host_pid=$script:CoordinatorHostPid" })
+            ) | Where-Object { $_ }
+
+            $toRestart = @()
+            foreach ($role in $failed) {
+                if (Test-RestartCooldown -Role $role -LastRestartTable $LastRestart) {
+                    Write-WatchdogLog ("skip_restart service={0} reason=cooldown" -f $role)
+                    continue
+                }
+                $toRestart += $role
+            }
+
+            if ($toRestart.Count -eq 0) {
+                Write-WatchdogLog ("failure services={0} detail={1} restart_skipped reason=all_cooldown" -f (($failed -join ',')), (($detail -join ';')))
+                Start-Sleep -Seconds $PollSeconds
+                $ConsecutiveErrors = 0
+                continue
+            }
+
+            Write-WatchdogLog ("failure services={0} detail={1}" -f (($failed -join ',')), (($detail -join ';')))
+
+            Start-Sleep -Seconds $BackoffSeconds
+
+            if ($toRestart -contains 'control-plane') {
+                Stop-HttpServiceHostProcess -Role 'control-plane' -TrackedHostPid $script:ControlPlaneHostPid
+                $r = Start-WatchdogServiceHost -Command $cpCmd
+                $script:ControlPlaneHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
+                $LastRestart['control-plane'] = Get-Date
+                Write-WatchdogLog ("RESTART control-plane ok={0} new_host_pid={1} (http /health not 200)" -f $r.Ok, $script:ControlPlaneHostPid)
+            }
+            if ($toRestart -contains 'voice') {
+                Stop-HttpServiceHostProcess -Role 'voice' -TrackedHostPid $script:VoiceHostPid
+                $r = Start-WatchdogServiceHost -Command $voiceCmd
+                $script:VoiceHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
+                $LastRestart['voice'] = Get-Date
+                Write-WatchdogLog ("RESTART voice ok={0} new_host_pid={1} (http GET / not 200)" -f $r.Ok, $script:VoiceHostPid)
+            }
+            if ($toRestart -contains 'coordinator') {
+                $r = Start-WatchdogServiceHost -Command $coordCmd
+                $script:CoordinatorHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
+                $LastRestart['coordinator'] = Get-Date
+                Write-WatchdogLog ("RESTART coordinator ok={0} new_host_pid={1} (tracked host gone)" -f $r.Ok, $script:CoordinatorHostPid)
+            }
+            if ($toRestart -contains 'executor') {
+                $r = Start-WatchdogServiceHost -Command $execCmd
+                $script:ExecutorHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
+                $LastRestart['executor'] = Get-Date
+                Write-WatchdogLog ("RESTART executor ok={0} new_host_pid={1} (tracked host gone)" -f $r.Ok, $script:ExecutorHostPid)
+            }
+
             Start-Sleep -Seconds $PollSeconds
-            continue
+            $ConsecutiveErrors = 0
+        } catch {
+            $ConsecutiveErrors++
+            Write-WatchdogLog ("poll_loop_exception detail={0}" -f $_.Exception.Message)
+            if ($ConsecutiveErrors -ge $MaxConsecutiveErrors) {
+                Write-WatchdogLog ("poll_loop_fatal consecutive_errors={0} exiting" -f $MaxConsecutiveErrors)
+                Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+                exit 1
+            }
+            Start-Sleep -Seconds $PollSeconds
         }
-
-        Write-WatchdogLog ("failure services={0} detail={1}" -f (($failed -join ',')), (($detail -join ';')))
-
-        Start-Sleep -Seconds $BackoffSeconds
-
-        if ($toRestart -contains 'control-plane') {
-            Stop-HttpServiceHostProcess -Role 'control-plane' -TrackedHostPid $script:ControlPlaneHostPid
-            $r = Start-WatchdogServiceHost -Command $cpCmd
-            $script:ControlPlaneHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
-            $LastRestart['control-plane'] = Get-Date
-            Write-WatchdogLog ("RESTART control-plane ok={0} new_host_pid={1} (http /health not 200)" -f $r.Ok, $script:ControlPlaneHostPid)
-        }
-        if ($toRestart -contains 'voice') {
-            Stop-HttpServiceHostProcess -Role 'voice' -TrackedHostPid $script:VoiceHostPid
-            $r = Start-WatchdogServiceHost -Command $voiceCmd
-            $script:VoiceHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
-            $LastRestart['voice'] = Get-Date
-            Write-WatchdogLog ("RESTART voice ok={0} new_host_pid={1} (http GET / not 200)" -f $r.Ok, $script:VoiceHostPid)
-        }
-        if ($toRestart -contains 'coordinator') {
-            $r = Start-WatchdogServiceHost -Command $coordCmd
-            $script:CoordinatorHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
-            $LastRestart['coordinator'] = Get-Date
-            Write-WatchdogLog ("RESTART coordinator ok={0} new_host_pid={1} (tracked host gone)" -f $r.Ok, $script:CoordinatorHostPid)
-        }
-        if ($toRestart -contains 'executor') {
-            $r = Start-WatchdogServiceHost -Command $execCmd
-            $script:ExecutorHostPid = if ($r.Pid) { [int]$r.Pid } else { 0 }
-            $LastRestart['executor'] = Get-Date
-            Write-WatchdogLog ("RESTART executor ok={0} new_host_pid={1} (tracked host gone)" -f $r.Ok, $script:ExecutorHostPid)
-        }
-
-        Start-Sleep -Seconds $PollSeconds
     }
 } finally {
     Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue

@@ -247,6 +247,22 @@ async def handle_execution(
     await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
 
 
+async def _warmup_ollama() -> None:
+    url = f"{OLLAMA_URL}/api/chat"
+    body = {
+        "model": OLLAMA_MODEL,
+        "stream": False,
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(url, json=body, timeout=OLLAMA_TIMEOUT_SEC)
+            r.raise_for_status()
+            log.info(json.dumps({"ollama": "warmup_ok", "model": OLLAMA_MODEL}))
+    except Exception as e:
+        log.warning(json.dumps({"ollama": "warmup_failed", "detail": str(e)}))
+
+
 async def _run_loop(redis: Redis) -> None:
     timeout = httpx.Timeout(OLLAMA_TIMEOUT_SEC + 10.0)
     async with httpx.AsyncClient(timeout=timeout) as http:
@@ -312,6 +328,7 @@ async def _main() -> None:
     redis = Redis.from_url(REDIS_URL, decode_responses=False)
     try:
         await _ensure_group(redis, STREAM_EXECUTION, GROUP_EXECUTOR)
+        await _warmup_ollama()
         await _run_loop(redis)
     finally:
         await redis.close()

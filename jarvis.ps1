@@ -193,7 +193,7 @@ if (Test-Path -LiteralPath $laneVerify) {
 # --- 4) Control Plane (authoritative API) ---
 Write-Host ""
 Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
-$cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; uvicorn app.main:app --host 0.0.0.0 --port 8001"
+$cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8001"
 $cpLaunch = Start-JarvisTrackedProcess -Name 'control-plane' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $cpCmd) -WindowStyle Normal
 [void]$JarvisLaunchRecords.Add($cpLaunch)
 

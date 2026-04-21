@@ -1,16 +1,157 @@
 import { useMemo } from "react";
 import { OperatorHealthCard } from "../components/operator/OperatorHealthCard";
 import { useShellHealth } from "../contexts/ShellHealthContext";
+import { useOperatorWorkers } from "../hooks/useOperatorWorkers";
 import { formatRelativeTime } from "../lib/format";
 import { sseStatus, workerRegistryStatus } from "../lib/operatorRuntimeHealth";
+import type { HealthState, WorkerRead } from "../lib/types";
+
+function mapWorkerReportedStatus(s: string): HealthState {
+  const x = s.toLowerCase();
+  if (x === "healthy") return "healthy";
+  if (x === "degraded" || x === "starting") return "degraded";
+  if (x === "offline" || x === "stopped") return "offline";
+  return "unknown";
+}
+
+function healthRank(s: HealthState): number {
+  switch (s) {
+    case "offline":
+      return 4;
+    case "degraded":
+      return 3;
+    case "unknown":
+      return 2;
+    case "healthy":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function worstHealth(a: HealthState, b: HealthState): HealthState {
+  return healthRank(a) >= healthRank(b) ? a : b;
+}
+
+function pickWorkerForType(workers: WorkerRead[], workerType: string): WorkerRead | null {
+  const matches = workers.filter((w) => w.worker_type === workerType);
+  if (matches.length === 0) return null;
+  return matches.reduce((best, w) => {
+    const tw = w.last_heartbeat_at ? Date.parse(w.last_heartbeat_at) : 0;
+    const tb = best.last_heartbeat_at ? Date.parse(best.last_heartbeat_at) : 0;
+    return tw >= tb ? w : best;
+  });
+}
+
+function effectiveWorkerHealth(w: WorkerRead, staleThresholdMin: number): HealthState {
+  const reported = mapWorkerReportedStatus(w.status);
+  if (!w.last_heartbeat_at) {
+    return reported === "healthy" ? "degraded" : reported;
+  }
+  const ms = Date.now() - Date.parse(w.last_heartbeat_at);
+  if (Number.isNaN(ms)) return reported;
+  const thrMs = staleThresholdMin * 60 * 1000;
+  if (ms > thrMs) return "offline";
+  if (ms > thrMs / 2 && reported === "healthy") return "degraded";
+  return reported;
+}
+
 export function SystemHealth() {
   const { live, systemHealth, hb } = useShellHealth();
   const { data, error, loading } = systemHealth;
+  const {
+    data: workersData,
+    error: workersError,
+    loading: workersLoading,
+  } = useOperatorWorkers(30000);
 
   const sse = useMemo(
     () => sseStatus(live.streamPhase, live.streamError),
     [live.streamPhase, live.streamError]
   );
+
+  const localModel = import.meta.env.VITE_JARVIS_LOCAL_MODEL?.trim() || "(not set)";
+  const cloudModel = import.meta.env.VITE_JARVIS_CLOUD_MODEL?.trim() || "(not set)";
+  const localModelDisplay = localModel === "(not set)" ? "(not set)" : `${localModel} (configured)`;
+  const cloudModelDisplay = cloudModel === "(not set)" ? "(not set)" : `${cloudModel} (configured)`;
+
+  const runtimeCard = useMemo(() => {
+    const staleMin = workersData?.stale_threshold_minutes ?? data?.worker_registry.threshold_minutes ?? 15;
+    const list = workersData?.workers ?? [];
+
+    const ex = pickWorkerForType(list, "executor");
+    const co = pickWorkerForType(list, "coordinator");
+
+    const exHealth: HealthState = ex ? effectiveWorkerHealth(ex, staleMin) : "unknown";
+    const coHealth: HealthState = co ? effectiveWorkerHealth(co, staleMin) : "unknown";
+
+    let overall: HealthState = worstHealth(exHealth, coHealth);
+    if (workersError) overall = worstHealth(overall, "degraded");
+    else if (workersLoading && !workersData) overall = "unknown";
+
+    const roleLine = (label: string, w: WorkerRead | null) => {
+      if (!w) {
+        return (
+          <p key={label} className="text-[10px] leading-snug text-[var(--text-muted)]">
+            <span className="font-medium text-[var(--text-secondary)]">{label}:</span> unregistered
+          </p>
+        );
+      }
+      const hb = w.last_heartbeat_at
+        ? formatRelativeTime(w.last_heartbeat_at)
+        : "no heartbeat yet";
+      return (
+        <p key={`${label}-${w.instance_id}`} className="text-[10px] leading-snug text-[var(--text-muted)]">
+          <span className="font-medium text-[var(--text-secondary)]">{label}:</span>{" "}
+          <span className="text-[var(--text-primary)]">{w.status}</span>
+          {" · "}
+          last heartbeat {hb}
+        </p>
+      );
+    };
+
+    const detailParts: string[] = [
+      `Local ${localModelDisplay} · Cloud ${cloudModelDisplay}`,
+      workersError
+        ? workersError
+        : workersLoading && !workersData
+          ? "Loading worker registry…"
+          : "Model labels are build-time Vite config; executor/coordinator from GET /api/v1/operator/workers.",
+    ];
+
+    return {
+      overall,
+      detail: detailParts.join(" — "),
+      footer: (
+        <div className="space-y-1.5 border-t border-[var(--bg-border)]/60 pt-2">
+          <p className="text-[10px] leading-snug text-[var(--text-muted)]">
+            <span className="font-medium text-[var(--text-secondary)]">Local model:</span>{" "}
+            <span className="font-mono text-[9px] text-[var(--text-primary)]">{localModelDisplay}</span>
+          </p>
+          <p className="text-[10px] leading-snug text-[var(--text-muted)]">
+            <span className="font-medium text-[var(--text-secondary)]">Cloud model:</span>{" "}
+            <span className="font-mono text-[9px] text-[var(--text-primary)]">{cloudModelDisplay}</span>
+          </p>
+          <p className="text-[9px] leading-snug text-[var(--text-muted)]">
+            Model names reflect build-time config. Restart Command Center after changing VITE_JARVIS_LOCAL_MODEL or
+            VITE_JARVIS_CLOUD_MODEL.
+          </p>
+          {roleLine("Executor", ex)}
+          {roleLine("Coordinator", co)}
+          <p className="text-[10px] leading-snug text-[var(--text-muted)]">
+            <span className="font-medium text-[var(--text-secondary)]">Lane routing:</span> coming soon
+          </p>
+        </div>
+      ),
+    };
+  }, [
+    workersData,
+    workersError,
+    workersLoading,
+    data?.worker_registry.threshold_minutes,
+    localModelDisplay,
+    cloudModelDisplay,
+  ]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -32,6 +173,12 @@ export function SystemHealth() {
           <p className="text-sm text-[var(--text-muted)]">Loading health snapshot…</p>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <OperatorHealthCard
+            title="Runtime"
+            status={runtimeCard.overall}
+            detail={runtimeCard.detail}
+            footer={runtimeCard.footer}
+          />
           {data ? (
             <>
               <OperatorHealthCard

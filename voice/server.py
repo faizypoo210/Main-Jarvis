@@ -36,6 +36,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
+from shared.reply import build_jarvis_reply
 
 from .approval_voice import forget_voice_approval_state, try_handle_voice_approval
 from .briefing_voice import forget_voice_briefing_state, try_handle_voice_briefing
@@ -139,8 +140,11 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
 async def classify_intent_voice(
     client: httpx.AsyncClient,
     command_text: str,
-) -> dict[str, Any]:
-    """Call Ollama /api/chat with JSON format; same contract as ``executor.worker.classify_intent``."""
+) -> tuple[dict[str, Any], str]:
+    """Call Ollama /api/chat with JSON format; same contract as ``executor.worker.classify_intent``.
+
+    Returns ``(classification_dict, raw_model_message_text)`` for Jarvis reply synthesis.
+    """
     url = f"{OLLAMA_URL}/api/chat"
     body = {
         "model": OLLAMA_MODEL,
@@ -157,11 +161,11 @@ async def classify_intent_voice(
     msg = (payload.get("message") or {}) if isinstance(payload, dict) else {}
     content = msg.get("content") if isinstance(msg, dict) else None
     if not isinstance(content, str):
-        return {"intent": "unknown", "url": None, "reason": "empty_model_response"}
+        return ({"intent": "unknown", "url": None, "reason": "empty_model_response"}, "")
     parsed = _extract_json_object(content)
     if not parsed:
-        return {"intent": "unknown", "url": None, "reason": "unparseable_model_json"}
-    return parsed
+        return ({"intent": "unknown", "url": None, "reason": "unparseable_model_json"}, content)
+    return (parsed, content)
 
 
 def _tts_fallback_error_message() -> str:
@@ -745,15 +749,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             surface = _manager.surface_session_for(ws_key)
             intake_extra: dict[str, Any] | None = None
             try:
-                intent_obj = await classify_intent_voice(_http_client, text)
+                intent_obj, raw_ollama_text = await classify_intent_voice(_http_client, text)
+            except Exception as e:
+                log.warning("intent classification failed: %s", e)
+            else:
+                intent_key = str(intent_obj.get("intent") or "unknown")
+                reply = build_jarvis_reply(intent_key, raw_ollama_text, surface="voice")
                 intake_extra = {
                     "voice_intent_classification": {
                         **intent_obj,
                         "ollama_model": OLLAMA_MODEL,
+                        "jarvis_reply": reply,
                     }
                 }
-            except Exception as e:
-                log.warning("voice ollama intent classification failed: %s", e)
 
             intake_res = await post_voice_intake(
                 _http_client,

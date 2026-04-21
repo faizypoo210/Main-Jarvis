@@ -69,7 +69,13 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 # Override with CONTROL_PLANE_URL if the control plane listens elsewhere.
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
+# Local Ollama classifier: JARVIS_LOCAL_MODEL is canonical; OLLAMA_MODEL remains a deprecated alias.
+OLLAMA_MODEL = (
+    os.getenv("JARVIS_LOCAL_MODEL", "").strip()
+    or os.getenv("OLLAMA_MODEL", "").strip()
+    or "qwen3.5:4b"
+)
+JARVIS_CLOUD_MODEL = os.getenv("JARVIS_CLOUD_MODEL")
 OLLAMA_TIMEOUT_SEC = float(os.getenv("OLLAMA_TIMEOUT_SEC", "120"))
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 if WHISPER_DEVICE == "cuda":
@@ -430,6 +436,11 @@ async def _voice_worker_heartbeat_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _redis, _manager, _updates_task, _worker_hb_task, _http_client
+    log.info("Local model: %s", OLLAMA_MODEL)
+    log.info(
+        "Cloud model: %s",
+        JARVIS_CLOUD_MODEL.strip() if (JARVIS_CLOUD_MODEL or "").strip() else "(unset)",
+    )
     _http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(120.0, connect=10.0),
         limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),

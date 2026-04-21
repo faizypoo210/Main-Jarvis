@@ -25,7 +25,13 @@ load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:4b")
+# Local Ollama classifier: JARVIS_LOCAL_MODEL is canonical; OLLAMA_MODEL remains a deprecated alias.
+OLLAMA_MODEL = (
+    os.getenv("JARVIS_LOCAL_MODEL", "").strip()
+    or os.getenv("OLLAMA_MODEL", "").strip()
+    or "qwen3.5:4b"
+)
+JARVIS_CLOUD_MODEL = os.getenv("JARVIS_CLOUD_MODEL")
 OLLAMA_TIMEOUT_SEC = float(os.getenv("OLLAMA_TIMEOUT_SEC", "120"))
 
 STREAM_EXECUTION = "jarvis.execution"
@@ -314,6 +320,11 @@ async def _run_loop(redis: Redis) -> None:
 
 
 async def _main() -> None:
+    log.info("Local model: %s", OLLAMA_MODEL)
+    log.info(
+        "Cloud model: %s",
+        JARVIS_CLOUD_MODEL.strip() if (JARVIS_CLOUD_MODEL or "").strip() else "(unset)",
+    )
     log.info(
         json.dumps(
             {

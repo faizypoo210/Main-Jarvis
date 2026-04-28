@@ -38,71 +38,59 @@ Added JARVIS_HEALTH_OPENCLAW_GATEWAY_URL and JARVIS_HEALTH_OLLAMA_URL to control
 ## [DONE] Voice NLU upgrade
 Added Ollama intent classification to voice/server.py before post_voice_intake
 
-## [DONE]: Alembic startup cleanup
+## [DONE] Alembic startup cleanup
 Migrations always run on startup
 
+## [DONE] Testing Campaign + post-testing issue resolution
+All 8 test slices passed. Core Jarvis stack verified end-to-end. Executor, watchdog, voice NLU, SSE, one-click start/stop — all shipped and committed.
 
-## [DONE]: Testing Campaign, Slice 2 Fix
-All 8 test slices passed. Core Jarvis stack is verified end-to-end
-
-## What we are doing
-Systematic testing of all Jarvis functions.
-
-# CURRENT_TASK
-
-## Status: ACTIVE — Post-testing known issue resolution
-
-## Completed
-All 8 test slices passed. Core Jarvis stack is verified end-to-end.
-# CURRENT TASK
-
-
-## [DONE] All previous slices + post-testing issue resolution
-Full stack verified. Executor, watchdog, voice NLU, SSE, one-click start/stop — all shipped and committed.
+## [DONE] Architecture pass
+Model env vars locked, SOUL.md persona wired, shared/reply.py stub in place, runtime truth panel in Command Center.
 
 ---
 
-# CURRENT_TASK
+## [DONE] Slice 1 — Wire global Receipts page
+Already implemented. Receipts.test.tsx committed.
+**Goal:** Replace Receipts.tsx PLACEHOLDER_ROWS with a real list backed by new GET /api/v1/receipts endpoint.
+**Files:**
+- services/control-plane/app/api/routes/receipts.py
+- services/command-center/src/pages/Receipts.tsx
+- services/command-center/src/lib/api.ts
+**Not touching:** voice, executor, coordinator, control plane models, mission schema
+**Verify:** Live executor run → receipt appears in /receipts list. Vitest empty-state test passes.
 
-## Status: ACTIVE — Architecture pass
+## Slice 2 — Jarvis reply service
+**Goal:** New POST /api/v1/jarvis/reply composes (user text + mission context + pending approvals + recent receipts + persona from SOUL.md) into a Jarvis-voiced reply string. Voice server and Command Center chat both consume it.
+**Files:**
+- new services/control-plane/app/services/jarvis_reply.py
+- new route in services/control-plane/app/api/routes/
+- voice/server.py (consume instead of current stub)
+- services/command-center/src/components/conversation/ConversationThread.tsx (render Jarvis reply bubbles)
+**Not touching:** executor, coordinator, mission schema, Alembic migrations
+**Verify:** Chat "what's going on?" → Jarvis-voiced summary naming active missions and pending approvals. Voice same question → same content spoken.
 
----
+## Slice 3 — Cloud lane dispatch (MiniMax 2.5)
+**Goal:** Make requested_lane=="gateway" actually route to MiniMax 2.5 via existing OpenClaw auth profile. Receipt lane_truth must show openclaw_model_lane: gateway on a cloud run.
+**Files:**
+- executor/executor.py
+- shared/routing.py
+- shared/lane_truth.py
+**Not touching:** control plane, frontend, coordinator
+**Verify:** scripts/11-smoke-model-lanes.ps1 with gateway-routed prompt → receipt shows cloud model id.
 
-## Slice A — Lock model roles in env [NEXT]
-**Goal:** Eliminate all hardcoded model strings. Single source of truth in .env.
-**Vars to add:** JARVIS_LOCAL_MODEL=qwen3.5:4b, JARVIS_CLOUD_MODEL=minimax-2.5
-**Files:** .env, voice/server.py, executor/executor.py
-**Not touching:** control plane, coordinator, frontend
-**Verify:** `grep -rn "qwen\|minimax\|phi4" voice/ executor/` returns zero literals.
+## Slice 4 — Memory retrieval into replies
+**Goal:** Reply service loads top-K relevant memory_items into context before calling LLM. v1 = substring match + memory_type filter + recency sort. No embeddings.
+**Files:**
+- services/control-plane/app/services/jarvis_reply.py
+- services/control-plane/app/services/memory_service.py (new query helper)
+**Not touching:** voice server, frontend, executor, coordinator
+**Verify:** Promote a mission to memory → ask a related question → Jarvis reply references it.
 
-## Slice B — Shared Jarvis reply synthesis module
-**Goal:** Voice and Command Center use the same reply logic. One Jarvis voice across surfaces.
-**Files:** new shared/reply.py, voice/server.py (import + call)
-**Not touching:** control plane, executor, frontend
-**Verify:** Voice TTS copy is Jarvis-voiced, not raw Ollama output.
-
-## Slice C — Runtime truth panel in Command Center
-**Goal:** UI shows active models, lane routing, and real worker status — not inferred.
-**Files:** services/command-center/src/pages/SystemHealth.tsx (or equivalent)
-**Not touching:** all backend services
-**Verify:** System Health shows Runtime card: local model, cloud model, executor status, coordinator status.
-
----
-
-## Slice tracker
-
-| # | Name | Status |
-|---|------|--------|
-| All previous | Full stack + testing campaign | ✅ DONE |
-| Slice A | Model role env lock | 🔧 ACTIVE |
-| Slice B | Shared reply synthesis | ⏳ QUEUED |
-| Slice C | Runtime truth UI panel | ⏳ QUEUED |
-
----
-
-## Key env / credentials
-- CONTROL_PLANE_API_KEY=J9qBeIin1yWlWIMZfB/0pCNXmTnHfZtLZFBO+BoYcpY=
-- REDIS_URL=redis://localhost:6379
-- JARVIS_LOCAL_MODEL=qwen3.5:4b
-- JARVIS_CLOUD_MODEL=minimax-2.5
-- OLLAMA_TIMEOUT_SEC=120
+## Slice 5 — Mission decomposition v1
+**Goal:** Planner service generates a linear stage list for complex missions and writes stages[] before execution. Executor runs stages sequentially, each emitting its own receipt. No branching, no parallel workers.
+**Files:**
+- new services/control-plane/app/services/mission_planner.py
+- services/control-plane/app/api/routes/missions.py (accept stage writes)
+- executor/executor.py (consume stages)
+**Not touching:** voice, frontend, coordinator contract
+**Verify:** "Research top 5 Polymarket arb opportunities and save them" decomposes into 3–5 stages, each stage emits a receipt, mission completes with structured output.

@@ -16,4 +16,11 @@ Approvals may arrive via **voice**, **Command Center** (web), or **SMS**, depend
 - Prefer **asking** over **guessing** when risk is unclear.
 - Surface **receipt and mission status** from the control plane when relevant; do not fabricate backend state.
 
+## Technical context
+
+```yaml
+stack:
+  gateway: OpenClaw (port 18789, minimax-2.5)
+```
+
 Backend enforcement (routing, policy, audit) is implemented in the **control plane** and related services, not in this file.

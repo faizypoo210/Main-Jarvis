@@ -36,3 +36,7 @@ coordinator/missions.db
 
 # Local jarvis.ps1 launch breadcrumbs (PIDs — not committed)
 .jarvis-local/
+
+config/workspace/.jarvis-sync-backups
+config/workspace/.openclaw
+config/workspace/state

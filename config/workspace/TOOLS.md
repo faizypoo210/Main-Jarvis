@@ -7,12 +7,14 @@
 **Purpose:** GPU-accelerated local inference, intent classification, fast responses
 
 **Classification:**
+
 - Access: Execute
 - Scope: Local
 - Risk: Safe
 - Approval: Auto
 
 **Configuration:**
+
 ```yaml
 ollama:
   host: 10.0.0.249
@@ -22,6 +24,7 @@ ollama:
 ```
 
 **Use Cases:**
+
 - Quick intent classification
 - Heartbeat checks
 - Low-cost routing decisions
@@ -36,12 +39,14 @@ ollama:
 **Purpose:** Event bus, state cache, pub/sub
 
 **Classification:**
+
 - Access: Read/Write
 - Scope: Internal
 - Risk: Safe
 - Approval: Auto
 
 **Configuration:**
+
 ```yaml
 redis:
   host: 10.0.0.249
@@ -50,6 +55,7 @@ redis:
 ```
 
 **Streams:**
+
 ```
 jarvis.commands   → Voice/UI → Control Plane
 jarvis.execution  → Control Plane → OpenClaw
@@ -64,12 +70,14 @@ jarvis.updates    → Control Plane → Voice/UI
 **Purpose:** Durable state storage for Mission Control
 
 **Classification:**
+
 - Access: Read/Write (via Mission Control API)
 - Scope: Internal
 - Risk: Moderate
 - Approval: Via Mission Control
 
 **Configuration:**
+
 ```yaml
 postgresql:
   host: 10.0.0.249 (Docker)
@@ -83,15 +91,17 @@ postgresql:
 
 ### File Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `file.read` | Read | Safe | Auto | Optional |
-| `file.write` (workspace) | Write | Moderate | Ask | Required |
-| `file.write` (system) | Write | Critical | Require | Required |
-| `file.delete` | Write | High | Require | Required |
-| `file.trash` | Write | Moderate | Ask | Required |
-| `file.copy` | Write | Safe | Auto | Required |
-| `file.move` | Write | Moderate | Ask | Required |
+
+| Tool                     | Access | Risk     | Approval | Receipt  |
+| ------------------------ | ------ | -------- | -------- | -------- |
+| `file.read`              | Read   | Safe     | Auto     | Optional |
+| `file.write` (workspace) | Write  | Moderate | Ask      | Required |
+| `file.write` (system)    | Write  | Critical | Require  | Required |
+| `file.delete`            | Write  | High     | Require  | Required |
+| `file.trash`             | Write  | Moderate | Ask      | Required |
+| `file.copy`              | Write  | Safe     | Auto     | Required |
+| `file.move`              | Write  | Moderate | Ask      | Required |
+
 
 **Policy:** Prefer `trash` over `delete`. Never write outside workspace without explicit approval.
 
@@ -99,12 +109,14 @@ postgresql:
 
 ### Web Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `web.search` | Read | Safe | Auto | Optional |
-| `web.fetch` | Read | Safe | Auto | Optional |
-| `web.fetch_auth` | Read | Moderate | Ask | Required |
-| `web.post` | Write | High | Require | Required |
+
+| Tool             | Access | Risk     | Approval | Receipt  |
+| ---------------- | ------ | -------- | -------- | -------- |
+| `web.search`     | Read   | Safe     | Auto     | Optional |
+| `web.fetch`      | Read   | Safe     | Auto     | Optional |
+| `web.fetch_auth` | Read   | Moderate | Ask      | Required |
+| `web.post`       | Write  | High     | Require  | Required |
+
 
 **Policy:** Unrestricted public web access. Auth-required URLs need confirmation.
 
@@ -112,13 +124,15 @@ postgresql:
 
 ### Code Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `code.generate` | Execute | Safe | Auto | Required |
-| `code.execute` (sandbox) | Execute | Moderate | Ask | Required |
-| `code.execute` (system) | Execute | Critical | Require | Required |
-| `code.commit` | Write | High | Require | Required |
-| `code.push` | Write | High | Require | Required |
+
+| Tool                     | Access  | Risk     | Approval | Receipt  |
+| ------------------------ | ------- | -------- | -------- | -------- |
+| `code.generate`          | Execute | Safe     | Auto     | Required |
+| `code.execute` (sandbox) | Execute | Moderate | Ask      | Required |
+| `code.execute` (system)  | Execute | Critical | Require  | Required |
+| `code.commit`            | Write   | High     | Require  | Required |
+| `code.push`              | Write   | High     | Require  | Required |
+
 
 **Policy:** Generated code is safe. Execution requires escalating approval based on scope.
 
@@ -126,14 +140,16 @@ postgresql:
 
 ### Communication Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `email.read` | Read | Safe | Auto | Optional |
-| `email.send` | Write | High | Require | Required |
-| `email.draft` | Write | Safe | Auto | Required |
-| `sms.send` | Write | High | Require | Required |
-| `slack.read` | Read | Safe | Auto | Optional |
-| `slack.post` | Write | High | Require | Required |
+
+| Tool          | Access | Risk | Approval | Receipt  |
+| ------------- | ------ | ---- | -------- | -------- |
+| `email.read`  | Read   | Safe | Auto     | Optional |
+| `email.send`  | Write  | High | Require  | Required |
+| `email.draft` | Write  | Safe | Auto     | Required |
+| `sms.send`    | Write  | High | Require  | Required |
+| `slack.read`  | Read   | Safe | Auto     | Optional |
+| `slack.post`  | Write  | High | Require  | Required |
+
 
 **Policy:** Reading is free. Sending requires approval—these are identity-bearing.
 
@@ -141,40 +157,46 @@ postgresql:
 
 ### Integration Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `github.read` | Read | Safe | Auto | Optional |
-| `github.issue` | Write | Moderate | Ask | Required |
-| `github.commit` | Write | High | Require | Required |
-| `calendar.read` | Read | Safe | Auto | Optional |
-| `calendar.create` | Write | Moderate | Ask | Required |
-| `notion.read` | Read | Safe | Auto | Optional |
-| `notion.write` | Write | Moderate | Ask | Required |
+
+| Tool              | Access | Risk     | Approval | Receipt  |
+| ----------------- | ------ | -------- | -------- | -------- |
+| `github.read`     | Read   | Safe     | Auto     | Optional |
+| `github.issue`    | Write  | Moderate | Ask      | Required |
+| `github.commit`   | Write  | High     | Require  | Required |
+| `calendar.read`   | Read   | Safe     | Auto     | Optional |
+| `calendar.create` | Write  | Moderate | Ask      | Required |
+| `notion.read`     | Read   | Safe     | Auto     | Optional |
+| `notion.write`    | Write  | Moderate | Ask      | Required |
+
 
 ---
 
 ### System Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `shell.read` | Execute | Moderate | Ask | Required |
-| `shell.write` | Execute | High | Require | Required |
-| `docker.status` | Read | Safe | Auto | Optional |
-| `docker.start` | Execute | Moderate | Ask | Required |
-| `docker.stop` | Execute | Moderate | Ask | Required |
-| `process.list` | Read | Safe | Auto | Optional |
-| `process.kill` | Execute | High | Require | Required |
+
+| Tool            | Access  | Risk     | Approval | Receipt  |
+| --------------- | ------- | -------- | -------- | -------- |
+| `shell.read`    | Execute | Moderate | Ask      | Required |
+| `shell.write`   | Execute | High     | Require  | Required |
+| `docker.status` | Read    | Safe     | Auto     | Optional |
+| `docker.start`  | Execute | Moderate | Ask      | Required |
+| `docker.stop`   | Execute | Moderate | Ask      | Required |
+| `process.list`  | Read    | Safe     | Auto     | Optional |
+| `process.kill`  | Execute | High     | Require  | Required |
+
 
 ---
 
 ### Memory Operations
 
-| Tool | Access | Risk | Approval | Receipt |
-|------|--------|------|----------|---------|
-| `memory.read` | Read | Safe | Auto | None |
-| `memory.write_daily` | Write | Safe | Auto | Optional |
-| `memory.write_durable` | Write | Moderate | Ask | Required |
-| `memory.delete` | Write | High | Require | Required |
+
+| Tool                   | Access | Risk     | Approval | Receipt  |
+| ---------------------- | ------ | -------- | -------- | -------- |
+| `memory.read`          | Read   | Safe     | Auto     | None     |
+| `memory.write_daily`   | Write  | Safe     | Auto     | Optional |
+| `memory.write_durable` | Write  | Moderate | Ask      | Required |
+| `memory.delete`        | Write  | High     | Require  | Required |
+
 
 ---
 
@@ -182,32 +204,37 @@ postgresql:
 
 ### Composio-Authenticated Services
 
-| Service | Status | Capabilities | Approval Level |
-|---------|--------|--------------|----------------|
-| **Gmail** | ✅ Active | Read, Draft, Send | Send: Require |
-| **GitHub** | ✅ Active | Read, Issues, Commits | Commits: Require |
-| **Supabase** | ✅ Active | Read, Write | Write: Ask |
-| **YouTube** | ✅ Active | Read | Auto |
-| **HuggingFace** | ✅ Active | Read, Deploy | Deploy: Require |
-| **Calendar** | ✅ Active | Read, Create | Create: Ask |
-| **Slack** | ✅ Active | Read, Post | Post: Require |
-| **Notion** | ✅ Active | Read, Write | Write: Ask |
+
+| Service         | Status   | Capabilities          | Approval Level   |
+| --------------- | -------- | --------------------- | ---------------- |
+| **Gmail**       | ✅ Active | Read, Draft, Send     | Send: Require    |
+| **GitHub**      | ✅ Active | Read, Issues, Commits | Commits: Require |
+| **Supabase**    | ✅ Active | Read, Write           | Write: Ask       |
+| **YouTube**     | ✅ Active | Read                  | Auto             |
+| **HuggingFace** | ✅ Active | Read, Deploy          | Deploy: Require  |
+| **Calendar**    | ✅ Active | Read, Create          | Create: Ask      |
+| **Slack**       | ✅ Active | Read, Post            | Post: Require    |
+| **Notion**      | ✅ Active | Read, Write           | Write: Ask       |
+
 
 ### Integration Policies
 
 **GitHub:**
+
 - Reading repos/issues: Auto
 - Creating issues: Ask
 - Committing code: Require
 - Force push: Never (blocked)
 
 **Gmail:**
+
 - Reading inbox: Auto
 - Drafting: Auto
 - Sending: Require
 - Forwarding to external: Require
 
 **Calendar:**
+
 - Reading events: Auto
 - Creating personal events: Ask
 - Creating events with attendees: Require
@@ -238,16 +265,18 @@ postgresql:
 
 ### Port Reference
 
-| Port | Service | Protocol |
-|------|---------|----------|
-| 3000 | Command Center (deprecated — ports 3000/3001 are legacy Mission Control; primary operator UI is Command Center on :5173, control plane API on :8001) | HTTP |
-| 3001 | Command Center (deprecated — ports 3000/3001 are legacy Mission Control; primary operator UI is Command Center on :5173, control plane API on :8001) | HTTP |
-| 8000 | Voice Server | HTTP/WebSocket |
-| 8080 | LobsterBoard | HTTP |
-| 11434 | Ollama | HTTP |
-| 18789 | OpenClaw Gateway | WebSocket |
-| 5432 | PostgreSQL | TCP |
-| 6379 | Redis | TCP |
+
+| Port  | Service                                                                                                                                              | Protocol       |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| 3000  | Command Center (deprecated — ports 3000/3001 are legacy Mission Control; primary operator UI is Command Center on :5173, control plane API on :8001) | HTTP           |
+| 3001  | Command Center (deprecated — ports 3000/3001 are legacy Mission Control; primary operator UI is Command Center on :5173, control plane API on :8001) | HTTP           |
+| 8000  | Voice Server                                                                                                                                         | HTTP/WebSocket |
+| 8080  | LobsterBoard                                                                                                                                         | HTTP           |
+| 11434 | Ollama                                                                                                                                               | HTTP           |
+| 18789 | OpenClaw Gateway                                                                                                                                     | WebSocket      |
+| 5432  | PostgreSQL                                                                                                                                           | TCP            |
+| 6379  | Redis                                                                                                                                                | TCP            |
+
 
 ### Startup Sequence
 
@@ -272,13 +301,15 @@ postgresql:
 
 Credentials are stored in the secure vault, NOT in these files.
 
-| Credential | Location | Access Pattern |
-|------------|----------|----------------|
-| OpenClaw Token | Vault | Auto-injected by gateway |
-| Mission Control Token | Vault | Header injection |
-| DashClaw API Key | Vault | Header injection |
-| Composio Auth | Vault | OAuth managed |
-| OpenAI Key | Environment | Model calls |
+
+| Credential            | Location    | Access Pattern           |
+| --------------------- | ----------- | ------------------------ |
+| OpenClaw Token        | Vault       | Auto-injected by gateway |
+| Mission Control Token | Vault       | Header injection         |
+| DashClaw API Key      | Vault       | Header injection         |
+| Composio Auth         | Vault       | OAuth managed            |
+| OpenAI Key            | Environment | Model calls              |
+
 
 ### Auth Profiles
 
@@ -310,6 +341,7 @@ Level 3: Error handling and edge cases (on failure)
 ### Skill Security
 
 Before using any community skill:
+
 1. Review source code
 2. Check for suspicious network calls
 3. Verify no credential exfiltration
@@ -330,18 +362,21 @@ Before using any community skill:
 ### Cost Awareness
 
 Track and report:
+
 - Tokens per tool call
 - USD cost per mission
 - Anomalies (>150% of estimate)
 
 ### Rate Limiting
 
-| Service | Rate Limit | Behavior |
-|---------|------------|----------|
-| OpenAI | Model-dependent | Backoff + queue |
-| GitHub | 5000/hour | Cache reads |
-| Gmail | 250/day (send) | Queue + warn |
-| Web search | 100/hour | Cache results |
+
+| Service    | Rate Limit      | Behavior        |
+| ---------- | --------------- | --------------- |
+| OpenAI     | Model-dependent | Backoff + queue |
+| GitHub     | 5000/hour       | Cache reads     |
+| Gmail      | 250/day (send)  | Queue + warn    |
+| Web search | 100/hour        | Cache results   |
+
 
 ---
 
@@ -350,6 +385,7 @@ Track and report:
 ### Adding New Tools
 
 New tools require:
+
 1. Classification across all four dimensions
 2. Receipt schema definition
 3. Approval workflow documentation
@@ -359,6 +395,7 @@ New tools require:
 ### Tool Testing
 
 Before production:
+
 1. Sandbox testing
 2. Receipt validation
 3. Failure mode testing
@@ -369,9 +406,11 @@ Before production:
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2026-04-10 | Initial production tool policy map |
+
+| Version | Date       | Changes                            |
+| ------- | ---------- | ---------------------------------- |
+| 1.0     | 2026-04-10 | Initial production tool policy map |
+
 
 ---
 

@@ -1,0 +1,12 @@
+# USER.md — About Faiz
+- **Name:** Faiz
+- **What to call them:** Faiz
+- **Timezone:** Check system clock
+- **Communication style:** Direct, no-nonsense, catches over-engineering fast
+- **Working pattern:** Claude/ChatGPT for architecture → Cursor for implementation → Jarvis for execution
+- **Current focus:** Building the JARVIS stack (F:\Jarvis)
+- **Known preferences:**
+  - Short answers by default, depth on request
+  - Prefers real deployable systems over abstraction
+  - Rapid iteration with solid foundations
+  - Trusts governed autonomy, skeptical of magic

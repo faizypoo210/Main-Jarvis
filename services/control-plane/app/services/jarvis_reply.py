@@ -181,7 +181,7 @@ def _load_soul() -> str:
     ]
     for p in candidates:
         try:
-            text = p.read_text(encoding="utf-8").strip()
+            text = p.read_text(encoding="utf-8-sig").strip()
             if text:
                 return text
         except Exception:

@@ -83,7 +83,7 @@ Planner generates linear stage list. Executor runs stages sequentially, each emi
 **Not touching:** schemas (done in B1), routing.py, lane_truth.py, any frontend, voice server
 **Verify:** POST /api/v1/intake with "pull NBA scores today" → reply.message is specific not canned. reply.activity_label populated. reply.show_working_indicator is true.
 
-## [NEXT] Slice B3 — Broad behavioral lane classifier
+## [DONE] Slice B3 — Broad behavioral lane classifier
 **Goal:** Property-based Qwen classification produces IntentEnvelope with full property bag and maps to BehavioralLane. Old IntentType regex stays as fallback. Control plane still decides.
 **Files:**
 - services/control-plane/app/services/intake_interpretation.py
@@ -91,7 +91,7 @@ Planner generates linear stage list. Executor runs stages sequentially, each emi
 **Not touching:** intake_service.py routing logic, lane_truth.py, any frontend
 **Verify:** "pull NBA scores" → suggested_lane=fast_research. "apply for jobs" → suggested_lane=mission + identity_bearing=true. "send that email" → suggested_lane=approval + external_action=true.
 
-## [ ] Slice B4 — Premium working indicator UI
+## [NEXT] Slice B4 — Premium working indicator UI
 **Goal:** AgentActivity upgrades from single pulsing dot to wave-asterisk indicator. ConversationThread passes activity_label from reply bundle. Indicator clears on terminal reply.
 **Files:**
 - services/command-center/src/components/conversation/AgentActivity.tsx

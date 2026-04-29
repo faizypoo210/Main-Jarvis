@@ -13,7 +13,9 @@ from app.schemas.approvals import ApprovalRead
 from app.schemas.missions import (
     MissionBundleRead,
     MissionEventCreate,
+    MissionPlanResponse,
     MissionRead,
+    MissionStagesPatchBody,
     MissionStatusUpdate,
 )
 from app.schemas.receipts import ReceiptRead
@@ -97,6 +99,29 @@ async def get_mission_bundle(
 ) -> MissionBundleRead:
     svc = MissionService(session)
     return await svc.get_mission_bundle(mission_id)
+
+
+@router.patch("/{mission_id}/stages", response_model=MissionRead)
+async def patch_mission_stages(
+    mission_id: UUID,
+    body: MissionStagesPatchBody,
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> MissionRead:
+    svc = MissionService(session)
+    return await svc.update_mission_stages(mission_id, body)
+
+
+@router.get("/{mission_id}/plan", response_model=MissionPlanResponse)
+async def get_mission_plan(
+    mission_id: UUID,
+    command: str = Query(..., min_length=1),
+    session: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
+) -> MissionPlanResponse:
+    svc = MissionService(session)
+    stages = await svc.plan_and_save_stages(mission_id, command)
+    return MissionPlanResponse(stages=stages)
 
 
 @router.get("/{mission_id}", response_model=MissionRead)

@@ -156,6 +156,18 @@ async def handle_execution(
     mission_id = str(data.get("mission_id") or "").strip()
     command_text = (data.get("command") or data.get("text") or "").strip()
 
+    if data.get("skip_worker_classification"):
+        log.info(
+            json.dumps(
+                {
+                    "worker": "skip_classification_flag_set",
+                    "mission_id": mission_id,
+                }
+            )
+        )
+        await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+        return
+
     log.info(
         json.dumps(
             {
@@ -241,6 +253,37 @@ async def handle_execution(
                 default=str,
             )
         )
+
+    if intent == "unknown" and len(command_text.split()) > 6:
+        low = command_text.strip().lower()
+        if not (
+            low.startswith("open http")
+            or low.startswith("open www")
+            or low.startswith("what")
+            or low.startswith("who")
+            or low.startswith("how many")
+            or low.startswith("list")
+            or low.startswith("show")
+        ):
+            exec_payload = {
+                "mission_id": mission_id,
+                "command": command_text,
+                "dashclaw_decision": "allow",
+                "routing": data.get("routing", {}),
+                "skip_worker_classification": True,
+            }
+            await redis.xadd(STREAM_EXECUTION, {"data": json.dumps(exec_payload, default=str)})
+            log.info(
+                json.dumps(
+                    {
+                        "worker": "complex_routed_to_executor",
+                        "mission_id": mission_id,
+                        "command_preview": command_text[:80],
+                    }
+                )
+            )
+            await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+            return
 
     receipt_body = {
         "mission_id": mission_id,

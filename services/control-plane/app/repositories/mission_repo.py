@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, select
@@ -69,5 +70,20 @@ class MissionRepository:
             event_type="mission_status_changed",
             payload={"from": old_status, "to": status},
         )
+        queue_mission_snapshot(self._session, mission)
+        return mission
+
+    async def update_stages(
+        self, mission_id: UUID, stages: list[dict[str, Any]] | None
+    ) -> Mission | None:
+        mission = await self.get_by_id(mission_id)
+        if mission is None:
+            return None
+        mission.stages = stages
+        from datetime import UTC, datetime
+
+        mission.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        await self._session.refresh(mission)
         queue_mission_snapshot(self._session, mission)
         return mission

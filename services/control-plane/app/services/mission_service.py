@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -12,9 +13,17 @@ from app.repositories.mission_event_repo import MissionEventRepository
 from app.repositories.mission_repo import MissionRepository
 from app.repositories.receipt_repo import ReceiptRepository
 from app.schemas.approvals import ApprovalRead
-from app.schemas.missions import MissionBundleRead, MissionEventCreate, MissionRead
+from app.schemas.missions import (
+    MissionBundleRead,
+    MissionEventCreate,
+    MissionRead,
+    MissionStagesPatchBody,
+    MissionStatusUpdate,
+    _validate_stage_items,
+)
 from app.schemas.receipts import ReceiptRead
 from app.schemas.updates import MissionEventRead
+from app.services.mission_planner import plan_mission
 
 
 class MissionService:
@@ -46,6 +55,51 @@ class MissionService:
                 detail="Mission not found",
             )
         return MissionRead.model_validate(mission)
+
+    async def update_mission_stages(
+        self, mission_id: UUID, body: MissionStagesPatchBody
+    ) -> MissionRead:
+        normalized = _validate_stage_items(body.stages)
+        if body.stages and not normalized:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No valid stages in payload",
+            )
+        to_store: list[dict[str, Any]] | None = normalized if normalized else None
+        mission = await self._repo.update_stages(mission_id, to_store)
+        if mission is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mission not found",
+            )
+        return MissionRead.model_validate(mission)
+
+    async def plan_and_save_stages(self, mission_id: UUID, command: str) -> list[dict[str, Any]]:
+        cmd = (command or "").strip()
+        if not cmd:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="command query parameter is required",
+            )
+        mission = await self._repo.get_by_id(mission_id)
+        if mission is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mission not found",
+            )
+        planned = await plan_mission(cmd, str(mission_id))
+        normalized = _validate_stage_items(planned)
+        if not normalized:
+            normalized = _validate_stage_items(
+                [{"id": "stage-1", "title": cmd, "status": "pending"}]
+            )
+        updated = await self._repo.update_stages(mission_id, normalized)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mission not found",
+            )
+        return normalized
 
     async def list_mission_events(self, mission_id: UUID) -> list[MissionEventRead]:
         mission = await self._repo.get_by_id(mission_id)

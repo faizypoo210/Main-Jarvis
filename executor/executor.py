@@ -19,6 +19,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 from dotenv import load_dotenv
@@ -36,8 +37,8 @@ from shared.worker_registry_client import (
 
 load_dotenv()
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
+CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "").strip().rstrip("/")
 OPENCLAW_CMD = os.getenv(
     "OPENCLAW_CMD",
     str(Path.home() / "AppData" / "Roaming" / "npm" / "openclaw.cmd"),
@@ -109,10 +110,14 @@ def _lane_from_gateway_model(model: str | None) -> str:
 
 
 def _cloud_model_id() -> str:
-    """OpenClaw ``--model`` for cloud lane; from env with a single non-secret default."""
-    raw = os.getenv("JARVIS_CLOUD_MODEL", "minimax/MiniMax-M2.5")
-    s = (raw or "").strip()
-    return s if s else "minimax/MiniMax-M2.5"
+    """OpenClaw ``--model`` for cloud lane; must be set explicitly for gateway runs."""
+    val = os.getenv("JARVIS_CLOUD_MODEL", "").strip()
+    if not val:
+        raise ValueError(
+            "JARVIS_CLOUD_MODEL env var is not set. "
+            "Set it in executor/.env before using gateway lane."
+        )
+    return val
 
 
 def _requested_lane_from_data(data: dict[str, Any]) -> str:
@@ -229,6 +234,77 @@ def _parse_data(fields: dict[str, str]) -> dict[str, Any]:
     return {}
 
 
+def _executor_normalize_stages(raw: list[Any]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        sid = item.get("id")
+        title = item.get("title")
+        if not isinstance(sid, str) or not sid.strip():
+            continue
+        if not isinstance(title, str) or not title.strip():
+            continue
+        st = item.get("status", "pending")
+        if not isinstance(st, str):
+            st = "pending"
+        if st not in ("pending", "active", "complete", "failed"):
+            st = "pending"
+        out.append({"id": sid.strip(), "title": title.strip(), "status": st})
+    return out
+
+
+def _executor_command_is_complex(command: str) -> bool:
+    words = (command or "").strip().split()
+    if len(words) <= 6:
+        return False
+    low = (command or "").strip().lower()
+    if low.startswith("open http") or low.startswith("open www"):
+        return False
+    for prefix in ("what", "who", "how many", "list", "show"):
+        if low.startswith(prefix):
+            return False
+    return True
+
+
+async def _get_control_plane_json(
+    session: aiohttp.ClientSession,
+    path: str,
+) -> Any | None:
+    url = f"{CONTROL_PLANE_URL}{path if path.startswith('/') else '/' + path}"
+    headers = {"x-api-key": os.getenv("CONTROL_PLANE_API_KEY", "")}
+    req_timeout = aiohttp.ClientTimeout(total=150.0)
+    try:
+        async with session.get(url, headers=headers, timeout=req_timeout) as resp:
+            if resp.status >= 400:
+                body = await resp.text()
+                log.warning(
+                    json.dumps(
+                        {
+                            "control_plane": "get_http_error",
+                            "path": path,
+                            "status": resp.status,
+                            "body": body[:500],
+                        }
+                    )
+                )
+                return None
+            try:
+                return await resp.json()
+            except Exception as e:
+                log.warning(
+                    json.dumps(
+                        {"control_plane": "get_json_error", "path": path, "detail": str(e)}
+                    )
+                )
+                return None
+    except Exception as e:
+        log.warning(
+            json.dumps({"control_plane": "get_fail", "path": path, "detail": str(e)})
+        )
+        return None
+
+
 async def _ensure_group(redis: Redis, stream: str, group: str) -> None:
     try:
         await redis.xgroup_create(name=stream, groupname=group, id="0", mkstream=True)
@@ -330,10 +406,9 @@ async def _call_openclaw_once(
         "agent",
         "--agent",
         "main",
+        "--message",
+        command_text,
     ]
-    if requested_lane.strip().lower() == "gateway":
-        argv.extend(["--model", _cloud_model_id()])
-    argv.extend(["--message", command_text])
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -744,14 +819,184 @@ async def handle_execution(
         return
 
     requested_lane = _requested_lane_from_data(data)
-    reply_text, ok, oc_meta = await _call_openclaw(
-        session, command_text, mission_id, requested_lane
-    )
+
+    stages_to_run: list[dict[str, Any]] = []
+    mission_json = await _get_control_plane_json(session, f"/api/v1/missions/{mission_id}")
+    if isinstance(mission_json, dict):
+        raw_stages = mission_json.get("stages")
+        if isinstance(raw_stages, list) and len(raw_stages) > 0:
+            stages_to_run = _executor_normalize_stages(raw_stages)
+
+    if not stages_to_run:
+        if _executor_command_is_complex(command_text):
+            plan_path = f"/api/v1/missions/{mission_id}/plan?command={quote(command_text, safe='')}"
+            plan_json = await _get_control_plane_json(session, plan_path)
+            if isinstance(plan_json, dict):
+                ps = plan_json.get("stages")
+                if isinstance(ps, list) and len(ps) > 0:
+                    stages_to_run = _executor_normalize_stages(ps)
+            if not stages_to_run:
+                log.warning(
+                    json.dumps(
+                        {
+                            "executor": "plan_fetch_failed_or_empty_fallback_single",
+                            "mission_id": mission_id,
+                        }
+                    )
+                )
 
     cfg = _load_openclaw_json()
     gateway_model = _default_gateway_model(cfg)
     if not gateway_model:
         gateway_model = os.getenv("JARVIS_OPENCLAW_GATEWAY_MODEL", "").strip() or None
+
+    if stages_to_run:
+        stage_replies: list[str] = []
+        for stage in stages_to_run:
+            if stage.get("status") not in ("pending", "active"):
+                continue
+            sid = str(stage.get("id", ""))
+            title = str(stage.get("title", ""))
+            await _post_mission_event(
+                session,
+                mission_id,
+                "stage_started",
+                {"stage_id": sid, "title": title},
+            )
+            reply_text, ok, oc_meta = await _call_openclaw(
+                session, title, mission_id, requested_lane
+            )
+            execution_meta = _build_execution_meta(data, gateway_model=gateway_model)
+            execution_meta["stage_id"] = sid
+
+            receipt_payload: dict[str, Any] = {
+                "action": title,
+                "result": reply_text,
+                "success": ok,
+                "execution_meta": execution_meta,
+                "attempt_count": oc_meta["attempt_count"],
+                "error_class": oc_meta["error_class"],
+                "exit_code": oc_meta["exit_code"],
+                "stderr_excerpt": oc_meta["stderr_excerpt"],
+                "final_success": oc_meta["final_success"],
+            }
+
+            receipt_ok = await _post_control_plane(
+                session,
+                "/api/v1/receipts",
+                {
+                    "mission_id": mission_id,
+                    "receipt_type": "openclaw_execution",
+                    "source": "executor",
+                    "payload": receipt_payload,
+                    "summary": reply_text,
+                },
+            )
+            if not receipt_ok:
+                log.error(
+                    json.dumps(
+                        {
+                            "executor": "stage_receipt_write_failed_not_xacking",
+                            "mission_id": mission_id,
+                            "stage_id": sid,
+                        }
+                    )
+                )
+                return
+
+            if ok:
+                await _post_mission_event(
+                    session,
+                    mission_id,
+                    "stage_completed",
+                    {"stage_id": sid},
+                )
+                stage_replies.append(reply_text)
+            else:
+                await _post_mission_event(
+                    session,
+                    mission_id,
+                    "stage_failed",
+                    {"stage_id": sid},
+                )
+                status_ok = await _post_control_plane(
+                    session,
+                    f"/api/v1/missions/{mission_id}/status",
+                    {"status": "failed"},
+                )
+                if not status_ok:
+                    log.error(
+                        json.dumps(
+                            {
+                                "executor": "stage_fail_status_write_failed_not_xacking",
+                                "mission_id": mission_id,
+                            }
+                        )
+                    )
+                    return
+                await _post_mission_event(
+                    session,
+                    mission_id,
+                    "execution_failed",
+                    {"success": False},
+                )
+                await _xadd_updates(
+                    redis,
+                    mission_id=mission_id,
+                    message=reply_text,
+                    status="failed",
+                )
+                await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+                return
+
+        final_status = "complete"
+        status_ok = await _post_control_plane(
+            session,
+            f"/api/v1/missions/{mission_id}/status",
+            {"status": final_status},
+        )
+        if not status_ok:
+            log.error(
+                json.dumps(
+                    {
+                        "executor": "stages_complete_status_write_failed_not_xacking",
+                        "mission_id": mission_id,
+                    }
+                )
+            )
+            return
+
+        term_ok = await _post_mission_event(
+            session,
+            mission_id,
+            "execution_completed",
+            {"success": True},
+        )
+        if not term_ok:
+            log.warning(
+                json.dumps(
+                    {
+                        "executor": "terminal_lifecycle_event_failed",
+                        "mission_id": mission_id,
+                        "event_type": "execution_completed",
+                    }
+                )
+            )
+
+        summary_text = "\n\n".join(stage_replies) if stage_replies else ""
+        await _xadd_updates(
+            redis,
+            mission_id=mission_id,
+            message=summary_text,
+            status=final_status,
+        )
+        await redis.xack(STREAM_EXECUTION, GROUP_EXECUTOR, msg_id)
+        return
+
+    reply_text, ok, oc_meta = await _call_openclaw(
+        session, command_text, mission_id, requested_lane
+    )
+
     execution_meta = _build_execution_meta(data, gateway_model=gateway_model)
 
     receipt_payload: dict[str, Any] = {
@@ -842,7 +1087,6 @@ class ExecutorWorker:
     async def run(self) -> None:
         assert self._redis is not None
         r = self._redis
-        timeout = aiohttp.ClientTimeout(total=60)
         iid = default_instance_id()
 
         async def _executor_heartbeat_loop() -> None:
@@ -896,7 +1140,7 @@ class ExecutorWorker:
                 )
 
         async def _read_loop() -> None:
-            async with aiohttp.ClientSession(timeout=timeout) as http:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180)) as http:
                 while True:
                     try:
                         out = await r.xreadgroup(
@@ -946,6 +1190,10 @@ class ExecutorWorker:
 
 
 async def _main() -> None:
+    if not CONTROL_PLANE_URL:
+        raise RuntimeError("CONTROL_PLANE_URL env var is required")
+    if not REDIS_URL:
+        raise RuntimeError("REDIS_URL env var is required")
     w = ExecutorWorker()
     await w.connect()
     try:

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.approvals import ApprovalRead
 from app.schemas.receipts import ReceiptRead
@@ -30,6 +30,48 @@ class MissionStatusUpdate(BaseModel):
     status: str = Field(..., min_length=1, max_length=64)
 
 
+_STAGE_STATUSES = frozenset({"pending", "active", "complete", "failed"})
+
+
+def _validate_stage_items(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for raw in stages:
+        if not isinstance(raw, dict):
+            continue
+        sid = raw.get("id")
+        title = raw.get("title")
+        st = raw.get("status", "pending")
+        if not isinstance(sid, str) or not sid.strip():
+            continue
+        if not isinstance(title, str) or not title.strip():
+            continue
+        if not isinstance(st, str) or st not in _STAGE_STATUSES:
+            st = "pending"
+        out.append({"id": sid.strip(), "title": title.strip(), "status": st})
+    return out
+
+
+class MissionUpdate(BaseModel):
+    stages: list[dict[str, Any]] | None = None
+
+
+class MissionStagesPatchBody(BaseModel):
+    """PATCH /missions/{id}/stages — replace mission stage list."""
+
+    stages: list[dict[str, Any]]
+
+    @field_validator("stages", mode="before")
+    @classmethod
+    def _coerce_stages(cls, v: Any) -> list[dict[str, Any]]:
+        if not isinstance(v, list):
+            return []
+        return [x for x in v if isinstance(x, dict)]
+
+
+class MissionPlanResponse(BaseModel):
+    stages: list[dict[str, Any]]
+
+
 class MissionEventCreate(BaseModel):
     """Append-only mission event (workers use API key; event_type must be allowed)."""
 
@@ -49,6 +91,7 @@ class MissionRead(BaseModel):
     surface_origin: str | None
     risk_class: str | None
     current_stage: str | None
+    stages: list[dict[str, Any]] | None = None
     summary: str | None
     created_at: datetime
     updated_at: datetime

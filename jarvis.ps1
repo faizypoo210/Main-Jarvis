@@ -193,7 +193,7 @@ if (Test-Path -LiteralPath $laneVerify) {
 # --- 4) Control Plane (authoritative API) ---
 Write-Host ""
 Write-Host "Starting Jarvis Control Plane..." -ForegroundColor Cyan
-$cpCmd = "cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8001"
+$cpCmd = "`$Host.UI.RawUI.WindowTitle='JARVIS | Control Plane :8001'; cd `"$controlPlaneDir`"; `$env:PYTHONPATH='.'; .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8001"
 $cpLaunch = Start-JarvisTrackedProcess -Name 'control-plane' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $cpCmd) -WindowStyle Normal
 [void]$JarvisLaunchRecords.Add($cpLaunch)
 
@@ -215,7 +215,7 @@ if (-not $cpReady) {
 # --- 5) Command Center (primary operator UI) ---
 Write-Host "Starting Jarvis Command Center..." -ForegroundColor Cyan
 $commandCenterDir = Join-Path $JarvisRoot 'services\command-center'
-$ccCmd = "cd `"$commandCenterDir`"; npm run dev"
+$ccCmd = "`$Host.UI.RawUI.WindowTitle='JARVIS | Command Center :5173'; cd `"$commandCenterDir`"; npm run dev"
 $ccLaunch = Start-JarvisTrackedProcess -Name 'command-center' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $ccCmd) -WindowStyle Minimized -WorkingDirectory $commandCenterDir
 [void]$JarvisLaunchRecords.Add($ccLaunch)
 Start-Sleep -Seconds 2
@@ -235,7 +235,7 @@ if ($ccHttpOk) {
 # --- 6) Voice Server ---
 Write-Host "Starting Jarvis Voice Server..." -ForegroundColor Cyan
 $voiceDir = Join-Path $JarvisRoot 'voice'
-$voiceCmd = "cd `"$JarvisRoot`"; .\voice\.venv\Scripts\python.exe -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
+$voiceCmd = "`$Host.UI.RawUI.WindowTitle='JARVIS | Voice :8000'; cd `"$JarvisRoot`"; .\voice\.venv\Scripts\python.exe -m uvicorn voice.server:app --host 0.0.0.0 --port 8000"
 $voiceLaunch = Start-JarvisTrackedProcess -Name 'voice' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $voiceCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($voiceLaunch)
 Start-Sleep -Seconds 2
@@ -255,19 +255,24 @@ if ($voiceHttpOk) {
 # --- 7) Coordinator (Redis guard routing) ---
 Write-Host "Starting Jarvis Coordinator..." -ForegroundColor Cyan
 $coordDir = Join-Path $JarvisRoot 'coordinator'
-$coordCmd = "cd `"$coordDir`"; .\.venv\Scripts\python.exe coordinator.py"
+$coordCmd = "`$Host.UI.RawUI.WindowTitle='JARVIS | Coordinator'; cd `"$coordDir`"; .\.venv\Scripts\python.exe coordinator.py"
 $coordLaunch = Start-JarvisTrackedProcess -Name 'coordinator' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $coordCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($coordLaunch)
 Start-Sleep -Seconds 1
 
-# --- 8) Executor (Ollama intent worker; legacy OpenClaw entrypoint is executor/executor.py, not started here) ---
-Write-Host "Starting Jarvis Executor..." -ForegroundColor Cyan
-$executorDir = Join-Path $JarvisRoot 'executor'
-$execCmd = "cd `"$executorDir`"; .\.venv\Scripts\python.exe -u worker.py"
+# --- 8) Worker (Ollama classifier) + Executor (staged OpenClaw runner) ---
+Write-Host "Starting Jarvis Worker (Ollama classifier)..." -ForegroundColor Cyan
+$pythonExe = if (Test-Path "$JarvisRoot\.venv\Scripts\python.exe") { "$JarvisRoot\.venv\Scripts\python.exe" } else { "python" }
+$workerCmd = "`$Host.UI.RawUI.WindowTitle='JARVIS | Worker (Ollama)'; `$env:PYTHONPATH='$JarvisRoot'; cd '$JarvisRoot'; & '$pythonExe' -u executor\worker.py"
+$workerLaunch = Start-JarvisTrackedProcess -Name 'worker' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $workerCmd) -WindowStyle Minimized
+[void]$JarvisLaunchRecords.Add($workerLaunch)
+
+Write-Host "Starting Jarvis Executor (staged OpenClaw runner)..." -ForegroundColor Cyan
+$execCmd = "`$Host.UI.RawUI.WindowTitle='JARVIS | Executor (OpenClaw)'; `$env:PYTHONPATH='$JarvisRoot'; cd '$JarvisRoot'; & '$pythonExe' -u executor\executor.py"
 $execLaunch = Start-JarvisTrackedProcess -Name 'executor' -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $execCmd) -WindowStyle Minimized
 [void]$JarvisLaunchRecords.Add($execLaunch)
 Start-Sleep -Seconds 2
-Write-Host "Coordinator + Executor: PowerShell host windows launched (child python health not probed here)." -ForegroundColor DarkGray
+Write-Host "Coordinator + Worker + Executor: PowerShell host windows launched (child python health not probed here)." -ForegroundColor DarkGray
 
 # --- 9+) Supplemental only after core stack ---
 Invoke-Step "LobsterBoard (supplemental dashboard)"
@@ -336,6 +341,7 @@ Write-Host ("  Gateway:       {0}" -f ($(if ($gwListen -and $gwHttpOk) { 'HEALTH
 Write-Host ("  Command Center:{0}" -f ($(if ($ccHttpOk) { " HTTP responds (dev UI); host PID $($ccLaunch.Pid)" } elseif (Test-TcpListen 5173) { " LISTENING only; host PID $($ccLaunch.Pid)" } else { " NOT LISTENING / HTTP unverified; host PID $($ccLaunch.Pid)" }))) -ForegroundColor $(if ($ccHttpOk) { 'Green' } elseif (Test-TcpListen 5173) { 'Yellow' } else { 'Yellow' })
 Write-Host ("  Voice:         {0}" -f ($(if ($voiceHttpOk) { "HTTP responds on /; host PID $($voiceLaunch.Pid)" } elseif (Test-TcpListen 8000) { "LISTENING only; host PID $($voiceLaunch.Pid)" } else { "NOT LISTENING; host PID $($voiceLaunch.Pid)" }))) -ForegroundColor $(if ($voiceHttpOk) { 'Green' } elseif (Test-TcpListen 8000) { 'Yellow' } else { 'Yellow' })
 Write-Host ("  Coordinator:   {0}" -f ($(if ($coordLaunch.HostAlive) { "Powershell host PID $($coordLaunch.Pid) (running - child python not probed here)" } else { "LAUNCH HOST MISSING - see [coordinator] line above" }))) -ForegroundColor $(if ($coordLaunch.HostAlive) { 'DarkGray' } else { 'Yellow' })
+Write-Host ("  Worker:        {0}" -f ($(if ($workerLaunch.HostAlive) { "Powershell host PID $($workerLaunch.Pid) (running - child python not probed here)" } else { "LAUNCH HOST MISSING - see [worker] line above" }))) -ForegroundColor $(if ($workerLaunch.HostAlive) { 'DarkGray' } else { 'Yellow' })
 Write-Host ("  Executor:      {0}" -f ($(if ($execLaunch.HostAlive) { "Powershell host PID $($execLaunch.Pid) (running - child python not probed here)" } else { "LAUNCH HOST MISSING - see [executor] line above" }))) -ForegroundColor $(if ($execLaunch.HostAlive) { 'DarkGray' } else { 'Yellow' })
 Write-Host ("  LobsterBoard:  {0}" -f ($(if ($lbListen) { "LISTENING (supplemental)" } else { "not listening on 8080" }))) -ForegroundColor $(if ($lbListen) { 'Gray' } else { 'Yellow' })
 Write-Host ("  Ollama:        {0}" -f ($(if ($ollamaListen) { "LISTENING (optional local model)" } else { "OPTIONAL_DOWN / not on 11434" }))) -ForegroundColor $(if ($ollamaListen) { 'Gray' } else { 'Yellow' })
@@ -359,6 +365,7 @@ Write-Host "  Command Center (primary UI): http://localhost:5173"
 Write-Host "  Control Plane (authority):   http://localhost:8001"
 Write-Host "  Voice Server:                http://localhost:8000"
 Write-Host "  OpenClaw Gateway:            http://localhost:18789"
+Write-Host "  Worker:                      PowerShell host PID $($workerLaunch.Pid) (Ollama classifier; see Redis jarvis.execution)"
 Write-Host "  Executor:                    PowerShell host PID $($execLaunch.Pid) (see ports/registry for work)"
 Write-Host "  Coordinator:                 PowerShell host PID $($coordLaunch.Pid) (see Redis streams for work)"
 Write-Host ""

@@ -173,6 +173,27 @@ def _local_fallback_summary(
     return " ".join(parts)
 
 
+def _load_soul() -> str:
+    """Load SOUL.md from workspace. Returns a minimal fallback if missing."""
+    candidates = [
+        Path(os.environ.get("JARVIS_WORKSPACE_DIR", "")) / "SOUL.md",
+        Path.home() / ".openclaw" / "workspace" / "main" / "SOUL.md",
+    ]
+    for p in candidates:
+        try:
+            text = p.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+        except Exception:
+            continue
+    return (
+        "You are Jarvis — an executive AI command center. "
+        "You are calm, competent, and direct. You think in missions. "
+        "Your operator is Faiz. Never say you are Qwen or any other model. "
+        "Keep replies brief unless depth is needed."
+    )
+
+
 async def _ollama_generate(prompt: str) -> str | None:
     """POST ``/api/generate`` on Ollama; base URL and model from env only."""
     settings = get_settings()
@@ -181,7 +202,14 @@ async def _ollama_generate(prompt: str) -> str | None:
     if not model:
         return None
     url = f"{base}/api/generate"
-    body = {"model": model, "prompt": prompt, "stream": False, "think": False}
+    soul = _load_soul()
+    body = {
+        "model": model,
+        "prompt": prompt,
+        "system": soul,
+        "stream": False,
+        "think": False,
+    }
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as client:
             r = await client.post(url, json=body)

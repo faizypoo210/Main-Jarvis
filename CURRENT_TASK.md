@@ -70,7 +70,7 @@ Ollama qwen3.5:4b local brain. think:false for fast replies. config.py absolute 
 **Not touching:** executor, coordinator, mission schema, Alembic migrations
 **Verify:** Chat "what's going on?" → Jarvis-voiced summary naming active missions and pending approvals. Voice same question → same content spoken.
 
-## [NEXT] Slice 3 — Cloud lane dispatch (MiniMax 2.5)
+## [DONE] Slice 3 — Cloud lane dispatch (MiniMax 2.5)
 **Goal:** Make requested_lane=="gateway" actually route to MiniMax 2.5 via existing OpenClaw auth profile. Receipt lane_truth must show openclaw_model_lane: gateway on a cloud run.
 **Files:**
 - executor/executor.py

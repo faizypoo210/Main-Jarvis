@@ -67,6 +67,56 @@ async def _generate_ack(
         return fallback, fallback
 
 
+def _decide_lane(
+    envelope: "IntentEnvelope",
+    interp: "InterpretationResult",
+) -> "DecisionEnvelope":
+    from app.schemas.intake import DecisionEnvelope
+
+    suggested = envelope.suggested_lane
+    notes: list[str] = []
+
+    if envelope.destructive or envelope.financial or envelope.hardware_physical:
+        selected = "approval"
+        notes.append("Hard override: destructive/financial/hardware requires approval")
+    elif envelope.identity_bearing and envelope.external_action:
+        selected = "approval"
+        notes.append("Hard override: identity-bearing external action requires approval")
+    elif interp.intent_type == "interrupt_or_cancel":
+        selected = "fast_answer"
+        notes.append("Interrupt always fast_answer")
+    elif interp.intent_type in ("status_query", "inbox_action"):
+        selected = "fast_answer"
+        notes.append("Status/inbox always fast_answer")
+    elif interp.intent_type == "approval_decision":
+        selected = "approval"
+        notes.append("Explicit approval decision")
+    else:
+        selected = suggested
+
+    approval_required = selected == "approval"
+    mission_required = selected in ("mission", "deep_research", "automation")
+
+    return DecisionEnvelope(
+        input_id=envelope.input_id,
+        selected_lane=selected,
+        approval_required=approval_required,
+        mission_required=mission_required,
+        capability_available=True,
+        capability_notes=notes,
+        allowed_next_step=f"run_{selected}",
+        blocked_actions=[],
+        risk_class="red" if approval_required else "amber" if mission_required else "green",
+        requires_operator_input=interp.clarification_needed,
+        missing_info=envelope.missing_info,
+        progress_policy=(
+            "show_working_indicator_and_update_if_slow" if mission_required else
+            "show_working_indicator" if selected == "fast_research" else
+            "none"
+        ),
+    )
+
+
 def _decided_via_for_surface(source_surface: str) -> str:
     if source_surface == "sms":
         return "sms"
@@ -97,6 +147,15 @@ class IntakeService:
 
         activity_label = derive_activity_label(interp.intent_type, body.text)
         display_text, spoken_text = await _generate_ack(body.text, interp.intent_type, activity_label)
+
+        from app.services.intake_interpretation import (
+            classify_intent_envelope,
+            routing_context_for_decide_route,
+        )
+
+        intent_envelope = await classify_intent_envelope(body.text, body.source_surface, interp)
+        decision_envelope = _decide_lane(intent_envelope, interp)
+
         show_indicator = interp.intent_type not in (
             "conversational_reply", "status_query", "inbox_action", "interrupt_or_cancel"
         )
@@ -119,6 +178,8 @@ class IntakeService:
                     spoken_text=spoken_text,
                     activity_label=activity_label,
                     show_working_indicator=show_indicator,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
                     terminal=True,
                 ),
                 outcome="interrupt",
@@ -136,6 +197,8 @@ class IntakeService:
                         spoken_text=spoken_text,
                         activity_label=activity_label,
                         show_working_indicator=show_indicator,
+                        intent_envelope=intent_envelope,
+                        decision_envelope=decision_envelope,
                         terminal=True,
                     ),
                     outcome="clarification",
@@ -152,6 +215,8 @@ class IntakeService:
                         spoken_text=spoken_text,
                         activity_label=activity_label,
                         show_working_indicator=show_indicator,
+                        intent_envelope=intent_envelope,
+                        decision_envelope=decision_envelope,
                         terminal=True,
                     ),
                     outcome="clarification",
@@ -178,6 +243,8 @@ class IntakeService:
                         spoken_text=spoken_text,
                         activity_label=activity_label,
                         show_working_indicator=show_indicator,
+                        intent_envelope=intent_envelope,
+                        decision_envelope=decision_envelope,
                         terminal=True,
                     ),
                     outcome="noop",
@@ -193,6 +260,8 @@ class IntakeService:
                     spoken_text=spoken_text,
                     activity_label=activity_label,
                     show_working_indicator=show_indicator,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
                     terminal=True,
                 ),
                 outcome="approval_resolved",
@@ -211,6 +280,8 @@ class IntakeService:
                         spoken_text=spoken_text,
                         activity_label=activity_label,
                         show_working_indicator=show_indicator,
+                        intent_envelope=intent_envelope,
+                        decision_envelope=decision_envelope,
                         terminal=True,
                     ),
                     outcome="clarification",
@@ -235,6 +306,8 @@ class IntakeService:
                     spoken_text=spoken_text,
                     activity_label=activity_label,
                     show_working_indicator=show_indicator,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
                     terminal=True,
                 ),
                 outcome="inbox_updated",
@@ -260,6 +333,8 @@ class IntakeService:
                     spoken_text=spoken_text,
                     activity_label=activity_label,
                     show_working_indicator=show_indicator,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
                     terminal=True,
                 ),
                 outcome="status_reply",
@@ -284,6 +359,8 @@ class IntakeService:
                     spoken_text=spoken_text,
                     activity_label=activity_label,
                     show_working_indicator=show_indicator,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
                     terminal=True,
                 ),
                 outcome="governed_action_hint",
@@ -299,6 +376,8 @@ class IntakeService:
                     spoken_text=spoken_text,
                     activity_label=activity_label,
                     show_working_indicator=show_indicator,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
                     terminal=True,
                 ),
                 outcome="conversational_reply",
@@ -306,6 +385,7 @@ class IntakeService:
 
         # mission_request or mission_followup → CommandService
         merged_ctx: dict[str, Any] = dict(ctx)
+        merged_ctx.update(routing_context_for_decide_route(intent_envelope))
         if body.surface_session_id is not None:
             merged_ctx.setdefault(
                 "intake_surface_session_id",
@@ -338,6 +418,8 @@ class IntakeService:
                 spoken_text=spoken_text,
                 activity_label=activity_label,
                 show_working_indicator=show_indicator,
+                intent_envelope=intent_envelope,
+                decision_envelope=decision_envelope,
                 terminal=True,
             ),
             outcome=outcome,

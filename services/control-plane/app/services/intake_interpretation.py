@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from app.schemas.intake import InterpretationResult
+from app.schemas.intake import BehavioralLane, IntentEnvelope, InterpretationResult
 
 _JARVIS_ROOT = Path(__file__).resolve().parents[3]
 if str(_JARVIS_ROOT) not in sys.path:
@@ -405,3 +405,271 @@ def derive_activity_label(intent_type: str, raw_text: str) -> str:
     words = [w for w in raw_text.strip().lower().split() if w not in stop]
     label = " ".join(words[:4]).capitalize()
     return label[:48] if label else "Working on request"
+
+
+def _derive_envelope_from_interp(
+    interp: InterpretationResult,
+    raw_text: str,
+    source_surface: str,
+) -> IntentEnvelope:
+    """Build IntentEnvelope deterministically from existing InterpretationResult.
+
+    Used as fallback when Qwen classification fails or times out.
+    """
+    import uuid
+
+    it = interp.intent_type
+    lane_map: dict[str, BehavioralLane] = {
+        "conversational_reply": "chat",
+        "status_query": "fast_answer",
+        "inbox_action": "fast_answer",
+        "interrupt_or_cancel": "fast_answer",
+        "approval_decision": "approval",
+        "governed_action_request": "approval",
+        "mission_followup": "fast_answer",
+        "mission_request": "mission",
+    }
+    # Promote to fast_research if text has freshness signals and no identity/action risk
+    freshness_hints = re.compile(
+        r"\b(today|right now|current|latest|live|now|this week|score|scores|news|price|prices)\b",
+        re.IGNORECASE,
+    )
+    sensitive_hints = re.compile(
+        r"\b(send|submit|apply|post|delete|buy|sell|trade|flash|deploy|email)\b",
+        re.IGNORECASE,
+    )
+    suggested: BehavioralLane = lane_map.get(it, "mission")
+    if (
+        suggested == "mission"
+        and freshness_hints.search(raw_text)
+        and not sensitive_hints.search(raw_text)
+    ):
+        suggested = "fast_research"
+    return IntentEnvelope(
+        input_id=str(uuid.uuid4()),
+        surface=source_surface,
+        raw_text=raw_text,
+        intent_kind=(
+            "chat"
+            if it == "conversational_reply"
+            else (
+                "research"
+                if suggested in ("fast_research", "deep_research")
+                else (
+                    "execute"
+                    if suggested == "direct_tool"
+                    else "approve" if suggested == "approval" else "monitor"
+                )
+            )
+        ),
+        freshness="live_current" if suggested == "fast_research" else "none",
+        tool_required=suggested not in ("chat", "fast_answer"),
+        external_action=it in ("governed_action_request",),
+        identity_bearing=it in ("approval_decision", "governed_action_request"),
+        destructive=False,
+        financial=False,
+        hardware_physical=False,
+        privacy_sensitive=False,
+        duration=(
+            "instant"
+            if suggested in ("chat", "fast_answer", "fast_research")
+            else (
+                "long"
+                if suggested in ("deep_research", "automation")
+                else "short"
+            )
+        ),
+        missing_info=(
+            [interp.clarification_question]
+            if interp.clarification_needed and interp.clarification_question
+            else []
+        ),
+        suggested_lane=suggested,
+        confidence=interp.confidence,
+    )
+
+
+async def classify_intent_envelope(
+    raw_text: str,
+    source_surface: str,
+    interp: InterpretationResult,
+) -> IntentEnvelope:
+    """Call Qwen to classify request properties into an IntentEnvelope.
+
+    Timeout 6s. Falls back to :func:`_derive_envelope_from_interp` on any failure.
+    """
+    import json
+    import os
+    import uuid
+
+    import httpx
+
+    base = os.environ.get("OLLAMA_BASE_URL", "").strip().rstrip("/")
+    model = os.environ.get("JARVIS_LOCAL_MODEL", "").strip()
+    if not base or not model:
+        return _derive_envelope_from_interp(interp, raw_text, source_surface)
+
+    safe_request = json.dumps(raw_text, ensure_ascii=False)
+    prompt = f"""Classify this operator request and return ONLY a valid JSON object with no extra text or markdown.
+
+Request: {safe_request}
+
+Return exactly these keys (fill values appropriately):
+- "intent_kind": one of research, chat, execute, monitor, automate, configure, approve, debug, create, edit
+- "freshness": one of none, recent, live_current, continuous
+- "tool_required": boolean
+- "external_action": boolean
+- "identity_bearing": boolean
+- "destructive": boolean
+- "financial": boolean
+- "hardware_physical": boolean
+- "privacy_sensitive": boolean
+- "duration": one of instant, short, long, ongoing, scheduled
+- "missing_info": JSON array of strings (use [] if none)
+- "suggested_lane": one of chat, fast_answer, fast_research, direct_tool, mission, approval, deep_research, automation
+- "confidence": number between 0 and 1
+
+Rules: Use suggested_lane fast_research for live scores/news/prices/today-style lookups without account actions. Use mission for multi-step work. Use approval when the operator is approving/denying something sensitive or sending/submitting on their behalf. Set identity_bearing true for job applications, banking, email send, or anything needing the operator's identity."""
+
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.post(
+                f"{base}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "think": False,
+                },
+            )
+            r.raise_for_status()
+            body = r.json()
+            raw_out = (body.get("response") or "").strip()
+            s = raw_out
+            if s.startswith("```"):
+                lines = s.splitlines()
+                if lines and lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                s = "\n".join(lines).strip()
+            start = s.find("{")
+            end = s.rfind("}")
+            parsed: dict[str, Any] | None = None
+            if start >= 0 and end > start:
+                try:
+                    cand = json.loads(s[start : end + 1])
+                    if isinstance(cand, dict):
+                        parsed = cand
+                except json.JSONDecodeError as e:
+                    _ = e
+                    parsed = None
+            if not parsed:
+                return _derive_envelope_from_interp(interp, raw_text, source_surface)
+
+            lanes: frozenset[str] = frozenset(
+                {
+                    "chat",
+                    "fast_answer",
+                    "fast_research",
+                    "direct_tool",
+                    "mission",
+                    "approval",
+                    "deep_research",
+                    "automation",
+                }
+            )
+            kinds: frozenset[str] = frozenset(
+                {
+                    "research",
+                    "chat",
+                    "execute",
+                    "monitor",
+                    "automate",
+                    "configure",
+                    "approve",
+                    "debug",
+                    "create",
+                    "edit",
+                }
+            )
+            fresh_vals: frozenset[str] = frozenset(
+                {"none", "recent", "live_current", "continuous"}
+            )
+            dur_vals: frozenset[str] = frozenset(
+                {"instant", "short", "long", "ongoing", "scheduled"}
+            )
+
+            sl = parsed.get("suggested_lane")
+            if not isinstance(sl, str) or sl.strip() not in lanes:
+                return _derive_envelope_from_interp(interp, raw_text, source_surface)
+            suggested_lane: BehavioralLane = sl.strip()  # type: ignore[assignment]
+
+            ik = parsed.get("intent_kind")
+            if not isinstance(ik, str) or ik.strip() not in kinds:
+                return _derive_envelope_from_interp(interp, raw_text, source_surface)
+            intent_kind = ik.strip()  # type: ignore[assignment]
+
+            fr = parsed.get("freshness")
+            if not isinstance(fr, str) or fr.strip() not in fresh_vals:
+                fr = "live_current" if suggested_lane == "fast_research" else "none"
+            freshness = fr.strip()  # type: ignore[assignment]
+
+            dur = parsed.get("duration")
+            if not isinstance(dur, str) or dur.strip() not in dur_vals:
+                dur = (
+                    "instant"
+                    if suggested_lane in ("chat", "fast_answer", "fast_research")
+                    else "short"
+                )
+            duration = dur.strip()  # type: ignore[assignment]
+
+            def _bool(key: str, default: bool = False) -> bool:
+                v = parsed.get(key)
+                if isinstance(v, bool):
+                    return v
+                return default
+
+            mi = parsed.get("missing_info")
+            missing_info: list[str] = []
+            if isinstance(mi, list):
+                missing_info = [str(x) for x in mi if x is not None]
+
+            cf = parsed.get("confidence")
+            try:
+                conf = float(cf) if cf is not None else float(interp.confidence)
+            except (TypeError, ValueError) as e:
+                _ = e
+                conf = float(interp.confidence)
+            conf = max(0.0, min(1.0, conf))
+
+            merged: dict[str, Any] = {
+                "input_id": str(uuid.uuid4()),
+                "surface": source_surface,
+                "raw_text": raw_text,
+                "intent_kind": intent_kind,
+                "freshness": freshness,
+                "tool_required": _bool("tool_required"),
+                "external_action": _bool("external_action"),
+                "identity_bearing": _bool("identity_bearing"),
+                "destructive": _bool("destructive"),
+                "financial": _bool("financial"),
+                "hardware_physical": _bool("hardware_physical"),
+                "privacy_sensitive": _bool("privacy_sensitive"),
+                "duration": duration,
+                "missing_info": missing_info,
+                "suggested_lane": suggested_lane,
+                "confidence": conf,
+            }
+            return IntentEnvelope.model_validate(merged)
+    except Exception as e:
+        _ = e
+        return _derive_envelope_from_interp(interp, raw_text, source_surface)
+
+
+def routing_context_for_decide_route(envelope: IntentEnvelope) -> dict[str, Any]:
+    """Return a ``context`` fragment for :func:`shared.routing.decide_route`.
+
+    Merges behavioral lane hints without changing execution lane string values.
+    """
+    return {"suggested_behavioral_lane": envelope.suggested_lane}

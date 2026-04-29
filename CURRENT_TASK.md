@@ -59,7 +59,8 @@ Already implemented. Receipts.test.tsx committed.
 **Not touching:** voice, executor, coordinator, control plane models, mission schema
 **Verify:** Live executor run → receipt appears in /receipts list. Vitest empty-state test passes.
 
-## Slice 2 — Jarvis reply service
+## [DONE] Slice 2 — Jarvis reply service
+Ollama qwen3.5:4b local brain. think:false for fast replies. config.py absolute .env path fix.
 **Goal:** New POST /api/v1/jarvis/reply composes (user text + mission context + pending approvals + recent receipts + persona from SOUL.md) into a Jarvis-voiced reply string. Voice server and Command Center chat both consume it.
 **Files:**
 - new services/control-plane/app/services/jarvis_reply.py
@@ -69,7 +70,7 @@ Already implemented. Receipts.test.tsx committed.
 **Not touching:** executor, coordinator, mission schema, Alembic migrations
 **Verify:** Chat "what's going on?" → Jarvis-voiced summary naming active missions and pending approvals. Voice same question → same content spoken.
 
-## Slice 3 — Cloud lane dispatch (MiniMax 2.5)
+## [NEXT] Slice 3 — Cloud lane dispatch (MiniMax 2.5)
 **Goal:** Make requested_lane=="gateway" actually route to MiniMax 2.5 via existing OpenClaw auth profile. Receipt lane_truth must show openclaw_model_lane: gateway on a cloud run.
 **Files:**
 - executor/executor.py

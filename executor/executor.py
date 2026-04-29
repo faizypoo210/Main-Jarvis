@@ -108,6 +108,35 @@ def _lane_from_gateway_model(model: str | None) -> str:
     return "gateway"
 
 
+def _cloud_model_id() -> str:
+    """OpenClaw ``--model`` for cloud lane; from env with a single non-secret default."""
+    raw = os.getenv("JARVIS_CLOUD_MODEL", "minimax/MiniMax-M2.5")
+    s = (raw or "").strip()
+    return s if s else "minimax/MiniMax-M2.5"
+
+
+def _requested_lane_from_data(data: dict[str, Any]) -> str:
+    raw = data.get("routing")
+    if not isinstance(raw, dict):
+        return ""
+    return str(raw.get("requested_lane") or "").strip()
+
+
+def _resolved_openclaw_model_lane(
+    raw_routing: dict[str, Any] | None,
+    gateway_fallback: str,
+) -> str:
+    """Receipt lane label: routing.requested_lane when set, else gateway-model heuristic."""
+    if not isinstance(raw_routing, dict):
+        return gateway_fallback
+    req = str(raw_routing.get("requested_lane") or "").strip().lower()
+    if req == "gateway":
+        return "gateway"
+    if req == "local_fast":
+        return "local"
+    return gateway_fallback
+
+
 def _local_model_from_gateway(model: str | None, lane: str) -> str | None:
     if lane != "local" or not model:
         return None
@@ -150,28 +179,29 @@ def _build_execution_meta(
     *,
     gateway_model: str | None,
 ) -> dict[str, Any]:
-    oml = _lane_from_gateway_model(gateway_model)
+    oml_fb = _lane_from_gateway_model(gateway_model)
+    raw_routing = data.get("routing") if isinstance(data.get("routing"), dict) else None
+    oml = _resolved_openclaw_model_lane(raw_routing, oml_fb)
     resumed = bool(data.get("resumed")) or bool(data.get("approval_id"))
     meta: dict[str, Any] = {
-        # OpenClaw default model target (ollama/* → local; else cloud/other). Not mission routing.
+        # Resolved lane for receipts (routing.requested_lane when present; else config heuristic).
         "lane": oml,
         "openclaw_model_lane": oml,
         "gateway_model": gateway_model,
-        "local_model": _local_model_from_gateway(gateway_model, oml),
+        "local_model": _local_model_from_gateway(gateway_model, oml_fb),
         "resumed_from_approval": resumed,
         "mission_execution_path": MISSION_EXECUTION_PATH_OPENCLAW,
     }
     if oml == "gateway":
         meta["auth_profiles_present"] = _auth_profiles_appear_configured()
-    raw_routing = data.get("routing")
     routing_subset: dict[str, Any] = {}
     if isinstance(raw_routing, dict):
         routing_subset = {k: raw_routing[k] for k in _ROUTING_KEYS if k in raw_routing}
         if routing_subset:
             meta["routing"] = routing_subset
     meta["lane_truth"] = build_lane_truth_block(
-        routing=raw_routing if isinstance(raw_routing, dict) else None,
-        openclaw_model_lane=oml,
+        routing=raw_routing,
+        openclaw_model_lane=oml_fb,
     )
     return meta
 
@@ -290,18 +320,23 @@ def _classify_empty_or_stderr(
 async def _call_openclaw_once(
     session: aiohttp.ClientSession,
     command_text: str,
+    requested_lane: str,
 ) -> _OpenClawAttemptResult:
     """Single subprocess invocation; no retries."""
     del session  # reserved for future (e.g. correlated HTTP); CLI path does not use it today.
     proc: asyncio.subprocess.Process | None = None
+    argv: list[str] = [
+        OPENCLAW_CMD,
+        "agent",
+        "--agent",
+        "main",
+    ]
+    if requested_lane.strip().lower() == "gateway":
+        argv.extend(["--model", _cloud_model_id()])
+    argv.extend(["--message", command_text])
     try:
         proc = await asyncio.create_subprocess_exec(
-            OPENCLAW_CMD,
-            "agent",
-            "--agent",
-            "main",
-            "--message",
-            command_text,
+            *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -448,6 +483,7 @@ async def _call_openclaw(
     session: aiohttp.ClientSession,
     command_text: str,
     _session_id: str,
+    requested_lane: str,
 ) -> tuple[str, bool, dict[str, Any]]:
     """Run OpenClaw with bounded retries; returns (reply text, success, receipt diagnostics)."""
     del _session_id
@@ -464,7 +500,7 @@ async def _call_openclaw(
                 }
             )
         )
-        last = await _call_openclaw_once(session, command_text)
+        last = await _call_openclaw_once(session, command_text, requested_lane)
         if last.ok:
             meta = {
                 "attempt_count": attempts_used,
@@ -707,7 +743,10 @@ async def handle_execution(
         )
         return
 
-    reply_text, ok, oc_meta = await _call_openclaw(session, command_text, mission_id)
+    requested_lane = _requested_lane_from_data(data)
+    reply_text, ok, oc_meta = await _call_openclaw(
+        session, command_text, mission_id, requested_lane
+    )
 
     cfg = _load_openclaw_json()
     gateway_model = _default_gateway_model(cfg)

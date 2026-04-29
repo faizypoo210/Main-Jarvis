@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Optional: base URL for the OpenClaw gateway (e.g. set in .env — see .env.example)
     JARVIS_OPENCLAW_GATEWAY_URL: str = ""
     JARVIS_LOCAL_MODEL: str = ""
+    JARVIS_CLOUD_MODEL: str = ""
     OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     # GitHub REST (governed create-issue workflow only). Machine-local secret; never logged.
     JARVIS_GITHUB_TOKEN: str = ""

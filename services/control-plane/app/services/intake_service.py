@@ -383,6 +383,38 @@ class IntakeService:
                 outcome="conversational_reply",
             )
 
+        if (
+            decision_envelope.selected_lane == "fast_research"
+            and interp.intent_type not in (
+                "interrupt_or_cancel",
+                "approval_decision",
+                "inbox_action",
+                "status_query",
+                "governed_action_request",
+                "conversational_reply",
+                "mission_request",
+                "mission_followup",
+            )
+        ):
+            from app.services.fast_research_service import run_fast_research
+
+            research_display, research_spoken = await run_fast_research(body.text)
+            return IntakeResponse(
+                interpretation=interp,
+                reply=IntakeReplyBundle(
+                    message=research_display,
+                    kind="conversational",
+                    display_text=research_display,
+                    spoken_text=research_spoken,
+                    activity_label="Research complete",
+                    show_working_indicator=False,
+                    terminal=True,
+                    intent_envelope=intent_envelope,
+                    decision_envelope=decision_envelope,
+                ),
+                outcome="conversational_reply",
+            )
+
         # mission_request or mission_followup → CommandService
         merged_ctx: dict[str, Any] = dict(ctx)
         merged_ctx.update(routing_context_for_decide_route(intent_envelope))

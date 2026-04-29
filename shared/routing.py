@@ -12,6 +12,20 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+# Mirrors ``BehavioralLane`` in control-plane intake schemas (shared stays app-free).
+_VALID_BEHAVIORAL_LANES = frozenset(
+    {
+        "chat",
+        "fast_answer",
+        "fast_research",
+        "direct_tool",
+        "mission",
+        "approval",
+        "deep_research",
+        "automation",
+    }
+)
+
 # Prefer gateway when these appear (case-insensitive word boundaries).
 _GATEWAY_HINTS = re.compile(
     r"\b("
@@ -110,7 +124,14 @@ def decide_route(
     risk_class: str | None,
 ) -> RoutingDecision:
     """Classify intended lane and honest actual lane for mission execution."""
-    del context  # reserved for future (e.g. surface hints); v1 uses text + risk only
+    lane_hint: str | None = None
+    if context:
+        raw_lane = context.get("suggested_behavioral_lane")
+        if isinstance(raw_lane, str):
+            s = raw_lane.strip()
+            if s in _VALID_BEHAVIORAL_LANES:
+                lane_hint = s
+
     rc = _norm_risk(risk_class)
     approval_sensitive = rc in ("red", "amber")
 
@@ -129,6 +150,17 @@ def decide_route(
 
     requires_tools, requires_long, sensitive_text = _text_signals(text)
     if sensitive_text:
+        approval_sensitive = True
+
+    if lane_hint in (
+        "fast_research",
+        "deep_research",
+        "direct_tool",
+        "mission",
+        "automation",
+    ):
+        requires_tools = True
+    if lane_hint == "approval":
         approval_sensitive = True
 
     t = t0

@@ -49,6 +49,7 @@ def _compose_context_block(
     active_missions: list[tuple[str, str]],
     pending_approval_count: int,
     recent_receipt_summaries: list[str | None],
+    memory_items: list[str],
 ) -> str:
     lines: list[str] = []
     lines.append("## Control plane snapshot (authoritative)")
@@ -68,6 +69,11 @@ def _compose_context_block(
     else:
         lines.append("- (none)")
     lines.append("")
+    if memory_items:
+        lines.append("## Operator Memory")
+        for m in memory_items:
+            lines.append(f"- {m}")
+        lines.append("")
     lines.append("## Operator message")
     lines.append(user_text.strip())
     return "\n".join(lines).strip()
@@ -249,6 +255,7 @@ async def build_reply(
     active_missions: list[tuple[str, str]],
     pending_approvals: int,
     recent_receipts: list[str | None],
+    memory_items: list[str] | None = None,
 ) -> tuple[str, Source]:
     """Return (reply, source). Never raises: failures yield deterministic fallback text."""
     ut = (user_text or "").strip()
@@ -260,12 +267,14 @@ async def build_reply(
 
     missions = list(active_missions)
     summaries = list(recent_receipts)
+    mems = list(memory_items) if memory_items is not None else []
     try:
         block = _compose_context_block(
             user_text=ut,
             active_missions=missions,
             pending_approval_count=int(pending_approvals),
             recent_receipt_summaries=summaries,
+            memory_items=mems,
         )
 
         ollama_reply = await _ollama_generate(block)

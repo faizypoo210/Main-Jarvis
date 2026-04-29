@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Sequence
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -272,3 +274,58 @@ async def try_promote_from_receipt(
     )
     row.source_event_id = eid
     await session.flush()
+
+
+def _format_memory_line_for_reply(item: MemoryItem) -> str:
+    summ = (item.summary or "").strip()
+    return f"{item.memory_type}: {item.title} — {summ}"
+
+
+def _memory_search_tokens(user_text: str) -> list[str]:
+    raw = (user_text or "").strip()
+    if not raw:
+        return []
+    tokens = re.findall(r"[A-Za-z0-9]+", raw)
+    out: list[str] = []
+    for t in tokens:
+        w = t.lower()
+        if len(w) >= 2:
+            out.append(w)
+    return out
+
+
+def _memory_haystack(item: MemoryItem) -> str:
+    parts: Sequence[str] = (
+        item.title or "",
+        item.summary or "",
+        item.content or "",
+    )
+    return " ".join(parts).lower()
+
+
+def _memory_item_matches_any_token(item: MemoryItem, words: Sequence[str]) -> bool:
+    if not words:
+        return False
+    h = _memory_haystack(item)
+    return any(w in h for w in words)
+
+
+async def get_top_k_memory(db: AsyncSession, user_text: str, k: int = 5) -> list[str]:
+    """Return up to ``k`` formatted memory lines: substring match on tokens vs title/summary/content,
+    ordered by importance then recency; if no matches, top-``k`` active items by same ordering.
+    """
+    if k <= 0:
+        return []
+
+    stmt = (
+        select(MemoryItem)
+        .where(MemoryItem.status == "active")
+        .order_by(MemoryItem.importance.desc(), MemoryItem.updated_at.desc())
+    )
+    result = await db.execute(stmt)
+    rows: list[MemoryItem] = list(result.scalars().all())
+
+    words = _memory_search_tokens(user_text)
+    matched = [m for m in rows if _memory_item_matches_any_token(m, words)]
+    chosen = matched[:k] if matched else rows[:k]
+    return [_format_memory_line_for_reply(m) for m in chosen]

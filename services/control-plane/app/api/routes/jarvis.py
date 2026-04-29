@@ -13,6 +13,7 @@ from app.models.mission import Mission
 from app.models.receipt import Receipt
 from app.repositories.approval_repo import ApprovalRepository
 from app.services.jarvis_reply import build_reply
+from app.services.memory_service import get_top_k_memory
 
 router = APIRouter()
 
@@ -50,10 +51,13 @@ async def post_jarvis_reply(
     receipts = list(r_rows.scalars().all())
     recent = [rec.summary for rec in receipts]
 
+    memory_items = await get_top_k_memory(session, body.user_text, k=5)
+
     reply, source = await build_reply(
         body.user_text,
         active_missions,
         pending_count,
         recent,
+        memory_items=memory_items,
     )
     return JarvisReplyResponse(reply=reply, source=source)

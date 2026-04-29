@@ -91,7 +91,7 @@ Planner generates linear stage list. Executor runs stages sequentially, each emi
 **Not touching:** intake_service.py routing logic, lane_truth.py, any frontend
 **Verify:** "pull NBA scores" → suggested_lane=fast_research. "apply for jobs" → suggested_lane=mission + identity_bearing=true. "send that email" → suggested_lane=approval + external_action=true.
 
-## [NEXT] Slice B4 — Premium working indicator UI
+## [DONE] Slice B4 — Premium working indicator UI
 **Goal:** AgentActivity upgrades from single pulsing dot to wave-asterisk indicator. ConversationThread passes activity_label from reply bundle. Indicator clears on terminal reply.
 **Files:**
 - services/command-center/src/components/conversation/AgentActivity.tsx
@@ -100,7 +100,7 @@ Planner generates linear stage list. Executor runs stages sequentially, each emi
 **Not touching:** any Python, Composer.tsx, MessageBubble.tsx, AppShell.tsx
 **Verify:** Submit non-chat command → wave indicator appears with specific label. Mission complete or Jarvis reply → indicator clears.
 
-## [ ] Slice B5 — Fast research lane (no mission)
+## [NEXT] Slice B5 — Fast research lane (no mission)
 **Goal:** selected_lane=fast_research bypasses CommandService (no mission created). Calls Composio web search + MiniMax synthesis. Returns answer directly in IntakeReplyBundle. 30s soft timeout with partial fallback.
 **Files:**
 - new services/control-plane/app/services/fast_research_service.py

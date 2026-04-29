@@ -383,8 +383,9 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
             setItems((prev) => {
               const exists = prev.some((x) => x.kind === "jarvis" && x.id === `exec-${ev.id}`);
               if (exists) return prev;
+              const pendingAid = pendingActivityByMissionRef.current.get(missionId) ?? null;
               return [
-                ...prev,
+                ...prev.filter((i) => i.id !== pendingAid),
                 {
                   id: `exec-${ev.id}`,
                   kind: "jarvis",
@@ -588,16 +589,19 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
           setItems((prev) => [...prev, { id: `u-${uid}`, kind: "user", body: text }]);
           const res = await api.postJarvisReply(text);
           const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          setItems((prev) => [
-            ...prev,
-            {
-              id: `jarvis-${jid}`,
-              kind: "jarvis",
-              body: res.reply,
-              time,
-              routing: res.source === "fallback" ? "fallback" : undefined,
-            },
-          ]);
+          setItems((prev) => {
+            const pendingAid = null;
+            return [
+              ...prev.filter((i) => i.id !== pendingAid),
+              {
+                id: `jarvis-${jid}`,
+                kind: "jarvis",
+                body: res.reply,
+                time,
+                routing: res.source === "fallback" ? "fallback" : undefined,
+              },
+            ];
+          });
           return;
         }
         const res = await api.createCommand(text, "command_center");
@@ -606,9 +610,14 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
         lastComposerMissionIdRef.current = mid;
         const activityId = `activity-${mid}`;
         pendingActivityByMissionRef.current.set(mid, activityId);
+        const activityLabelRaw = (res as { activity_label?: string }).activity_label;
+        const activityText =
+          typeof activityLabelRaw === "string" && activityLabelRaw.trim().length > 0
+            ? activityLabelRaw.trim()
+            : operatorCopy.threadWaitingForMission;
         setItems([
           { id: `u-${uid}`, kind: "user", body: text },
-          { id: activityId, kind: "activity", text: operatorCopy.threadWaitingForMission },
+          { id: activityId, kind: "activity", text: activityText },
         ]);
         startMissionPipeline(mid);
       } catch (e: unknown) {
@@ -655,7 +664,7 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
             if (item.kind === "activity") {
               return (
                 <div key={item.id}>
-                  <AgentActivity text={item.text} />
+                  <AgentActivity label={item.text} />
                 </div>
               );
             }

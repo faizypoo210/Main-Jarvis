@@ -1,8 +1,15 @@
-export function AgentActivity({ text }: { text: string }) {
+interface AgentActivityProps {
+  label: string;
+}
+export function AgentActivity({ label }: AgentActivityProps) {
   return (
-    <div className="ml-9 flex items-center gap-2 py-1">
-      <span className="agent-dot-pulse h-2 w-2 shrink-0 rounded-full bg-[var(--accent-blue)]" />
-      <span className="text-sm italic text-[var(--text-muted)]">{text}</span>
+    <div className="ml-9 flex items-center gap-3 py-1">
+      <div className="flex items-center gap-[3px]">
+        <span className="agent-wave-dot" />
+        <span className="agent-wave-dot" />
+        <span className="agent-wave-dot" />
+      </div>
+      <span className="text-sm text-[var(--text-secondary)]">{label}</span>
     </div>
   );
 }

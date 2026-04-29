@@ -40,3 +40,5 @@ coordinator/missions.db
 config/workspace/.jarvis-sync-backups
 config/workspace/.openclaw
 config/workspace/state
+
+jarvis-reply-body.json

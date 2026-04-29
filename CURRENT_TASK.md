@@ -79,7 +79,8 @@ Ollama qwen3.5:4b local brain. think:false for fast replies. config.py absolute 
 **Not touching:** control plane, frontend, coordinator
 **Verify:** scripts/11-smoke-model-lanes.ps1 with gateway-routed prompt → receipt shows cloud model id.
 
-## Slice 4 — Memory retrieval into replies
+## [DONE] Slice 4 — Memory retrieval into replies
+get_top_k_memory: substring + importance + recency. Injected into jarvis reply prompt.
 **Goal:** Reply service loads top-K relevant memory_items into context before calling LLM. v1 = substring match + memory_type filter + recency sort. No embeddings.
 **Files:**
 - services/control-plane/app/services/jarvis_reply.py
@@ -87,7 +88,7 @@ Ollama qwen3.5:4b local brain. think:false for fast replies. config.py absolute 
 **Not touching:** voice server, frontend, executor, coordinator
 **Verify:** Promote a mission to memory → ask a related question → Jarvis reply references it.
 
-## Slice 5 — Mission decomposition v1
+## [NEXT] Slice 5 — Mission decomposition v1
 **Goal:** Planner service generates a linear stage list for complex missions and writes stages[] before execution. Executor runs stages sequentially, each emitting its own receipt. No branching, no parallel workers.
 **Files:**
 - new services/control-plane/app/services/mission_planner.py

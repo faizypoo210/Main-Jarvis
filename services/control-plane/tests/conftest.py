@@ -30,9 +30,7 @@ _CONTROL_PLANE_ROOT = Path(__file__).resolve().parents[1]
 _REPO_ROOT = _CONTROL_PLANE_ROOT.parents[1]
 
 # Isolated test DB URL (overrides .env for this pytest process only)
-_DEFAULT_TEST_DB = (
-    "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/jarvis_cp_test"
-)
+_DEFAULT_TEST_DB = os.environ.get("TEST_DATABASE_URL", "postgresql+asyncpg://jarvis:jarvispass@127.0.0.1:5432/jarvis_cp_test")
 os.environ["DATABASE_URL"] = os.environ.get(
     "PYTEST_CONTROL_PLANE_DATABASE_URL",
     _DEFAULT_TEST_DB,

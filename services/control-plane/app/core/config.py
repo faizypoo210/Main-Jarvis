@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,6 +35,10 @@ class Settings(BaseSettings):
     # Optional HTTP probes for GET /api/v1/system/health (empty = do not assume localhost execution truth).
     JARVIS_HEALTH_OPENCLAW_GATEWAY_URL: str = ""
     JARVIS_HEALTH_OLLAMA_URL: str = ""
+    # Optional: base URL for the OpenClaw gateway (e.g. set in .env — see .env.example)
+    JARVIS_OPENCLAW_GATEWAY_URL: str = ""
+    JARVIS_LOCAL_MODEL: str = ""
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     # GitHub REST (governed create-issue workflow only). Machine-local secret; never logged.
     JARVIS_GITHUB_TOKEN: str = ""
     # Gmail API (governed create-draft only). Use access token and/or OAuth refresh — see INTEGRATIONS_GMAIL.md.
@@ -59,7 +64,7 @@ class Settings(BaseSettings):
     APPROVAL_REMINDER_SMS_ENABLED: bool = True
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

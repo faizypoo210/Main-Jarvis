@@ -247,6 +247,21 @@ export async function getMissionBundle(missionId: string): Promise<MissionBundle
 }
 
 const COMMAND_SUBMIT_TIMEOUT_MS = 45_000;
+const JARVIS_REPLY_TIMEOUT_MS = 130_000;
+
+export async function postJarvisReply(
+  userText: string
+): Promise<{ reply: string; source: string }> {
+  const signal =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+      ? AbortSignal.timeout(JARVIS_REPLY_TIMEOUT_MS)
+      : undefined;
+  return requestJson<{ reply: string; source: string }>(`${BASE}/jarvis/reply`, {
+    method: "POST",
+    body: JSON.stringify({ user_text: userText }),
+    ...(signal ? { signal } : {}),
+  });
+}
 
 export async function createCommand(text: string, source: string): Promise<CommandResponse> {
   const signal =

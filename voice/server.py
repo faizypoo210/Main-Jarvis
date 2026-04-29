@@ -71,11 +71,7 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8001").rstrip("/")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 # Local Ollama classifier: JARVIS_LOCAL_MODEL is canonical; OLLAMA_MODEL remains a deprecated alias.
-OLLAMA_MODEL = (
-    os.getenv("JARVIS_LOCAL_MODEL", "").strip()
-    or os.getenv("OLLAMA_MODEL", "").strip()
-    or "qwen3.5:4b"
-)
+OLLAMA_MODEL = os.environ.get("JARVIS_LOCAL_MODEL") or os.environ.get("OLLAMA_MODEL")
 JARVIS_CLOUD_MODEL = os.getenv("JARVIS_CLOUD_MODEL")
 OLLAMA_TIMEOUT_SEC = float(os.getenv("OLLAMA_TIMEOUT_SEC", "120"))
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
@@ -135,6 +131,42 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             return None
     return None
+
+
+async def post_control_plane_jarvis_reply(
+    client: httpx.AsyncClient,
+    *,
+    control_plane_url: str,
+    api_key: str,
+    user_text: str,
+) -> tuple[str | None, str | None]:
+    """POST ``/api/v1/jarvis/reply``; returns ``(reply, source)`` or ``(None, None)`` on transport/HTTP failure."""
+    url = f"{control_plane_url.rstrip('/')}/api/v1/jarvis/reply"
+    headers = {"Content-Type": "application/json", "x-api-key": (api_key or "").strip()}
+    try:
+        r = await client.post(
+            url,
+            json={"user_text": user_text},
+            headers=headers,
+            timeout=130.0,
+        )
+    except httpx.RequestError as e:
+        log.warning("jarvis reply request failed: %s", e)
+        return None, None
+    if r.status_code != 200:
+        log.warning("jarvis reply HTTP %s", r.status_code)
+        return None, None
+    try:
+        data = r.json()
+    except Exception:
+        return None, None
+    if not isinstance(data, dict):
+        return None, None
+    reply = str(data.get("reply") or "").strip()
+    src = str(data.get("source") or "").strip()
+    if not reply:
+        return None, None
+    return reply, src or None
 
 
 async def classify_intent_voice(
@@ -747,21 +779,36 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             surface = _manager.surface_session_for(ws_key)
-            intake_extra: dict[str, Any] | None = None
+            intent_obj: dict[str, Any] = {
+                "intent": "unknown",
+                "url": None,
+                "reason": None,
+            }
+            raw_ollama_text = ""
             try:
                 intent_obj, raw_ollama_text = await classify_intent_voice(_http_client, text)
             except Exception as e:
                 log.warning("intent classification failed: %s", e)
-            else:
-                intent_key = str(intent_obj.get("intent") or "unknown")
-                reply = build_jarvis_reply(intent_key, raw_ollama_text, surface="voice")
-                intake_extra = {
-                    "voice_intent_classification": {
-                        **intent_obj,
-                        "ollama_model": OLLAMA_MODEL,
-                        "jarvis_reply": reply,
-                    }
+                intent_obj = {"intent": "unknown", "url": None, "reason": str(e)[:200]}
+
+            intent_key = str(intent_obj.get("intent") or "unknown")
+            jr_text, jr_src = await post_control_plane_jarvis_reply(
+                _http_client,
+                control_plane_url=CONTROL_PLANE_URL,
+                api_key=os.getenv("CONTROL_PLANE_API_KEY", ""),
+                user_text=text,
+            )
+            if not jr_text:
+                jr_text = build_jarvis_reply(intent_key, raw_ollama_text, surface="voice")
+                jr_src = "fallback"
+            intake_extra = {
+                "voice_intent_classification": {
+                    **intent_obj,
+                    "ollama_model": OLLAMA_MODEL,
+                    "jarvis_reply": jr_text,
+                    "jarvis_reply_source": jr_src,
                 }
+            }
 
             intake_res = await post_voice_intake(
                 _http_client,

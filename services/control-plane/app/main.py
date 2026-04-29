@@ -18,6 +18,7 @@ from app.api.routes import (
     gmail_integration,
     health,
     heartbeat,
+    jarvis,
     missions,
     operator,
     operator_memory,
@@ -95,6 +96,7 @@ def _register_routes(application: FastAPI) -> None:
     )
     application.include_router(approvals.router, prefix=f"{api_v1_prefix}/approvals", tags=["approvals"])
     application.include_router(receipts.router, prefix=f"{api_v1_prefix}/receipts", tags=["receipts"])
+    application.include_router(jarvis.router, prefix=f"{api_v1_prefix}/jarvis", tags=["jarvis"])
     application.include_router(updates.router, prefix=f"{api_v1_prefix}/updates", tags=["updates"])
     application.include_router(workers.router, prefix=api_v1_prefix, tags=["workers"])
     application.include_router(system.router, prefix=api_v1_prefix, tags=["system"])

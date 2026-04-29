@@ -45,6 +45,17 @@ function sortEventsAsc(events: MissionEvent[]): MissionEvent[] {
   return [...events].sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+/** Free-form questions use Jarvis reply; imperative commands keep the mission pipeline. */
+function isJarvisFreeformQuestion(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\?\s*$/.test(t)) return true;
+  if (/^(what|who|when|where|why|how|which)\b/i.test(t)) return true;
+  if (/^(tell me|give me|show me|summarize|summarise|status|brief|briefing|explain)\b/i.test(t)) return true;
+  if (/^what's\b/i.test(t) || /^what is\b/i.test(t) || /^what are\b/i.test(t)) return true;
+  return false;
+}
+
 /** Build a minimal Approval from enriched approval_requested mission event payload (control plane). */
 function approvalFromRequestedEvent(ev: MissionEvent): Approval | null {
   const p = ev.payload;
@@ -571,6 +582,24 @@ export function ConversationThread({ onVoiceClick }: { onVoiceClick: () => void 
       setSubmitError(null);
       setSubmitting(true);
       try {
+        if (isJarvisFreeformQuestion(text)) {
+          const uid = crypto.randomUUID();
+          const jid = crypto.randomUUID();
+          setItems((prev) => [...prev, { id: `u-${uid}`, kind: "user", body: text }]);
+          const res = await api.postJarvisReply(text);
+          const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          setItems((prev) => [
+            ...prev,
+            {
+              id: `jarvis-${jid}`,
+              kind: "jarvis",
+              body: res.reply,
+              time,
+              routing: res.source === "fallback" ? "fallback" : undefined,
+            },
+          ]);
+          return;
+        }
         const res = await api.createCommand(text, "command_center");
         const uid = crypto.randomUUID();
         const mid = res.mission_id;

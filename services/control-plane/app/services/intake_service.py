@@ -26,6 +26,47 @@ from app.services.intake_interpretation import (
 )
 
 
+async def _generate_ack(
+    raw_text: str,
+    intent_type: str,
+    activity_label: str,
+) -> tuple[str, str]:
+    """Call Ollama for a task-aware ack. Returns (display_text, spoken_text).
+    Timeout 4s. Any failure returns a safe structured fallback — never raises."""
+    import os
+    import httpx
+
+    base = os.environ.get("OLLAMA_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        fallback = f"On it, sir — {activity_label.lower()}."
+        return fallback, fallback
+    model = os.environ.get("JARVIS_LOCAL_MODEL", "").strip()
+    if not model:
+        fallback = f"On it, sir — {activity_label.lower()}."
+        return fallback, fallback
+    prompt = (
+        f'You are JARVIS, a governed executive AI assistant. '
+        f'The operator said: "{raw_text}". '
+        f'Write exactly one acknowledgement sentence, max 12 words, specific to this request. '
+        f'Address the operator as "sir". Reply with the sentence only. No quotes.'
+    )
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            r = await client.post(
+                f"{base}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False, "think": False},
+            )
+            r.raise_for_status()
+            display = r.json().get("response", "").strip().strip('"')
+            if not display:
+                raise ValueError("empty")
+            spoken = display.split(".")[0].strip() + "."
+            return display, spoken
+    except Exception as e:
+        fallback = f"On it, sir — {activity_label.lower()}."
+        return fallback, fallback
+
+
 def _decided_via_for_surface(source_surface: str) -> str:
     if source_surface == "sms":
         return "sms"
@@ -52,6 +93,14 @@ class IntakeService:
             context=body.context,
         )
 
+        from app.services.intake_interpretation import derive_activity_label
+
+        activity_label = derive_activity_label(interp.intent_type, body.text)
+        display_text, spoken_text = await _generate_ack(body.text, interp.intent_type, activity_label)
+        show_indicator = interp.intent_type not in (
+            "conversational_reply", "status_query", "inbox_action", "interrupt_or_cancel"
+        )
+
         it = interp.intent_type
 
         if it == "interrupt_or_cancel":
@@ -66,6 +115,11 @@ class IntakeService:
                     kind="interrupt",
                     mission_id=mid,
                     extras={"target_mission_id": str(mid)} if mid else None,
+                    display_text=display_text,
+                    spoken_text=spoken_text,
+                    activity_label=activity_label,
+                    show_working_indicator=show_indicator,
+                    terminal=True,
                 ),
                 outcome="interrupt",
             )
@@ -78,6 +132,11 @@ class IntakeService:
                         message=interp.clarification_question or "More detail needed.",
                         kind="clarification",
                         extras=None,
+                        display_text=display_text,
+                        spoken_text=spoken_text,
+                        activity_label=activity_label,
+                        show_working_indicator=show_indicator,
+                        terminal=True,
                     ),
                     outcome="clarification",
                 )
@@ -89,6 +148,11 @@ class IntakeService:
                         message=interp.clarification_question
                         or "Could not resolve approval id or decision.",
                         kind="clarification",
+                        display_text=display_text,
+                        spoken_text=spoken_text,
+                        activity_label=activity_label,
+                        show_working_indicator=show_indicator,
+                        terminal=True,
                     ),
                     outcome="clarification",
                 )
@@ -110,6 +174,11 @@ class IntakeService:
                         kind="noop",
                         approval_id=aid,
                         extras={"error_status": e.status_code},
+                        display_text=display_text,
+                        spoken_text=spoken_text,
+                        activity_label=activity_label,
+                        show_working_indicator=show_indicator,
+                        terminal=True,
                     ),
                     outcome="noop",
                 )
@@ -120,6 +189,11 @@ class IntakeService:
                     kind="approval_resolved",
                     approval_id=approval.id,
                     mission_id=approval.mission_id,
+                    display_text=display_text,
+                    spoken_text=spoken_text,
+                    activity_label=activity_label,
+                    show_working_indicator=show_indicator,
+                    terminal=True,
                 ),
                 outcome="approval_resolved",
             )
@@ -133,6 +207,11 @@ class IntakeService:
                         message="Specify inbox_item_key and inbox_action in context, or "
                         "say: acknowledge <item_key>, snooze <item_key> [minutes], dismiss <item_key>.",
                         kind="clarification",
+                        display_text=display_text,
+                        spoken_text=spoken_text,
+                        activity_label=activity_label,
+                        show_working_indicator=show_indicator,
+                        terminal=True,
                     ),
                     outcome="clarification",
                 )
@@ -152,6 +231,11 @@ class IntakeService:
                     message=f"Inbox {action} applied for {item_key}.",
                     kind="inbox_updated",
                     extras={"inbox_action": action, "item_key": item_key},
+                    display_text=display_text,
+                    spoken_text=spoken_text,
+                    activity_label=activity_label,
+                    show_working_indicator=show_indicator,
+                    terminal=True,
                 ),
                 outcome="inbox_updated",
             )
@@ -172,6 +256,11 @@ class IntakeService:
                     message=f"Recent missions (newest first):\n{summary}",
                     kind="status_snapshot",
                     extras=extra,
+                    display_text=display_text,
+                    spoken_text=spoken_text,
+                    activity_label=activity_label,
+                    show_working_indicator=show_indicator,
+                    terminal=True,
                 ),
                 outcome="status_reply",
             )
@@ -191,6 +280,11 @@ class IntakeService:
                         "governed_action_type": gat,
                         "catalog": "/api/v1/operator/action-catalog",
                     },
+                    display_text=display_text,
+                    spoken_text=spoken_text,
+                    activity_label=activity_label,
+                    show_working_indicator=show_indicator,
+                    terminal=True,
                 ),
                 outcome="governed_action_hint",
             )
@@ -201,6 +295,11 @@ class IntakeService:
                 reply=IntakeReplyBundle(
                     message="Acknowledged.",
                     kind="conversational",
+                    display_text=display_text,
+                    spoken_text=spoken_text,
+                    activity_label=activity_label,
+                    show_working_indicator=show_indicator,
+                    terminal=True,
                 ),
                 outcome="conversational_reply",
             )
@@ -235,6 +334,11 @@ class IntakeService:
                     "mission_status": resp.mission_status,
                     "intent_type": it,
                 },
+                display_text=display_text,
+                spoken_text=spoken_text,
+                activity_label=activity_label,
+                show_working_indicator=show_indicator,
+                terminal=True,
             ),
             outcome=outcome,
         )

@@ -383,3 +383,25 @@ def resolve_approval_target(
     if wants_approve and wants_deny:
         return (aid, None)
     return (aid, None)
+
+
+def derive_activity_label(intent_type: str, raw_text: str) -> str:
+    """Derive a short present-tense working label from intent + raw text.
+    Max 48 chars. No trailing period. First word capitalised only."""
+    if intent_type == "status_query":
+        return "Reviewing operator status"
+    if intent_type == "approval_decision":
+        return "Processing approval decision"
+    if intent_type == "inbox_action":
+        return "Updating inbox item"
+    if intent_type == "interrupt_or_cancel":
+        return "Cancelling active task"
+    if intent_type == "governed_action_request":
+        return "Preparing governed action"
+    if intent_type == "mission_followup":
+        return "Checking mission status"
+    # mission_request or conversational_reply — derive from first meaningful words
+    stop = {"please", "can", "you", "i", "the", "a", "an", "my", "me", "could", "would"}
+    words = [w for w in raw_text.strip().lower().split() if w not in stop]
+    label = " ".join(words[:4]).capitalize()
+    return label[:48] if label else "Working on request"

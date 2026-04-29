@@ -232,6 +232,14 @@ export async function getMissionReceipts(missionId: string): Promise<Receipt[]> 
   );
 }
 
+export async function getReceipts(params?: { limit?: number; offset?: number }): Promise<Receipt[]> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return requestJson<Receipt[]>(`${BASE}/receipts${qs ? `?${qs}` : ""}`);
+}
+
 export async function getMissionBundle(missionId: string): Promise<MissionBundle> {
   return requestJson<MissionBundle>(
     `${BASE}/missions/${encodeURIComponent(missionId)}/bundle`

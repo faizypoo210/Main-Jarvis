@@ -51,6 +51,86 @@ ReplyKind = Literal[
     "noop",
 ]
 
+BehavioralLane = Literal[
+    "chat",
+    "fast_answer",
+    "fast_research",
+    "direct_tool",
+    "mission",
+    "approval",
+    "deep_research",
+    "automation",
+]
+
+ProgressPhase = Literal[
+    "acknowledged",
+    "routing_decided",
+    "capability_check_started",
+    "capability_missing",
+    "tool_started",
+    "source_checked",
+    "partial_result",
+    "approval_needed",
+    "waiting_on_operator",
+    "worker_stalled",
+    "completed",
+    "failed",
+]
+
+
+class IntentEnvelope(BaseModel):
+    input_id: str
+    surface: str
+    raw_text: str
+    intent_kind: Literal[
+        "research",
+        "chat",
+        "execute",
+        "monitor",
+        "automate",
+        "configure",
+        "approve",
+        "debug",
+        "create",
+        "edit",
+    ]
+    freshness: Literal["none", "recent", "live_current", "continuous"]
+    tool_required: bool
+    external_action: bool
+    identity_bearing: bool
+    destructive: bool
+    financial: bool
+    hardware_physical: bool
+    privacy_sensitive: bool
+    duration: Literal["instant", "short", "long", "ongoing", "scheduled"]
+    missing_info: list[str]
+    suggested_lane: BehavioralLane
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class DecisionEnvelope(BaseModel):
+    input_id: str
+    selected_lane: BehavioralLane
+    approval_required: bool
+    mission_required: bool
+    capability_available: bool
+    capability_notes: list[str]
+    allowed_next_step: str
+    blocked_actions: list[str]
+    risk_class: Literal["green", "amber", "red"]
+    requires_operator_input: bool
+    missing_info: list[str]
+    progress_policy: str
+
+
+class ProgressEvent(BaseModel):
+    input_id: str
+    mission_id: UUID | None
+    phase: ProgressPhase
+    label: str
+    detail: str | None
+    timestamp: str
+
 
 class InterpretationResult(BaseModel):
     """Structured interpretation of natural-language input (v1 deterministic rules)."""
@@ -102,6 +182,13 @@ class IntakeReplyBundle(BaseModel):
         None,
         description="Narrow structured hints (counts, mission preview, routing hints).",
     )
+    display_text: str | None = None
+    spoken_text: str | None = None
+    activity_label: str | None = None
+    show_working_indicator: bool = False
+    terminal: bool = True
+    intent_envelope: IntentEnvelope | None = None
+    decision_envelope: DecisionEnvelope | None = None
 
 
 class IntakeRequest(BaseModel):
